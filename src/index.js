@@ -70,14 +70,14 @@ function stopAudioTransmission() {
     }
   }
 
-  // Immediately show logo and hide speaking indicator
-  showLogoIndicator();
-  hideSpeakingIndicator();
-  // Clear any existing timeout
+  // Clear any existing timeout first
   if (currentTimeout) {
     clearTimeout(currentTimeout);
     currentTimeout = null;
   }
+  // Show logo and hide speaking indicator
+  hideSpeakingIndicator();
+  showLogoIndicator();
   estimatedDuration = 0;
 }
 
