@@ -246,6 +246,13 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         logDataChannelState();
       }
 
+      if (realtimeEvent.type === "response.created") {
+        // Reset duration when a new response starts
+        estimatedDuration = 0;
+        clearCurrentTimeout();
+        console.log("New response created, reset duration and cleared timeout");
+      }
+
       if (realtimeEvent.tool_calls) {
         for (const tool of realtimeEvent.tool_calls) {
           if (tool.name === "get_current_datetime") {
