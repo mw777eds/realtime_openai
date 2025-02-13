@@ -55,45 +55,11 @@ async function stopAudioTransmission() {
       console.log("Muted microphone input");
     }
     
-    // Mute AI output and stop current response
+    // Mute AI output
     if (audioEl && audioEl.srcObject) {
       const audioTracks = audioEl.srcObject.getAudioTracks();
       audioTracks.forEach(track => track.enabled = false);
       console.log("Muted AI output");
-      
-      // Send stop event to cut off remaining content
-      if (dc && dc.readyState === "open") {
-        // Try to force the conversation to end by disabling turn detection
-        const sessionUpdateEvent = {
-          type: "session.update",
-          session: {
-            turn_detection: null
-          }
-        };
-        dc.send(JSON.stringify(sessionUpdateEvent));
-        console.log("Sent session update to disable turn detection");
-
-        // Re-enable turn detection after a brief pause
-        setTimeout(() => {
-          const reenableEvent = {
-            type: "session.update",
-            session: {
-              turn_detection: {
-                mode: "continuous"
-              }
-            }
-          };
-          dc.send(JSON.stringify(reenableEvent));
-          console.log("Re-enabled turn detection");
-          showLogoIndicator();
-          hideSpeakingIndicator();
-          resolve();
-        }, 100);
-      } else {
-        resolve();
-      }
-    } else {
-      resolve();
     }
 
     // Clear any existing timeout first
@@ -101,10 +67,13 @@ async function stopAudioTransmission() {
       clearTimeout(currentTimeout);
       currentTimeout = null;
     }
+    
     // Show logo and hide speaking indicator
     hideSpeakingIndicator();
     showLogoIndicator();
     estimatedDuration = 0;
+    
+    resolve();
   });
 }
 
