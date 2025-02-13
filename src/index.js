@@ -74,13 +74,13 @@ async function initWebRTC() {
   dc.addEventListener("message", (e) => {
     // Realtime server events appear here!
     const realtimeEvent = JSON.parse(e.data);
-    console.log(realtimeEvent);
+    console.log(`[${new Date().toISOString()}] Event:`, realtimeEvent);
 
     if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
       console.log("Model response:", realtimeEvent.response.output[0]);
     }
 
-    console.log("type",realtimeEvent.type);
+    console.log(`[${new Date().toISOString()}] Type:`, realtimeEvent.type);
     
     if (realtimeEvent.type === "response.text.delta") {
       showStarburst();
@@ -103,7 +103,7 @@ async function initWebRTC() {
           // Send tool response back to OpenAI
           dc.send(JSON.stringify(toolResponse));
 
-          console.log("Tool response sent:", toolResponse);
+          console.log(`[${new Date().toISOString()}] Tool response sent:`, toolResponse);
 
           // After sending the tool response, request the model to generate a response
           const responseCreateEvent = {
@@ -113,7 +113,7 @@ async function initWebRTC() {
             }
           };
           dc.send(JSON.stringify(responseCreateEvent));
-          console.log("Response create event sent:", responseCreateEvent);
+          console.log(`[${new Date().toISOString()}] Response create event sent:`, responseCreateEvent);
         }
       }
     }
