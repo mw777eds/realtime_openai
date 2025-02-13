@@ -10,12 +10,10 @@ window.cleanupWebRTC = cleanupWebRTC;
 
 // Function to start audio transmission
 function startAudioTransmission() {
-  console.log("Attempting to start audio transmission");
   
   // Unmute microphone input
   if (audioTrack) {
     audioTrack.enabled = true;
-    console.log("Unmuted microphone input");
   } else {
     console.error("Microphone track not available");
   }
@@ -64,7 +62,6 @@ function cleanupWebRTC() {
     pc.close();
     pc = null;
   }
-  console.log("WebRTC connection cleaned up");
 }
 
 function showLogoIndicator() {
@@ -103,7 +100,6 @@ function initAudioAnalyser() {
     audioAnalyser = audioContext.createAnalyser();
     audioAnalyser.fftSize = 256;
     audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
-    console.log("Audio analyser initialized");
   }
 }
 
@@ -129,17 +125,9 @@ function checkAudioActivity() {
   return false;
 }
 
-function logDataChannelState() {
-  console.log("Data channel state:", dc ? dc.readyState : "no data channel");
-  console.log("WebRTC connection state:", pc ? pc.connectionState : "no connection");
-  console.log("isPaused:", isPaused);
-}
-
 async function toggleAudioTransmission() {
   isPaused = !isPaused;
   const pausedOverlay = document.getElementById('pausedOverlay');
-  
-  logDataChannelState();
   
   if (isPaused) {
     await stopAudioTransmission();
@@ -222,6 +210,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
         console.log("Model response:", realtimeEvent.response.output[0]);
+        /* TODO: Log or list model response in FileMaker */
       }
       
       if (realtimeEvent.type === "error" || 
@@ -232,7 +221,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
       if (realtimeEvent.type === "error") {
         console.error("Error event received:", realtimeEvent.error);
-        logDataChannelState();
       }
 
 
@@ -289,7 +277,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       sdp: await sdpResponse.text(),
     };
     await pc.setRemoteDescription(answer);
-    console.log("WebRTC connection established");
+    /* TODO: Change the UI from loading to showing the logo */
     return pc;
   } catch (error) {
     console.error("Failed to initialize WebRTC:", error);
