@@ -85,10 +85,28 @@ function hideSpeakingIndicator() {
 
 let pc = null;
 let dc = null;
+let isPaused = false;
+
+function toggleAudioTransmission() {
+  isPaused = !isPaused;
+  const pausedOverlay = document.getElementById('pausedOverlay');
+  
+  if (isPaused) {
+    stopAudioTransmission();
+    pausedOverlay.style.display = 'flex';
+  } else {
+    startAudioTransmission();
+    pausedOverlay.style.display = 'none';
+  }
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   loadSpeakingIndicator();
   loadLogoIndicator();
+  
+  // Add click handlers to both indicators
+  document.getElementById('speakingIndicator').addEventListener('click', toggleAudioTransmission);
+  document.getElementById('logoIndicator').addEventListener('click', toggleAudioTransmission);
 });
 
 async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolChoice) {
