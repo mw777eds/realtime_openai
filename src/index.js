@@ -46,16 +46,9 @@ async function stopAudioTransmission() {
       console.log("Muted AI output");
     }
 
-    // Clear any existing timeout first
-    if (currentTimeout) {
-      clearTimeout(currentTimeout);
-      currentTimeout = null;
-    }
-    
     // Show logo and hide speaking indicator
     hideSpeakingIndicator();
     showLogoIndicator();
-    estimatedDuration = 0;
     
     resolve();
   });
@@ -126,7 +119,6 @@ function checkAudioActivity() {
     if (hasAudio) {
       showSpeakingIndicator();
       hideLogoIndicator();
-      console.log("Audio activity detected, level:", average);
     } else {
       showLogoIndicator();
       hideSpeakingIndicator();
@@ -210,7 +202,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
     dc = pc.createDataChannel("oai-events");
     dc.addEventListener("open", () => {
-      console.log("Data channel opened, sending session update");
       const sessionUpdateEvent = {
         type: "session.update",
         session: {
@@ -220,7 +211,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         }
       };
       dc.send(JSON.stringify(sessionUpdateEvent));
-      console.log("Starting audio transmission after session update");
       startAudioTransmission();
     });
 
@@ -245,12 +235,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         logDataChannelState();
       }
 
-      if (realtimeEvent.type === "response.created") {
-        // Reset duration when a new response starts
-        estimatedDuration = 0;
-        clearCurrentTimeout();
-        console.log("New response created, reset duration and cleared timeout");
-      }
 
       if (realtimeEvent.tool_calls) {
         for (const tool of realtimeEvent.tool_calls) {
@@ -269,7 +253,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             // Send tool response back to OpenAI
             dc.send(JSON.stringify(toolResponse));
 
-            console.log(`[${new Date().toISOString()}] Tool response sent:`, toolResponse);
 
             // After sending the tool response, request the model to generate a response
             const responseCreateEvent = {
@@ -279,7 +262,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
               }
             };
             dc.send(JSON.stringify(responseCreateEvent));
-            console.log(`[${new Date().toISOString()}] Response create event sent:`, responseCreateEvent);
           }
         }
       }
@@ -300,8 +282,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
     if (!sdpResponse.ok) {
       throw new Error(`SDP response error! status: ${sdpResponse.status}`);
-    } else {
-      console.log("SDP response ok");
     }
 
     const answer = {
