@@ -1,0 +1,30 @@
+{
+  "name": "realtime",
+  "version": "1.0.0",
+  "author": "Michael wallace",
+  "license": "MIT",
+  "description": "realtime api openai",
+  "scripts": {
+    "start": "vite",
+    "reload": "node ./scripts/reload-dev",
+    "deploy-to-fm": "npm run build && npm run upload",
+    "build": "vite build",
+    "upload": "node ./scripts/upload.cjs",
+    "generate-script-steps": "node ./scripts/generate-script-steps",
+    "reset-dev": "npm run clear-cache && npm run start",
+    "start-fm-dev": "node ./scripts/start-fm-dev",
+    "open-dev-browser": "open http://localhost:1234"
+  },
+  "type": "module",
+  "browserslist": "> 0.5%, last 2 versions, not dead",
+  "devDependencies": {
+    "eslint": "^8.16.0",
+    "eslint-config-prettier": "^8.5.0",
+    "open": "^8.2.1",
+    "prettier": "2.6.2",
+    "vite": "^6.0.3",
+    "vite-plugin-css-injected-by-js": "^3.5.2",
+    "vite-plugin-singlefile": "^2.1.0"
+  },
+  "widgetType": "JS"
+}
