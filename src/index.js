@@ -167,10 +167,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById('logoIndicator').addEventListener('click', toggleAudioTransmission);
   document.getElementById('pausedOverlay').addEventListener('click', toggleAudioTransmission);
 
-  // Add initialization call to filemaer script.
-  if (window.FileMaker) {
-    window.FileMaker.PerformScript("StartRealtime", "");
-  }
 });
 
 async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice) {
@@ -331,5 +327,3 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     alert("Failed to initialize WebRTC. Please try again.");
   }
 }
-
-
