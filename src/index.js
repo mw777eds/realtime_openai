@@ -64,7 +64,7 @@ async function stopAudioTransmission() {
       // Send stop event to cut off remaining content
       if (dc && dc.readyState === "open") {
         const stopEvent = {
-          type: "response.stop"
+          type: "conversation.stop"
         };
         dc.send(JSON.stringify(stopEvent));
         console.log("Sent stop event to cut off remaining content");
