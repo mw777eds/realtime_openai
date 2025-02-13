@@ -63,9 +63,14 @@ async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolCh
       const sessionUpdateEvent = {
         type: "session.update",
         session: {
-          instructions,
-          tools,
-          tool_choice: toolChoice
+          instructions: instructions || "You are a helpful AI assistant embedded in a FileMaker WebViewer. You can use your get_current_datetime tool to find out the time. If asked anything about date/time do not make it up. Use the tools provided or say I don't know.",
+          tools: tools || [{
+            type: "function",
+            name: "get_current_datetime",
+            description: "Returns the current date and time in ISO 8601 format.",
+            parameters: {}
+          }],
+          tool_choice: toolChoice || "auto"
         }
       };
       dc.send(JSON.stringify(sessionUpdateEvent));
@@ -81,7 +86,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolCh
       }
 
       console.log(`[${new Date().toISOString()}] Type:`, realtimeEvent.type);
-  
+      
       if (realtimeEvent.type === "response.audio_transcript.delta") {
         showSpeakingIndicator();
         hideLogoIndicator();
@@ -135,7 +140,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolCh
     await pc.setLocalDescription(offer);
 
     const baseUrl = "https://api.openai.com/v1/realtime";
-    // const model = "gpt-4o-realtime-preview-2024-12-17";
     const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
       method: "POST",
       body: offer.sdp,
@@ -147,6 +151,8 @@ async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolCh
 
     if (!sdpResponse.ok) {
       throw new Error(`SDP response error! status: ${sdpResponse.status}`);
+    } else {
+      console.log("SDP response ok");
     }
 
     const answer = {
@@ -154,8 +160,10 @@ async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolCh
       sdp: await sdpResponse.text(),
     };
     await pc.setRemoteDescription(answer);
+    return pc;
   } catch (error) {
     console.error("Failed to initialize WebRTC:", error);
+    alert("Failed to initialize WebRTC. Please try again.");
   }
 }
 
