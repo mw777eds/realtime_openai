@@ -6,6 +6,7 @@ export default defineConfig({
     host: "localhost",
     port: 1234,
   },
+  https: true,
   plugins: [viteSingleFile()],
   build: {
     target: "esnext",
