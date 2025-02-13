@@ -6,7 +6,10 @@ export default defineConfig({
     host: "localhost",
     port: 1234,
   },
-  https: true,
+  https: {
+    key: fs.readFileSync('path/to/localhost-key.pem'),
+    cert: fs.readFileSync('path/to/localhost-cert.pem'),
+  },
   plugins: [viteSingleFile()],
   build: {
     target: "esnext",
