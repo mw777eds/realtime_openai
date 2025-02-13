@@ -87,8 +87,3 @@ async function initWebRTC() {
     alert("Failed to initialize WebRTC. Please try again.");
   }
 }
-
-// this function is called by FileMaker.
-window.loadWidget = function () {
-  console.log("FileMaker called this function");
-};

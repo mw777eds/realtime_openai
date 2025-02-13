@@ -4,3 +4,4 @@ dist
 import.log
 .parcel-cache
 .DS_Store'
+.aider*
