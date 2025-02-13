@@ -104,9 +104,10 @@ document.addEventListener("DOMContentLoaded", () => {
   loadSpeakingIndicator();
   loadLogoIndicator();
   
-  // Add click handlers to both indicators
+  // Add click handlers to both indicators and overlay
   document.getElementById('speakingIndicator').addEventListener('click', toggleAudioTransmission);
   document.getElementById('logoIndicator').addEventListener('click', toggleAudioTransmission);
+  document.getElementById('pausedOverlay').addEventListener('click', toggleAudioTransmission);
 });
 
 async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolChoice) {
