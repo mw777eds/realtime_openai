@@ -47,38 +47,55 @@ function startAudioTransmission() {
 }
 
 // Function to stop audio transmission
-function stopAudioTransmission() {
-  // Mute microphone input
-  if (audioTrack) {
-    audioTrack.enabled = false;
-    console.log("Muted microphone input");
-  }
-  
-  // Mute AI output and stop current response
-  if (audioEl && audioEl.srcObject) {
-    const audioTracks = audioEl.srcObject.getAudioTracks();
-    audioTracks.forEach(track => track.enabled = false);
-    console.log("Muted AI output");
-    
-    // Send stop event to cut off remaining content
-    if (dc && dc.readyState === "open") {
-      const stopEvent = {
-        type: "response.stop"
-      };
-      dc.send(JSON.stringify(stopEvent));
-      console.log("Sent stop event to cut off remaining content");
+async function stopAudioTransmission() {
+  return new Promise((resolve) => {
+    // Mute microphone input
+    if (audioTrack) {
+      audioTrack.enabled = false;
+      console.log("Muted microphone input");
     }
-  }
+    
+    // Mute AI output and stop current response
+    if (audioEl && audioEl.srcObject) {
+      const audioTracks = audioEl.srcObject.getAudioTracks();
+      audioTracks.forEach(track => track.enabled = false);
+      console.log("Muted AI output");
+      
+      // Send stop event to cut off remaining content
+      if (dc && dc.readyState === "open") {
+        const stopEvent = {
+          type: "response.stop"
+        };
+        dc.send(JSON.stringify(stopEvent));
+        console.log("Sent stop event to cut off remaining content");
+        
+        // Wait for the stop to complete
+        const handleStopComplete = (e) => {
+          const event = JSON.parse(e.data);
+          if (event.type === "conversation.stopped") {
+            console.log("Stop event completed");
+            dc.removeEventListener("message", handleStopComplete);
+            resolve();
+          }
+        };
+        dc.addEventListener("message", handleStopComplete);
+      } else {
+        resolve();
+      }
+    } else {
+      resolve();
+    }
 
-  // Clear any existing timeout first
-  if (currentTimeout) {
-    clearTimeout(currentTimeout);
-    currentTimeout = null;
-  }
-  // Show logo and hide speaking indicator
-  hideSpeakingIndicator();
-  showLogoIndicator();
-  estimatedDuration = 0;
+    // Clear any existing timeout first
+    if (currentTimeout) {
+      clearTimeout(currentTimeout);
+      currentTimeout = null;
+    }
+    // Show logo and hide speaking indicator
+    hideSpeakingIndicator();
+    showLogoIndicator();
+    estimatedDuration = 0;
+  });
 }
 
 // Function to cleanup WebRTC connection
@@ -126,14 +143,14 @@ function logDataChannelState() {
   console.log("isPaused:", isPaused);
 }
 
-function toggleAudioTransmission() {
+async function toggleAudioTransmission() {
   isPaused = !isPaused;
   const pausedOverlay = document.getElementById('pausedOverlay');
   
   logDataChannelState();
   
   if (isPaused) {
-    stopAudioTransmission();
+    await stopAudioTransmission();
     pausedOverlay.style.display = 'flex';
   } else {
     if (!dc || dc.readyState !== "open") {
@@ -141,21 +158,13 @@ function toggleAudioTransmission() {
       // Reset the paused state since we're reinitializing
       isPaused = false;
       pausedOverlay.style.display = 'none';
+      cleanupWebRTC(); // Clean up old connection
       // Trigger reinitialization from FileMaker
       if (window.FileMaker) {
         window.FileMaker.PerformScript("SendToOpenAI", "");
       }
     } else {
       startAudioTransmission();
-      // Send a new response.create event to restart AI output
-      const startEvent = {
-        type: "response.create",
-        response: {
-          modalities: ["text"]
-        }
-      };
-      dc.send(JSON.stringify(startEvent));
-      console.log("Sent response.create event to restart AI output");
       pausedOverlay.style.display = 'none';
     }
   }
