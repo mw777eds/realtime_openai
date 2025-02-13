@@ -63,22 +63,28 @@ async function stopAudioTransmission() {
       
       // Send stop event to cut off remaining content
       if (dc && dc.readyState === "open") {
-        // Try to force the conversation to end by simulating audio buffer events
-        const bufferStartEvent = {
-          type: "input_audio_buffer.append",
-          audio: "" // empty audio buffer
+        // Try to force the conversation to end by disabling turn detection
+        const sessionUpdateEvent = {
+          type: "session.update",
+          session: {
+            turn_detection: null
+          }
         };
-        dc.send(JSON.stringify(bufferStartEvent));
-        console.log("Sent empty audio buffer");
+        dc.send(JSON.stringify(sessionUpdateEvent));
+        console.log("Sent session update to disable turn detection");
 
-        const commitEvent = {
-          type: "input_audio_buffer.commit"
-        };
-        dc.send(JSON.stringify(commitEvent));
-        console.log("Sent input buffer commit");
-
-        // Wait a moment for the events to process
+        // Re-enable turn detection after a brief pause
         setTimeout(() => {
+          const reenableEvent = {
+            type: "session.update",
+            session: {
+              turn_detection: {
+                mode: "continuous"
+              }
+            }
+          };
+          dc.send(JSON.stringify(reenableEvent));
+          console.log("Re-enabled turn detection");
           showLogoIndicator();
           hideSpeakingIndicator();
           resolve();
