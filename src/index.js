@@ -25,6 +25,9 @@ window.cleanupWebRTC = cleanupWebRTC;
 
 // Function to start audio transmission
 function startAudioTransmission() {
+  console.log("Attempting to start audio transmission");
+  console.log("Data channel state:", dc ? dc.readyState : "no data channel");
+  
   if (dc && dc.readyState === "open") {
     const startEvent = {
       type: "response.create",
@@ -110,7 +113,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById('pausedOverlay').addEventListener('click', toggleAudioTransmission);
 });
 
-async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolChoice) {
+async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice) {
   try {
     pc = new RTCPeerConnection();
 
@@ -126,8 +129,8 @@ async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolCh
       const sessionUpdateEvent = {
         type: "session.update",
         session: {
-          instructions: instructions,
-          tools: tools,
+          instructions: instructions || "You are a helpful AI assistant.",
+          tools: toolsStr ? JSON.parse(toolsStr) : [],
           tool_choice: toolChoice || "auto"
         }
       };
@@ -218,6 +221,9 @@ async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolCh
       sdp: await sdpResponse.text(),
     };
     await pc.setRemoteDescription(answer);
+    console.log("WebRTC connection established");
+    // Automatically start audio transmission after successful initialization
+    startAudioTransmission();
     return pc;
   } catch (error) {
     console.error("Failed to initialize WebRTC:", error);
