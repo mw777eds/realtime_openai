@@ -120,16 +120,44 @@ let isPaused = false;
 let audioTrack = null;
 let audioEl = null;
 
+function logDataChannelState() {
+  console.log("Data channel state:", dc ? dc.readyState : "no data channel");
+  console.log("WebRTC connection state:", pc ? pc.connectionState : "no connection");
+  console.log("isPaused:", isPaused);
+}
+
 function toggleAudioTransmission() {
   isPaused = !isPaused;
   const pausedOverlay = document.getElementById('pausedOverlay');
+  
+  logDataChannelState();
   
   if (isPaused) {
     stopAudioTransmission();
     pausedOverlay.style.display = 'flex';
   } else {
-    startAudioTransmission();
-    pausedOverlay.style.display = 'none';
+    if (!dc || dc.readyState !== "open") {
+      console.log("Data channel not ready, reinitializing WebRTC");
+      // Reset the paused state since we're reinitializing
+      isPaused = false;
+      pausedOverlay.style.display = 'none';
+      // Trigger reinitialization from FileMaker
+      if (window.FileMaker) {
+        window.FileMaker.PerformScript("SendToOpenAI", "");
+      }
+    } else {
+      startAudioTransmission();
+      // Send a new response.create event to restart AI output
+      const startEvent = {
+        type: "response.create",
+        response: {
+          modalities: ["text"]
+        }
+      };
+      dc.send(JSON.stringify(startEvent));
+      console.log("Sent response.create event to restart AI output");
+      pausedOverlay.style.display = 'none';
+    }
   }
 }
 
@@ -178,7 +206,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       startAudioTransmission();
     });
 
-    dc.addEventListener("message", (e) => {
+    dc.addEventListener("message", async (e) => {
       // Realtime server events appear here!
       const realtimeEvent = JSON.parse(e.data);
       console.log(`[${new Date().toISOString()}] Event:`, realtimeEvent);
