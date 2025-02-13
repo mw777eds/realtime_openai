@@ -83,7 +83,7 @@ async function initWebRTC() {
     console.log("type",realtimeEvent.type);
     
     if (realtimeEvent.type === "response.text.delta") {
-      animateWaveform();
+      animateStarburst();
     }
 
     if (realtimeEvent.tool_calls) {
@@ -152,16 +152,21 @@ async function initWebRTC() {
   }
 }
 
-// Function to animate the waveform
-function animateWaveform() {
-  const wave = document.getElementById('wave');
-  let offset = 0;
+function animateStarburst() {
+  const starburst = document.getElementById('starburst');
+  starburst.style.display = 'block';
 
+  let hue = 0;
   function animate() {
-    offset += 0.1;
-    wave.setAttribute('transform', `translate(${offset}, 0)`);
+    hue = (hue + 10) % 360;
+    starburst.style.fill = `hsl(${hue}, 100%, 50%)`;
     requestAnimationFrame(animate);
   }
 
   animate();
+
+  // Hide the starburst after a delay to simulate end of speech
+  setTimeout(() => {
+    starburst.style.display = 'none';
+  }, 2000); // Adjust the delay as needed
 }
