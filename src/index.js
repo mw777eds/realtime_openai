@@ -63,13 +63,8 @@ async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolCh
       const sessionUpdateEvent = {
         type: "session.update",
         session: {
-          instructions: instructions || "You are a helpful AI assistant embedded in a FileMaker WebViewer. You can use your get_current_datetime tool to find out the time. If asked anything about date/time do not make it up. Use the tools provided or say I don't know.",
-          tools: tools || [{
-            type: "function",
-            name: "get_current_datetime",
-            description: "Returns the current date and time in ISO 8601 format.",
-            parameters: {}
-          }],
+          instructions: instructions,
+          tools: tools,
           tool_choice: toolChoice || "auto"
         }
       };
