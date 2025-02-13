@@ -132,6 +132,8 @@ async function initWebRTC() {
 
     if (!sdpResponse.ok) {
       throw new Error(`SDP response error! status: ${sdpResponse.status}`);
+    }else{
+      console.log("SDP response ok")
     }
 
     const answer = {
