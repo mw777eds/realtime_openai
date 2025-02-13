@@ -1,14 +1,28 @@
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.querySelector("button");
+  let isConnected = false;
+  let pc = null;
 
-  // Initialize WebRTC on button click
+  // Toggle WebRTC connection on button click
   btn.onclick = async function () {
-    await initWebRTC();
+    if (isConnected) {
+      // Stop the connection
+      pc.close();
+      pc = null;
+      isConnected = false;
+      btn.textContent = "Start Talking";
+    } else {
+      // Start the connection
+      pc = await initWebRTC();
+      isConnected = true;
+      btn.textContent = "Stop Talking";
+    }
   };
 });
 
 // Initialize WebRTC connection
 async function initWebRTC() {
+  let pc;
   try {
     // Get an ephemeral key from the specified URL
     const tokenResponse = await fetch("https://n8n.empowereddatasolutions.com/webhook/realtime");
@@ -22,7 +36,7 @@ async function initWebRTC() {
     }
 
   // Create a peer connection
-    const pc = new RTCPeerConnection();
+    pc = new RTCPeerConnection();
 
   // Set up to play remote audio from the model
   const audioEl = document.createElement("audio");
@@ -67,6 +81,7 @@ async function initWebRTC() {
       sdp: await sdpResponse.text(),
     };
     await pc.setRemoteDescription(answer);
+    return pc;
   } catch (error) {
     console.error("Failed to initialize WebRTC:", error);
     alert("Failed to initialize WebRTC. Please try again.");
