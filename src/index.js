@@ -2,6 +2,7 @@ import { loadSpeakingIndicator } from "./imageLoader.js";
 import { loadLogoIndicator } from "./imageLoader_logo.js";
 
 let estimatedDuration = 0;
+let currentTimeout = null;
 
 function estimateDuration(delta) {
   try {
@@ -50,6 +51,15 @@ function stopAudioTransmission() {
     };
     dc.send(JSON.stringify(stopEvent));
     console.log("Stopped audio transmission");
+    // Immediately show logo and hide speaking indicator
+    showLogoIndicator();
+    hideSpeakingIndicator();
+    // Clear any existing timeout
+    if (currentTimeout) {
+      clearTimeout(currentTimeout);
+      currentTimeout = null;
+    }
+    estimatedDuration = 0;
   }
 }
 
@@ -158,13 +168,28 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         console.log("Estimated duration:", estimatedDuration);
       }
 
-      if (realtimeEvent.type === "response.audio_transcript.done") {
-        setTimeout(() => {
-          console.log("Hiding indicator after duration:", estimatedDuration);
+      if (realtimeEvent.type === "response.audio_transcript.done" || 
+          realtimeEvent.type === "error" || 
+          realtimeEvent.type === "conversation.stopped") {
+        // Clear any existing timeout
+        if (currentTimeout) {
+          clearTimeout(currentTimeout);
+        }
+        // Reset immediately for errors and stops
+        if (realtimeEvent.type === "error" || realtimeEvent.type === "conversation.stopped") {
           showLogoIndicator();
           hideSpeakingIndicator();
-          estimatedDuration = 0; // Reset for the next response
-        }, estimatedDuration);
+          estimatedDuration = 0;
+        } else {
+          // Set new timeout for normal completion
+          currentTimeout = setTimeout(() => {
+            console.log("Hiding indicator after duration:", estimatedDuration);
+            showLogoIndicator();
+            hideSpeakingIndicator();
+            estimatedDuration = 0; // Reset for the next response
+            currentTimeout = null;
+          }, estimatedDuration);
+        }
       }
 
       if (realtimeEvent.tool_calls) {
