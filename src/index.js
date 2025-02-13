@@ -16,6 +16,16 @@ function estimateDuration(delta) {
   }
 }
 
+function showLogoIndicator() {
+  const logoIndicator = document.getElementById('logoIndicator');
+  logoIndicator.style.display = 'block';
+}
+
+function hideLogoIndicator() {
+  const logoIndicator = document.getElementById('logoIndicator');
+  logoIndicator.style.display = 'none';
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   loadSpeakingIndicator();
   
@@ -104,6 +114,7 @@ async function initWebRTC() {
     
     if (realtimeEvent.type === "response.audio_transcript.delta") {
       showSpeakingIndicator();
+      hideLogoIndicator();
       estimateDuration(realtimeEvent.delta);
       console.log("Estimated duration:", estimatedDuration);
     }
@@ -112,6 +123,7 @@ async function initWebRTC() {
       setTimeout(() => {
         hideSpeakingIndicator();
         console.log("Hiding indicator after duration:", estimatedDuration);
+        showLogoIndicator();
         estimatedDuration = 0; // Reset for the next response
       }, estimatedDuration);
     }
