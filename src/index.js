@@ -1,10 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.querySelector("button");
 
-  // the JS button
+  // Initialize WebRTC on button click
   btn.onclick = async function () {
-    console.log("You ran some JavaScript");
-    alert("You ran some JavaScript");
     await initWebRTC();
   };
 });
@@ -13,7 +11,9 @@ document.addEventListener("DOMContentLoaded", () => {
 async function initWebRTC() {
   try {
     // Get an ephemeral key from the specified URL
-    const tokenResponse = await fetch("https://n8n.empowereddatasolutions.com/webhook-test/realtime");
+    const tokenResponse = await fetch("https://n8n.empowereddatasolutions.com/webhook-test/realtime", {
+      mode: 'cors'
+    });
     if (!tokenResponse.ok) {
       throw new Error(`HTTP error! status: ${tokenResponse.status}`);
     }
