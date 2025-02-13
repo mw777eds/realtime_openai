@@ -83,13 +83,19 @@ async function initWebRTC() {
     if (realtimeEvent.tool_calls) {
       for (const tool of realtimeEvent.tool_calls) {
         if (tool.name === "get_current_datetime") {
-          const response = {
-            id: tool.id, // Keep track of which tool was called
-            result: new Date().toISOString() // Return current datetime
+          const toolResponse = {
+            type: "conversation.item.create",
+            item: {
+              type: "function_call_output",
+              call_id: tool.call_id,
+              output: JSON.stringify({
+                current_datetime: new Date().toISOString()
+              })
+            }
           };
 
           // Send tool response back to OpenAI
-          dc.send(JSON.stringify(response));
+          dc.send(JSON.stringify(toolResponse));
         }
       }
     }
