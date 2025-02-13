@@ -47,7 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadLogoIndicator();
 });
 
-async function initializeWebRTC(ephemeralKey, instructions, tools, toolChoice) {
+async function initializeWebRTC(ephemeralKey, model, instructions, tools, toolChoice) {
   try {
     pc = new RTCPeerConnection();
 
@@ -77,7 +77,7 @@ async function initializeWebRTC(ephemeralKey, instructions, tools, toolChoice) {
     await pc.setLocalDescription(offer);
 
     const baseUrl = "https://api.openai.com/v1/realtime";
-    const model = "gpt-4o-realtime-preview-2024-12-17";
+    // const model = "gpt-4o-realtime-preview-2024-12-17";
     const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
       method: "POST",
       body: offer.sdp,
@@ -105,16 +105,6 @@ async function initializeWebRTC(ephemeralKey, instructions, tools, toolChoice) {
 async function initWebRTC() {
   let pc;
   try {
-    // Get an ephemeral key from the specified URL
-    const tokenResponse = await fetch("https://n8n.empowereddatasolutions.com/webhook/realtime");
-    if (!tokenResponse.ok) {
-      throw new Error(`HTTP error! status: ${tokenResponse.status}`);
-    }
-    const data = await tokenResponse.json();
-    const EPHEMERAL_KEY = data[0]?.client_secret?.value;
-    if (!EPHEMERAL_KEY) {
-      throw new Error("Failed to retrieve ephemeral key");
-    }
 
   // Create a peer connection
     pc = new RTCPeerConnection();
