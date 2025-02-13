@@ -206,6 +206,11 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       console.log(`[${new Date().toISOString()}] Type:`, realtimeEvent.type);
       
       if (realtimeEvent.type === "response.audio_transcript.delta") {
+        // If this is the first delta of a new response, reset duration
+        if (!estimatedDuration) {
+          clearCurrentTimeout();
+          console.log("New response starting, cleared timeout and reset duration");
+        }
         showSpeakingIndicator();
         hideLogoIndicator();
         estimateDuration(realtimeEvent.delta);
