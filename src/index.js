@@ -127,17 +127,17 @@ function checkAudioActivity() {
 
 async function toggleAudioTransmission() {
   isPaused = !isPaused;
-  const pausedOverlay = document.getElementById('pausedOverlay');
+  const mutedOverlay = document.getElementById('mutedOverlay');
   
   if (isPaused) {
     await stopAudioTransmission();
-    pausedOverlay.style.display = 'flex';
+    mutedOverlay.style.display = 'flex';
   } else {
     if (!dc || dc.readyState !== "open") {
       console.log("Data channel not ready, reinitializing WebRTC");
       // Reset the paused state since we're reinitializing
       isPaused = false;
-      pausedOverlay.style.display = 'none';
+      mutedOverlay.style.display = 'none';
       cleanupWebRTC(); // Clean up old connection
       // Trigger reinitialization from FileMaker
       if (window.FileMaker) {
@@ -145,7 +145,7 @@ async function toggleAudioTransmission() {
       }
     } else {
       startAudioTransmission();
-      pausedOverlay.style.display = 'none';
+      mutedOverlay.style.display = 'none';
     }
   }
 }
@@ -157,7 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Add click handlers to both indicators and overlay
   document.getElementById('speakingIndicator').addEventListener('click', toggleAudioTransmission);
   document.getElementById('logoIndicator').addEventListener('click', toggleAudioTransmission);
-  document.getElementById('pausedOverlay').addEventListener('click', toggleAudioTransmission);
+  document.getElementById('mutedOverlay').addEventListener('click', toggleAudioTransmission);
 
 });
 
@@ -195,7 +195,10 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         session: {
           instructions: instructions || "You are a helpful AI assistant.",
           tools: toolsStr ? JSON.parse(toolsStr) : [],
-          tool_choice: toolChoice || "auto"
+          tool_choice: toolChoice || "auto",
+          input_audio_transcription: {
+            model: "whisper-1"
+          }
         }
       };
       dc.send(JSON.stringify(sessionUpdateEvent));
@@ -211,6 +214,11 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
         console.log("Model response:", realtimeEvent.response.output[0]);
         /* TODO: Log or list model response in FileMaker */
+      }
+
+      if (realtimeEvent.type === "conversation.item.input_audio_transcription.completed" && realtimeEvent.item.content.transcript) {
+        console.log("User message:", realtimeEvent.item.content.transcript);
+        /* TODO: Log or list users message in FileMaker */
       }
       
       if (realtimeEvent.type === "error" || 
