@@ -27,29 +27,49 @@ window.cleanupWebRTC = cleanupWebRTC;
 // Function to start audio transmission
 function startAudioTransmission() {
   console.log("Attempting to start audio transmission");
+  
+  // Unmute microphone input
   if (audioTrack) {
     audioTrack.enabled = true;
-    console.log("Unmuted audio transmission");
+    console.log("Unmuted microphone input");
   } else {
-    console.error("Audio track not available");
+    console.error("Microphone track not available");
+  }
+
+  // Unmute AI output
+  if (audioEl && audioEl.srcObject) {
+    const audioTracks = audioEl.srcObject.getAudioTracks();
+    audioTracks.forEach(track => track.enabled = true);
+    console.log("Unmuted AI output");
+  } else {
+    console.error("AI audio output not available");
   }
 }
 
 // Function to stop audio transmission
 function stopAudioTransmission() {
+  // Mute microphone input
   if (audioTrack) {
     audioTrack.enabled = false;
-    console.log("Muted audio transmission");
-    // Immediately show logo and hide speaking indicator
-    showLogoIndicator();
-    hideSpeakingIndicator();
-    // Clear any existing timeout
-    if (currentTimeout) {
-      clearTimeout(currentTimeout);
-      currentTimeout = null;
-    }
-    estimatedDuration = 0;
+    console.log("Muted microphone input");
   }
+  
+  // Mute AI output
+  if (audioEl && audioEl.srcObject) {
+    const audioTracks = audioEl.srcObject.getAudioTracks();
+    audioTracks.forEach(track => track.enabled = false);
+    console.log("Muted AI output");
+  }
+
+  // Immediately show logo and hide speaking indicator
+  showLogoIndicator();
+  hideSpeakingIndicator();
+  // Clear any existing timeout
+  if (currentTimeout) {
+    clearTimeout(currentTimeout);
+    currentTimeout = null;
+  }
+  estimatedDuration = 0;
 }
 
 // Function to cleanup WebRTC connection
@@ -89,6 +109,7 @@ let pc = null;
 let dc = null;
 let isPaused = false;
 let audioTrack = null;
+let audioEl = null;
 
 function toggleAudioTransmission() {
   isPaused = !isPaused;
@@ -117,9 +138,16 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
   try {
     pc = new RTCPeerConnection();
 
-    const audioEl = document.createElement("audio");
+    audioEl = document.createElement("audio");
     audioEl.autoplay = true;
-    pc.ontrack = e => audioEl.srcObject = e.streams[0];
+    pc.ontrack = e => {
+      audioEl.srcObject = e.streams[0];
+      // Get the audio tracks from the stream
+      const audioTracks = audioEl.srcObject.getAudioTracks();
+      if (isPaused) {
+        audioTracks.forEach(track => track.enabled = false);
+      }
+    };
 
     const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
     audioTrack = ms.getTracks()[0];
