@@ -1,30 +1,6 @@
 import { loadSpeakingIndicator } from "./imageLoader_speaking.js";
 import { loadLogoIndicator } from "./imageLoader_logo.js";
 
-let estimatedDuration = 0;
-let currentTimeout = null;
-
-function clearCurrentTimeout() {
-  if (currentTimeout) {
-    clearTimeout(currentTimeout);
-    currentTimeout = null;
-    console.log("Cleared existing timeout");
-  }
-}
-
-function estimateDuration(delta) {
-  try {
-    const words = delta.split(/\s+/).filter(Boolean);
-    words.forEach(word => {
-      estimatedDuration += 200; // Base time per word
-      if (/[.,!?]/.test(word)) {
-        estimatedDuration += 300; // Extra time for punctuation
-      }
-    });
-  } catch (error) {
-    console.error("Error estimating duration:", error);
-  }
-}
 
 // Expose functions to FileMaker
 window.initializeWebRTC = initializeWebRTC;
@@ -124,6 +100,42 @@ let dc = null;
 let isPaused = false;
 let audioTrack = null;
 let audioEl = null;
+let audioContext = null;
+let audioAnalyser = null;
+let audioDataArray = null;
+
+function initAudioAnalyser() {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    audioAnalyser = audioContext.createAnalyser();
+    audioAnalyser.fftSize = 256;
+    audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+    console.log("Audio analyser initialized");
+  }
+}
+
+function checkAudioActivity() {
+  if (audioAnalyser && !isPaused) {
+    audioAnalyser.getByteFrequencyData(audioDataArray);
+    const average = audioDataArray.reduce((a, b) => a + b) / audioDataArray.length;
+    
+    // Use a threshold to determine if there's meaningful audio
+    const AUDIO_THRESHOLD = 10; // Adjust this value based on testing
+    const hasAudio = average > AUDIO_THRESHOLD;
+    
+    if (hasAudio) {
+      showSpeakingIndicator();
+      hideLogoIndicator();
+      console.log("Audio activity detected, level:", average);
+    } else {
+      showLogoIndicator();
+      hideSpeakingIndicator();
+    }
+    
+    return hasAudio;
+  }
+  return false;
+}
 
 function logDataChannelState() {
   console.log("Data channel state:", dc ? dc.readyState : "no data channel");
@@ -182,6 +194,14 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       if (isPaused) {
         audioTracks.forEach(track => track.enabled = false);
       }
+      
+      // Set up audio analysis
+      initAudioAnalyser();
+      const source = audioContext.createMediaStreamSource(e.streams[0]);
+      source.connect(audioAnalyser);
+      
+      // Start monitoring audio levels
+      setInterval(checkAudioActivity, 100);
     };
 
     const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -215,40 +235,10 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
       console.log(`[${new Date().toISOString()}] Type:`, realtimeEvent.type);
       
-      if (realtimeEvent.type === "response.audio_transcript.delta") {
-        // If this is the first delta of a new response, reset duration
-        if (!estimatedDuration) {
-          clearCurrentTimeout();
-          console.log("New response starting, cleared timeout and reset duration");
-        }
-        showSpeakingIndicator();
-        hideLogoIndicator();
-        estimateDuration(realtimeEvent.delta);
-        console.log("Estimated duration:", estimatedDuration);
-      }
-
-      if (realtimeEvent.type === "response.audio_transcript.done" || 
-          realtimeEvent.type === "error" || 
+      if (realtimeEvent.type === "error" || 
           realtimeEvent.type === "conversation.stopped") {
-        // Clear any existing timeout
-        if (currentTimeout) {
-          clearTimeout(currentTimeout);
-        }
-        // Reset immediately for errors and stops
-        if (realtimeEvent.type === "error" || realtimeEvent.type === "conversation.stopped") {
-          showLogoIndicator();
-          hideSpeakingIndicator();
-          estimatedDuration = 0;
-        } else {
-          // Set new timeout for normal completion
-          currentTimeout = setTimeout(() => {
-            console.log("Hiding indicator after duration:", estimatedDuration);
-            showLogoIndicator();
-            hideSpeakingIndicator();
-            estimatedDuration = 0; // Reset for the next response
-            currentTimeout = null;
-          }, estimatedDuration);
-        }
+        showLogoIndicator();
+        hideSpeakingIndicator();
       }
 
       if (realtimeEvent.type === "error") {
