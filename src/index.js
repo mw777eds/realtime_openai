@@ -1,4 +1,3 @@
-import { sampleData } from "./sampleData";
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.querySelector("button");
 
