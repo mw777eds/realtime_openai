@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
 async function initWebRTC() {
   try {
     // Get an ephemeral key from the specified URL
-    const tokenResponse = await fetch("https://n8n.empowereddatasolutions.com/webhook-test/realtime");
+    const tokenResponse = await fetch("https://n8n.empowereddatasolutions.com/webhook/realtime");
     if (!tokenResponse.ok) {
       throw new Error(`HTTP error! status: ${tokenResponse.status}`);
     }
