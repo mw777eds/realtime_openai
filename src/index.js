@@ -118,6 +118,7 @@ function hideSpeakingIndicator() {
   indicator.style.display = 'none';
 }
 
+
 let pc = null;
 let dc = null;
 let isPaused = false;
