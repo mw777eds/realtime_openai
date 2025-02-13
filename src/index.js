@@ -90,9 +90,9 @@ async function initWebRTC() {
             item: {
               type: "function_call_output",
               call_id: tool.call_id,
-              output: JSON.stringify({
+              output: {
                 current_datetime: new Date().toISOString()
-              })
+              }
             }
           };
 
@@ -101,7 +101,10 @@ async function initWebRTC() {
 
           // After sending the tool response, request the model to generate a response
           const responseCreateEvent = {
-            type: "response.create"
+            type: "response.create",
+            response: {
+              modalities: ["text"]
+            }
           };
           dc.send(JSON.stringify(responseCreateEvent));
         }
