@@ -1,4 +1,8 @@
+import { loadSpeakingIndicator } from "./imageLoader.js";
+
 document.addEventListener("DOMContentLoaded", () => {
+  loadSpeakingIndicator();
+  
   const btn = document.querySelector("button");
   let isConnected = false;
   let pc = null;
