@@ -126,6 +126,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
     dc = pc.createDataChannel("oai-events");
     dc.addEventListener("open", () => {
+      console.log("Data channel opened, sending session update");
       const sessionUpdateEvent = {
         type: "session.update",
         session: {
@@ -135,6 +136,8 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         }
       };
       dc.send(JSON.stringify(sessionUpdateEvent));
+      console.log("Starting audio transmission after session update");
+      startAudioTransmission();
     });
 
     dc.addEventListener("message", (e) => {
@@ -222,8 +225,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     };
     await pc.setRemoteDescription(answer);
     console.log("WebRTC connection established");
-    // Automatically start audio transmission after successful initialization
-    startAudioTransmission();
     return pc;
   } catch (error) {
     console.error("Failed to initialize WebRTC:", error);
