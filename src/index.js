@@ -82,6 +82,10 @@ async function initWebRTC() {
 
     console.log("type",realtimeEvent.type);
     
+    if (realtimeEvent.type === "response.text.delta") {
+      animateWaveform();
+    }
+
     if (realtimeEvent.tool_calls) {
       for (const tool of realtimeEvent.tool_calls) {
         if (tool.name === "get_current_datetime") {
@@ -146,4 +150,18 @@ async function initWebRTC() {
     console.error("Failed to initialize WebRTC:", error);
     alert("Failed to initialize WebRTC. Please try again.");
   }
+}
+
+// Function to animate the waveform
+function animateWaveform() {
+  const wave = document.getElementById('wave');
+  let offset = 0;
+
+  function animate() {
+    offset += 0.1;
+    wave.setAttribute('transform', `translate(${offset}, 0)`);
+    requestAnimationFrame(animate);
+  }
+
+  animate();
 }

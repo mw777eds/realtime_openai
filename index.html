@@ -10,6 +10,10 @@
   <body>
       <h2 class="tintedBlackLeft">Realtime API</h2>
     <button type="button">Push to Talk</button>
+    <svg id="waveform" width="100" height="50">
+      <rect width="100" height="50" fill="#ccc" />
+      <path id="wave" d="M0,25 Q25,0 50,25 T100,25" fill="none" stroke="#000" stroke-width="2" />
+    </svg>
     <script type="module">
       import "./src/index.js";
     </script>
