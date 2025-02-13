@@ -1,5 +1,21 @@
 import { loadSpeakingIndicator } from "./imageLoader.js";
 
+let estimatedDuration = 0;
+
+function estimateDuration(delta) {
+  try {
+    const words = delta.split(/\s+/).filter(Boolean);
+    words.forEach(word => {
+      estimatedDuration += 200; // Base time per word
+      if (/[.,!?]/.test(word)) {
+        estimatedDuration += 300; // Extra time for punctuation
+      }
+    });
+  } catch (error) {
+    console.error("Error estimating duration:", error);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   loadSpeakingIndicator();
   
