@@ -88,8 +88,16 @@ async function initWebRTC() {
     
     if (realtimeEvent.type === "response.audio_transcript.delta") {
       showSpeakingIndicator();
-    } else if (realtimeEvent.type === "response.audio.done") {
-      hideSpeakingIndicator();
+      estimateDuration(realtimeEvent.delta);
+      console.log("Estimated duration:", estimatedDuration);
+    }
+
+    if (realtimeEvent.type === "response.audio_transcript.done") {
+      setTimeout(() => {
+        hideSpeakingIndicator();
+        console.log("Hiding indicator after duration:", estimatedDuration);
+        estimatedDuration = 0; // Reset for the next response
+      }, estimatedDuration);
     }
 
     if (realtimeEvent.tool_calls) {
