@@ -27,30 +27,19 @@ window.cleanupWebRTC = cleanupWebRTC;
 // Function to start audio transmission
 function startAudioTransmission() {
   console.log("Attempting to start audio transmission");
-  console.log("Data channel state:", dc ? dc.readyState : "no data channel");
-  
-  if (dc && dc.readyState === "open") {
-    const startEvent = {
-      type: "response.create",
-      response: {
-        modalities: ["text"]
-      }
-    };
-    dc.send(JSON.stringify(startEvent));
-    console.log("Started audio transmission");
+  if (audioTrack) {
+    audioTrack.enabled = true;
+    console.log("Unmuted audio transmission");
   } else {
-    console.error("Data channel not ready");
+    console.error("Audio track not available");
   }
 }
 
 // Function to stop audio transmission
 function stopAudioTransmission() {
-  if (dc && dc.readyState === "open") {
-    const stopEvent = {
-      type: "conversation.stop"
-    };
-    dc.send(JSON.stringify(stopEvent));
-    console.log("Stopped audio transmission");
+  if (audioTrack) {
+    audioTrack.enabled = false;
+    console.log("Muted audio transmission");
     // Immediately show logo and hide speaking indicator
     showLogoIndicator();
     hideSpeakingIndicator();
@@ -99,6 +88,7 @@ function hideSpeakingIndicator() {
 let pc = null;
 let dc = null;
 let isPaused = false;
+let audioTrack = null;
 
 function toggleAudioTransmission() {
   isPaused = !isPaused;
@@ -132,7 +122,8 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     pc.ontrack = e => audioEl.srcObject = e.streams[0];
 
     const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
-    pc.addTrack(ms.getTracks()[0]);
+    audioTrack = ms.getTracks()[0];
+    pc.addTrack(audioTrack);
 
     dc = pc.createDataChannel("oai-events");
     dc.addEventListener("open", () => {
