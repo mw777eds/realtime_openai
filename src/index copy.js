@@ -1,4 +1,4 @@
-import { loadSpeakingIndicator } from "./imageLoader.js";
+import { loadSpeakingIndicator } from "./imageLoader_speaking.js";
 import { loadLogoIndicator } from "./imageLoader_logo.js";
 
 let estimatedDuration = 0;
@@ -27,77 +27,30 @@ function hideLogoIndicator() {
   logoIndicator.style.display = 'none';
 }
 
-function showSpeakingIndicator() {
-  const indicator = document.getElementById('speakingIndicator');
-  indicator.style.display = 'block';
-}
-
-function hideSpeakingIndicator() {
-  const indicator = document.getElementById('speakingIndicator');
-  indicator.style.display = 'none';
-}
-
-let pc = null;
-let dc = null;
-
 document.addEventListener("DOMContentLoaded", () => {
   loadSpeakingIndicator();
   loadLogoIndicator();
-});
+  
+  const btn = document.querySelector("button");
+  let isConnected = false;
+  let pc = null;
 
-async function initializeWebRTC(ephemeralKey, instructions, tools, toolChoice) {
-  try {
-    pc = new RTCPeerConnection();
-
-    const audioEl = document.createElement("audio");
-    audioEl.autoplay = true;
-    pc.ontrack = e => audioEl.srcObject = e.streams[0];
-
-    const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
-    pc.addTrack(ms.getTracks()[0]);
-
-    dc = pc.createDataChannel("oai-events");
-    dc.addEventListener("open", () => {
-      const sessionUpdateEvent = {
-        type: "session.update",
-        session: {
-          instructions,
-          tools,
-          tool_choice: toolChoice
-        }
-      };
-      dc.send(JSON.stringify(sessionUpdateEvent));
-    });
-
-    dc.addEventListener("message", handleRealtimeEvents);
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const baseUrl = "https://api.openai.com/v1/realtime";
-    const model = "gpt-4o-realtime-preview-2024-12-17";
-    const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
-      method: "POST",
-      body: offer.sdp,
-      headers: {
-        Authorization: `Bearer ${ephemeralKey}`,
-        "Content-Type": "application/sdp"
-      },
-    });
-
-    if (!sdpResponse.ok) {
-      throw new Error(`SDP response error! status: ${sdpResponse.status}`);
+  // Toggle WebRTC connection on button click
+  btn.onclick = async function () {
+    if (isConnected) {
+      // Stop the connection
+      pc.close();
+      pc = null;
+      isConnected = false;
+      btn.textContent = "Start Talking";
+    } else {
+      // Start the connection
+      pc = await initWebRTC();
+      isConnected = true;
+      btn.textContent = "Stop Talking";
     }
-
-    const answer = {
-      type: "answer",
-      sdp: await sdpResponse.text(),
-    };
-    await pc.setRemoteDescription(answer);
-  } catch (error) {
-    console.error("Failed to initialize WebRTC:", error);
-  }
-}
+  };
+});
 
 // Initialize WebRTC connection
 async function initWebRTC() {
@@ -170,9 +123,9 @@ async function initWebRTC() {
 
     if (realtimeEvent.type === "response.audio_transcript.done") {
       setTimeout(() => {
+        hideSpeakingIndicator();
         console.log("Hiding indicator after duration:", estimatedDuration);
         showLogoIndicator();
-        hideSpeakingIndicator();
         estimatedDuration = 0; // Reset for the next response
       }, estimatedDuration);
     }
@@ -243,3 +196,12 @@ async function initWebRTC() {
   }
 }
 
+function showSpeakingIndicator() {
+  const indicator = document.getElementById('speakingIndicator');
+  indicator.style.display = 'block';
+}
+
+function hideSpeakingIndicator() {
+  const indicator = document.getElementById('speakingIndicator');
+  indicator.style.display = 'none';
+}
