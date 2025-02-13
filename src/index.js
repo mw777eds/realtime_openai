@@ -1,20 +1,28 @@
 import { sampleData } from "./sampleData";
-const btn = document.querySelector("button");
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.querySelector("button");
 
-// the JS button
-btn.onclick = async function () {
-  console.log("You ran some JavaScript");
-  alert("You ran some JavaScript");
-  await initWebRTC();
-};
+  // the JS button
+  btn.onclick = async function () {
+    console.log("You ran some JavaScript");
+    alert("You ran some JavaScript");
+    await initWebRTC();
+  };
+});
 
 // Initialize WebRTC connection
 async function initWebRTC() {
-  // Get an ephemeral key from the specified URL
   try {
+    // Get an ephemeral key from the specified URL
     const tokenResponse = await fetch("https://n8n.empowereddatasolutions.com/webhook-test/realtime");
+    if (!tokenResponse.ok) {
+      throw new Error(`HTTP error! status: ${tokenResponse.status}`);
+    }
     const data = await tokenResponse.json();
-    const EPHEMERAL_KEY = data[0].client_secret.value;
+    const EPHEMERAL_KEY = data[0]?.client_secret?.value;
+    if (!EPHEMERAL_KEY) {
+      throw new Error("Failed to retrieve ephemeral key");
+    }
 
   // Create a peer connection
     const pc = new RTCPeerConnection();
@@ -44,20 +52,24 @@ async function initWebRTC() {
 
   const baseUrl = "https://api.openai.com/v1/realtime";
   const model = "gpt-4o-realtime-preview-2024-12-17";
-  const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
-    method: "POST",
-    body: offer.sdp,
-    headers: {
-      Authorization: `Bearer ${EPHEMERAL_KEY}`,
-      "Content-Type": "application/sdp"
-    },
-  });
+    const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
+      method: "POST",
+      body: offer.sdp,
+      headers: {
+        Authorization: `Bearer ${EPHEMERAL_KEY}`,
+        "Content-Type": "application/sdp"
+      },
+    });
 
-  const answer = {
-    type: "answer",
-    sdp: await sdpResponse.text(),
-  };
-  await pc.setRemoteDescription(answer);
+    if (!sdpResponse.ok) {
+      throw new Error(`SDP response error! status: ${sdpResponse.status}`);
+    }
+
+    const answer = {
+      type: "answer",
+      sdp: await sdpResponse.text(),
+    };
+    await pc.setRemoteDescription(answer);
   } catch (error) {
     console.error("Failed to initialize WebRTC:", error);
     alert("Failed to initialize WebRTC. Please try again.");
