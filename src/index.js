@@ -17,6 +17,8 @@ function estimateDuration(delta) {
   }
 }
 
+window.initializeWebRTC = initializeWebRTC;
+
 function showLogoIndicator() {
   const logoIndicator = document.getElementById('logoIndicator');
   logoIndicator.style.display = 'block';
