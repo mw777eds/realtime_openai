@@ -11,12 +11,13 @@ btn.onclick = async function () {
 // Initialize WebRTC connection
 async function initWebRTC() {
   // Get an ephemeral key from the specified URL
-  const tokenResponse = await fetch("https://n8n.empowereddatasolutions.com/webhook-test/realtime");
-  const data = await tokenResponse.json();
-  const EPHEMERAL_KEY = data[0].client_secret.value;
+  try {
+    const tokenResponse = await fetch("https://n8n.empowereddatasolutions.com/webhook-test/realtime");
+    const data = await tokenResponse.json();
+    const EPHEMERAL_KEY = data[0].client_secret.value;
 
   // Create a peer connection
-  const pc = new RTCPeerConnection();
+    const pc = new RTCPeerConnection();
 
   // Set up to play remote audio from the model
   const audioEl = document.createElement("audio");
@@ -57,6 +58,10 @@ async function initWebRTC() {
     sdp: await sdpResponse.text(),
   };
   await pc.setRemoteDescription(answer);
+  } catch (error) {
+    console.error("Failed to initialize WebRTC:", error);
+    alert("Failed to initialize WebRTC. Please try again.");
+  }
 }
 
 // this function is called by FileMaker.
