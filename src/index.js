@@ -88,14 +88,20 @@ async function initWebRTC() {
             item: {
               type: "function_call_output",
               call_id: tool.call_id,
-              output: {
+              output: JSON.stringify({
                 current_datetime: new Date().toISOString()
-              }
+              })
             }
           };
 
           // Send tool response back to OpenAI
           dc.send(JSON.stringify(toolResponse));
+
+          // After sending the tool response, request the model to generate a response
+          const responseCreateEvent = {
+            type: "response.create"
+          };
+          dc.send(JSON.stringify(responseCreateEvent));
         }
       }
     }
