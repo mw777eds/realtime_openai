@@ -99,7 +99,7 @@ async function initWebRTC() {
           // Send tool response back to OpenAI
           dc.send(JSON.stringify(toolResponse));
 
-          console.log("Tool response:", toolResponse);
+          console.log("Tool response sent:", toolResponse);
 
           // After sending the tool response, request the model to generate a response
           const responseCreateEvent = {
@@ -109,7 +109,7 @@ async function initWebRTC() {
             }
           };
           dc.send(JSON.stringify(responseCreateEvent));
-          console.log ( "responseCreateEvent", responseCreateEvent);
+          console.log("Response create event sent:", responseCreateEvent);
         }
       }
     }
