@@ -248,6 +248,11 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         }
       }
 
+      if (realtimeEvent.type === "error") {
+        console.error("Error event received:", realtimeEvent.error);
+        logDataChannelState();
+      }
+
       if (realtimeEvent.tool_calls) {
         for (const tool of realtimeEvent.tool_calls) {
           if (tool.name === "get_current_datetime") {
