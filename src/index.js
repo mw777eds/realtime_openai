@@ -46,7 +46,7 @@ function startAudioTransmission() {
 function stopAudioTransmission() {
   if (dc && dc.readyState === "open") {
     const stopEvent = {
-      type: "response.stop"
+      type: "conversation.stop"
     };
     dc.send(JSON.stringify(stopEvent));
     console.log("Stopped audio transmission");
