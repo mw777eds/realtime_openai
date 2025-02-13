@@ -54,11 +54,20 @@ function stopAudioTransmission() {
     console.log("Muted microphone input");
   }
   
-  // Mute AI output
+  // Mute AI output and stop current response
   if (audioEl && audioEl.srcObject) {
     const audioTracks = audioEl.srcObject.getAudioTracks();
     audioTracks.forEach(track => track.enabled = false);
     console.log("Muted AI output");
+    
+    // Send stop event to cut off remaining content
+    if (dc && dc.readyState === "open") {
+      const stopEvent = {
+        type: "response.stop"
+      };
+      dc.send(JSON.stringify(stopEvent));
+      console.log("Sent stop event to cut off remaining content");
+    }
   }
 
   // Immediately show logo and hide speaking indicator
