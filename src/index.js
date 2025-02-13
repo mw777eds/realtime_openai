@@ -63,9 +63,26 @@ async function stopAudioTransmission() {
       
       // Send stop event to cut off remaining content
       if (dc && dc.readyState === "open") {
-        // Since we can't stop the conversation directly, we'll just resolve immediately
-        console.log("Muting audio only since stop event not supported");
-        resolve();
+        // Try to force the conversation to end by simulating audio buffer events
+        const bufferStartEvent = {
+          type: "input_audio_buffer.append",
+          audio: "" // empty audio buffer
+        };
+        dc.send(JSON.stringify(bufferStartEvent));
+        console.log("Sent empty audio buffer");
+
+        const commitEvent = {
+          type: "input_audio_buffer.commit"
+        };
+        dc.send(JSON.stringify(commitEvent));
+        console.log("Sent input buffer commit");
+
+        // Wait a moment for the events to process
+        setTimeout(() => {
+          showLogoIndicator();
+          hideSpeakingIndicator();
+          resolve();
+        }, 100);
       } else {
         resolve();
       }
