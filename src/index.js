@@ -56,7 +56,7 @@ async function initWebRTC() {
     const sessionUpdateEvent = {
       type: "session.update",
       session: {
-        instructions: "You are a helpful AI assistant embedded in a FileMaker WebViewer.",
+        instructions: "You are a helpful AI assistant embedded in a FileMaker WebViewer. You can use your ge_current_datetime tool to find out the time.  If asked anything about date/time do not maek it up.  Use the tools provided or say I don't know.",
         tools: [
           {
             type: "function",
