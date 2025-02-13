@@ -1,4 +1,4 @@
-import { loadSpeakingIndicator } from "./imageLoade_speaking.js";
+import { loadSpeakingIndicator } from "./imageLoader_speaking.js";
 import { loadLogoIndicator } from "./imageLoader_logo.js";
 
 let estimatedDuration = 0;
