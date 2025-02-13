@@ -4,6 +4,14 @@ import { loadLogoIndicator } from "./imageLoader_logo.js";
 let estimatedDuration = 0;
 let currentTimeout = null;
 
+function clearCurrentTimeout() {
+  if (currentTimeout) {
+    clearTimeout(currentTimeout);
+    currentTimeout = null;
+    console.log("Cleared existing timeout");
+  }
+}
+
 function estimateDuration(delta) {
   try {
     const words = delta.split(/\s+/).filter(Boolean);
