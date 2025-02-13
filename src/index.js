@@ -17,7 +17,51 @@ function estimateDuration(delta) {
   }
 }
 
+// Expose functions to FileMaker
 window.initializeWebRTC = initializeWebRTC;
+window.startAudioTransmission = startAudioTransmission;
+window.stopAudioTransmission = stopAudioTransmission;
+window.cleanupWebRTC = cleanupWebRTC;
+
+// Function to start audio transmission
+function startAudioTransmission() {
+  if (dc && dc.readyState === "open") {
+    const startEvent = {
+      type: "response.create",
+      response: {
+        modalities: ["text"]
+      }
+    };
+    dc.send(JSON.stringify(startEvent));
+    console.log("Started audio transmission");
+  } else {
+    console.error("Data channel not ready");
+  }
+}
+
+// Function to stop audio transmission
+function stopAudioTransmission() {
+  if (dc && dc.readyState === "open") {
+    const stopEvent = {
+      type: "response.stop"
+    };
+    dc.send(JSON.stringify(stopEvent));
+    console.log("Stopped audio transmission");
+  }
+}
+
+// Function to cleanup WebRTC connection
+function cleanupWebRTC() {
+  if (dc) {
+    dc.close();
+    dc = null;
+  }
+  if (pc) {
+    pc.close();
+    pc = null;
+  }
+  console.log("WebRTC connection cleaned up");
+}
 
 function showLogoIndicator() {
   const logoIndicator = document.getElementById('logoIndicator');
