@@ -227,13 +227,12 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     dc.addEventListener("message", async (e) => {
       // Realtime server events appear here!
       const realtimeEvent = JSON.parse(e.data);
+      console.log(`[${new Date().toISOString()}] Type:`, realtimeEvent.type);
       console.log(`[${new Date().toISOString()}] Event:`, realtimeEvent);
 
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
         console.log("Model response:", realtimeEvent.response.output[0]);
       }
-
-      console.log(`[${new Date().toISOString()}] Type:`, realtimeEvent.type);
       
       if (realtimeEvent.type === "error" || 
           realtimeEvent.type === "conversation.stopped") {
