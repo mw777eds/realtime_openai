@@ -51,10 +51,48 @@ async function initWebRTC() {
 
   // Set up data channel for sending and receiving events
   const dc = pc.createDataChannel("oai-events");
+  dc.addEventListener("open", () => {
+    // Update session with system prompt and tools
+    const sessionUpdateEvent = {
+      type: "session.update",
+      session: {
+        instructions: "You are a helpful AI assistant embedded in a FileMaker WebViewer.",
+        tools: [
+          {
+            type: "function",
+            name: "get_current_datetime",
+            description: "Returns the current date and time in ISO 8601 format.",
+            parameters: {}
+          }
+        ],
+        tool_choice: "auto"
+      }
+    };
+    dc.send(JSON.stringify(sessionUpdateEvent));
+  });
+
   dc.addEventListener("message", (e) => {
     // Realtime server events appear here!
     const realtimeEvent = JSON.parse(e.data);
     console.log(realtimeEvent);
+
+    if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
+      console.log("Model response:", realtimeEvent.response.output[0]);
+    }
+
+    if (realtimeEvent.tool_calls) {
+      for (const tool of realtimeEvent.tool_calls) {
+        if (tool.name === "get_current_datetime") {
+          const response = {
+            id: tool.id, // Keep track of which tool was called
+            result: new Date().toISOString() // Return current datetime
+          };
+
+          // Send tool response back to OpenAI
+          dc.send(JSON.stringify(response));
+        }
+      }
+    }
   });
 
   // Start the session using the Session Description Protocol (SDP)
