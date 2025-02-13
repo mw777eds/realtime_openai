@@ -88,9 +88,9 @@ async function initWebRTC() {
             item: {
               type: "function_call_output",
               call_id: tool.call_id,
-              output: JSON.stringify({
+              output: {
                 current_datetime: new Date().toISOString()
-              })
+              }
             }
           };
 
