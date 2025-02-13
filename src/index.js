@@ -1,4 +1,5 @@
 import { loadSpeakingIndicator } from "./imageLoader.js";
+import { loadLogoIndicator } from "./imageLoader_logo.js";
 
 let estimatedDuration = 0;
 
@@ -26,8 +27,19 @@ function hideLogoIndicator() {
   logoIndicator.style.display = 'none';
 }
 
+function showSpeakingIndicator() {
+  const indicator = document.getElementById('speakingIndicator');
+  indicator.style.display = 'block';
+}
+
+function hideSpeakingIndicator() {
+  const indicator = document.getElementById('speakingIndicator');
+  indicator.style.display = 'none';
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   loadSpeakingIndicator();
+  loadLogoIndicator();
   
   const btn = document.querySelector("button");
   let isConnected = false;
@@ -121,9 +133,9 @@ async function initWebRTC() {
 
     if (realtimeEvent.type === "response.audio_transcript.done") {
       setTimeout(() => {
-        hideSpeakingIndicator();
         console.log("Hiding indicator after duration:", estimatedDuration);
         showLogoIndicator();
+        hideSpeakingIndicator();
         estimatedDuration = 0; // Reset for the next response
       }, estimatedDuration);
     }
@@ -194,12 +206,3 @@ async function initWebRTC() {
   }
 }
 
-function showSpeakingIndicator() {
-  const indicator = document.getElementById('speakingIndicator');
-  indicator.style.display = 'block';
-}
-
-function hideSpeakingIndicator() {
-  const indicator = document.getElementById('speakingIndicator');
-  indicator.style.display = 'none';
-}
