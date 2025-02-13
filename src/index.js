@@ -216,9 +216,13 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         /* TODO: Log or list model response in FileMaker */
       }
 
-      if (realtimeEvent.type === "conversation.item.input_audio_transcription.completed" && realtimeEvent.item.content.transcript) {
-        console.log("User message:", realtimeEvent.item.content.transcript);
-        /* TODO: Log or list users message in FileMaker */
+      if (realtimeEvent.type === "conversation.item.input_audio_transcription.completed") {
+        // Check if we have a transcript in the expected location
+        const transcript = realtimeEvent.item?.content?.transcript || realtimeEvent.transcript || '';
+        if (transcript) {
+          console.log("User message:", transcript);
+          /* TODO: Log or list users message in FileMaker */
+        }
       }
       
       if (realtimeEvent.type === "error" || 
