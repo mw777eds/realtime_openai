@@ -1,4 +1,4 @@
-import { loadSpeakingIndicator } from "./imageLoader.js";
+import { loadSpeakingIndicator } from "./imageLoade_speaking.js";
 import { loadLogoIndicator } from "./imageLoader_logo.js";
 
 let estimatedDuration = 0;
@@ -166,6 +166,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById('speakingIndicator').addEventListener('click', toggleAudioTransmission);
   document.getElementById('logoIndicator').addEventListener('click', toggleAudioTransmission);
   document.getElementById('pausedOverlay').addEventListener('click', toggleAudioTransmission);
+
+  // Add initialization call to filemaer script.
+  if (window.FileMaker) {
+    window.FileMaker.PerformScript("StartRealtime", "");
+  }
 });
 
 async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice) {
