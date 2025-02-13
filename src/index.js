@@ -63,22 +63,9 @@ async function stopAudioTransmission() {
       
       // Send stop event to cut off remaining content
       if (dc && dc.readyState === "open") {
-        const stopEvent = {
-          type: "conversation.stop"
-        };
-        dc.send(JSON.stringify(stopEvent));
-        console.log("Sent stop event to cut off remaining content");
-        
-        // Wait for the stop to complete
-        const handleStopComplete = (e) => {
-          const event = JSON.parse(e.data);
-          if (event.type === "conversation.stopped") {
-            console.log("Stop event completed");
-            dc.removeEventListener("message", handleStopComplete);
-            resolve();
-          }
-        };
-        dc.addEventListener("message", handleStopComplete);
+        // Since we can't stop the conversation directly, we'll just resolve immediately
+        console.log("Muting audio only since stop event not supported");
+        resolve();
       } else {
         resolve();
       }
