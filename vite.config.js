@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { defineConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 
@@ -7,8 +8,8 @@ export default defineConfig({
     port: 1234,
   },
   https: {
-    key: fs.readFileSync('path/to/localhost-key.pem'),
-    cert: fs.readFileSync('path/to/localhost-cert.pem'),
+    key: fs.readFileSync('localhost-key.pem'),
+    cert: fs.readFileSync('localhost-cert.pem'),
   },
   plugins: [viteSingleFile()],
   build: {
