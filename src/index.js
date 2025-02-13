@@ -80,6 +80,8 @@ async function initWebRTC() {
       console.log("Model response:", realtimeEvent.response.output[0]);
     }
 
+    console.log("type",realtimeEvent.type);
+    
     if (realtimeEvent.tool_calls) {
       for (const tool of realtimeEvent.tool_calls) {
         if (tool.name === "get_current_datetime") {
