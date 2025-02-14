@@ -198,7 +198,8 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           tool_choice: toolChoice || "auto",
           input_audio_transcription: {
             model: "whisper-1"
-          }
+          },
+          modalities: ["text", "audio"]
         }
       };
       dc.send(JSON.stringify(sessionUpdateEvent));
@@ -211,6 +212,9 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       console.log(`[${new Date().toISOString()}] Type:`, realtimeEvent.type);
       console.log(`[${new Date().toISOString()}] Event:`, realtimeEvent);
 
+      if ( realtimeEvent.type === "response.done" && realtimeEvent.response.output?.type == "function_call" ) {
+        console.log("Model tool call: ", realtimeEvent.output.name, realtimeEvent.output.arguments);
+      }
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
         console.log("Model response:", realtimeEvent.response.output[0]);
         /* TODO: Log or list model response in FileMaker */
