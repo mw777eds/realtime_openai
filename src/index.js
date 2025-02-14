@@ -268,7 +268,12 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
         console.log("Model response:", realtimeEvent.response.output[0]);
-        /* TODO: Log or list model response in FileMaker */
+        if (window.FileMaker && realtimeEvent.response.output[0].content?.[0]?.text) {
+          window.FileMaker.PerformScript("LogMessage", JSON.stringify({
+            roll: "assistant",
+            message: realtimeEvent.response.output[0].content[0].text
+          }));
+        }
       }
 
       if (realtimeEvent.type === "conversation.item.input_audio_transcription.completed") {
@@ -276,10 +281,17 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         const transcript = realtimeEvent.item?.content?.transcript || realtimeEvent.transcript || '';
         if (transcript) {
           console.log("User message:", transcript);
-          /* TODO: Log or list users message in FileMaker */
+          if (window.FileMaker) {
+            window.FileMaker.PerformScript("LogMessage", JSON.stringify({
+              roll: "user",
+              message: transcript
+            }));
+          }
         }
       }
-      
+
+
+
       if (realtimeEvent.type === "error" || 
           realtimeEvent.type === "conversation.stopped") {
         showLogoIndicator();
