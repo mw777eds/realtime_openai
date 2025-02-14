@@ -198,8 +198,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           tool_choice: toolChoice || "auto",
           input_audio_transcription: {
             model: "whisper-1"
-          },
-          modalities: ["text", "audio"]
+          }
         }
       };
       dc.send(JSON.stringify(sessionUpdateEvent));
@@ -211,14 +210,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       const realtimeEvent = JSON.parse(e.data);
       console.log(`[${new Date().toISOString()}] Type:`, realtimeEvent.type);
       console.log(`[${new Date().toISOString()}] Event:`, realtimeEvent);
-
-      if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.some(item => item.type === "function_call")) {
-        const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
-        console.log("Model tool calls:", toolCalls);
-        if (window.FileMaker) {
-          window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
-        }
-      }
 
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
         console.log("Model response:", realtimeEvent.response.output[0]);
