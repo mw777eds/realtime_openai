@@ -12,6 +12,15 @@ window.createModelResponse = createModelResponse;
 
 // Function to send tool response back to OpenAI
 function sendToolResponse(toolResponse) {
+  console.log("sendToolResponse received:", toolResponse);
+  console.log("call_id type:", typeof toolResponse.call_id);
+  console.log("call_id value:", toolResponse.call_id);
+  
+  if (!toolResponse.call_id) {
+    console.error("Missing call_id in toolResponse");
+    return;
+  }
+
   if (dc && dc.readyState === "open") {
     const response = {
       type: "conversation.item.create",
@@ -21,10 +30,13 @@ function sendToolResponse(toolResponse) {
         output: JSON.stringify(toolResponse.output)
       }
     };
+    console.log("Preparing to send response:", response);
+    console.log("Response stringified:", JSON.stringify(response));
+    
     dc.send(JSON.stringify(response));
-    console.log("Sent tool response:", response);
+    console.log("Sent tool response");
   } else {
-    console.error("Data channel not ready for tool response");
+    console.error("Data channel not ready for tool response. State:", dc ? dc.readyState : "no dc");
   }
 }
 
