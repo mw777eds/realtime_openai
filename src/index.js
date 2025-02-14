@@ -268,10 +268,10 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
         console.log("Model response:", realtimeEvent.response.output[0]);
-        if (window.FileMaker && realtimeEvent.response.output[0].content?.[0]?.text) {
+        if (window.FileMaker && realtimeEvent.response.output[0].content?.[0]?.transcript) {
           window.FileMaker.PerformScript("LogMessage", JSON.stringify({
             roll: "assistant",
-            message: realtimeEvent.response.output[0].content[0].text
+            message: realtimeEvent.response.output[0].content[0].transcript
           }));
         }
       }
