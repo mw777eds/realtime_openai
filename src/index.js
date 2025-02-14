@@ -18,7 +18,7 @@ function sendToolResponse(toolResponse) {
       item: {
         type: "function_call_output",
         call_id: toolResponse.call_id,
-        output: toolResponse.output
+        output: JSON.stringify(toolResponse.output)
       }
     };
     dc.send(JSON.stringify(response));
