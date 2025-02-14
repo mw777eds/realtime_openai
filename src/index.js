@@ -214,7 +214,13 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.[0]?.type === "function_call") {
         console.log("Model tool call:", realtimeEvent.response.output[0].name, realtimeEvent.response.output[0].arguments);
-        /* TODO: run script in filemaker script CallTools with the stringified arguments realtimeEvent.response.output */
+        if (window.FileMaker) {
+          const toolCall = {
+            name: realtimeEvent.response.output[0].name,
+            arguments: realtimeEvent.response.output[0].arguments
+          };
+          window.FileMaker.PerformScript("CallTools", JSON.stringify(toolCall));
+        }
       }
 
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
