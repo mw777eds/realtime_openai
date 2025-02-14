@@ -34,8 +34,7 @@ function createModelResponse() {
     const responseCreateEvent = {
       type: "response.create",
       response: {
-        modalities: ["text", "audio"],
-        voice: "sage"
+        modalities: ["text", "audio"]
       }
     };
     dc.send(JSON.stringify(responseCreateEvent));
