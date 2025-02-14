@@ -7,6 +7,43 @@ window.initializeWebRTC = initializeWebRTC;
 window.startAudioTransmission = startAudioTransmission;
 window.stopAudioTransmission = stopAudioTransmission;
 window.cleanupWebRTC = cleanupWebRTC;
+window.sendToolResponse = sendToolResponse;
+window.createModelResponse = createModelResponse;
+
+// Function to send tool response back to OpenAI
+function sendToolResponse(toolResponse) {
+  if (dc && dc.readyState === "open") {
+    const response = {
+      type: "conversation.item.create",
+      item: {
+        type: "function_call_output",
+        call_id: toolResponse.call_id,
+        output: toolResponse.output
+      }
+    };
+    dc.send(JSON.stringify(response));
+    console.log("Sent tool response:", response);
+  } else {
+    console.error("Data channel not ready for tool response");
+  }
+}
+
+// Function to trigger model response after tools
+function createModelResponse() {
+  if (dc && dc.readyState === "open") {
+    const responseCreateEvent = {
+      type: "response.create",
+      response: {
+        modalities: ["text", "audio"],
+        voice: "sage"
+      }
+    };
+    dc.send(JSON.stringify(responseCreateEvent));
+    console.log("Requested new model response");
+  } else {
+    console.error("Data channel not ready for response creation");
+  }
+}
 
 // Function to start audio transmission
 function startAudioTransmission() {
