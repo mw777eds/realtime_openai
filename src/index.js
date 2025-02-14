@@ -12,9 +12,7 @@ window.createModelResponse = createModelResponse;
 
 // Function to send tool response back to OpenAI
 function sendToolResponse(toolResponse) {
-  console.log("sendToolResponse received:", toolResponse);
-  console.log("call_id type:", typeof toolResponse.call_id);
-  console.log("call_id value:", toolResponse.call_id);
+  toolResponse = JSON.parse(toolResponse);
   
   if (!toolResponse.call_id) {
     console.error("Missing call_id in toolResponse");
