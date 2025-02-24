@@ -257,7 +257,10 @@ async function toggleAudioTransmission() {
       }
     } else {
       startAudioTransmission();
-      mutedOverlay.style.display = 'none';
+      mutedOverlay.style.display = 'flex';
+      sleepIcon.style.display = 'none';
+      thoughtIcon.style.display = 'none';
+      earIcon.style.display = 'block';
     }
   }
 }
