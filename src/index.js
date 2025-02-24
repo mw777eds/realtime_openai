@@ -354,7 +354,11 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             sleep: sleepIcon.style.display
           });
 
-          // Force hide all icons first
+          // Force redraw by temporarily removing from DOM
+          const iconContainer = iconOverlay.parentNode;
+          iconContainer.removeChild(iconOverlay);
+          
+          // Reset all states
           iconOverlay.style.display = 'flex';
           thoughtIcon.style.display = 'none';
           earIcon.style.display = 'none';
@@ -368,6 +372,10 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           
           // Force show only thinking icon
           thoughtIcon.style.display = 'block';
+          
+          // Reinsert to force redraw
+          void iconOverlay.offsetHeight; // Trigger reflow
+          iconContainer.appendChild(iconOverlay);
           
           console.log('After tool call setup - Icon states:', {
             overlay: iconOverlay.style.display,
