@@ -355,19 +355,10 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             clearTimeout(window.earIconTimeout);
           }
           
-          console.log('Before state change:', {
-            thought: thoughtIcon.style.display,
-            ear: earIcon.style.display,
-            sleep: sleepIcon.style.display
-          });
-          
-          // Hide all icons first
-          thoughtIcon.style.display = 'none';
+          // Immediately hide ear icon and show thinking icon
           earIcon.style.display = 'none';
-          sleepIcon.style.display = 'none';
-          
-          // Show only thinking icon
           thoughtIcon.style.display = 'block';
+          sleepIcon.style.display = 'none';
           
           // Call FileMaker script once
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
