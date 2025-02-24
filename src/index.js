@@ -337,14 +337,16 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         console.log("Model tool calls:", toolCalls);
         if (window.FileMaker) {
           // Show thinking icon before calling FileMaker and keep it showing
+          const thoughtIcon = document.getElementById('thoughtIcon');
+          const earIcon = document.getElementById('earIcon');
           thoughtIcon.style.display = 'block';
           earIcon.style.display = 'none';
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
         }
       }
 
-      // Show ear icon when response is complete and not paused
-      if (realtimeEvent.type === "response.done") {
+      // Only handle response.done if it's not a function call
+      if (realtimeEvent.type === "response.done" && !realtimeEvent.response.output?.some(item => item.type === "function_call")) {
         thoughtIcon.style.display = 'none';
         if (!isPaused) {
           // Set timeout to show ear icon after 500ms
