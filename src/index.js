@@ -347,7 +347,14 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           const earIcon = document.getElementById('earIcon');
           const sleepIcon = document.getElementById('sleepIcon');
           
-          // Ensure overlay is visible and reset all icons
+          console.log('Before tool call - Icon states:', {
+            overlay: iconOverlay.style.display,
+            thought: thoughtIcon.style.display,
+            ear: earIcon.style.display,
+            sleep: sleepIcon.style.display
+          });
+
+          // Force hide all icons first
           iconOverlay.style.display = 'flex';
           thoughtIcon.style.display = 'none';
           earIcon.style.display = 'none';
@@ -356,10 +363,18 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           // Remove any pending ear icon display timeouts
           if (window.earIconTimeout) {
             clearTimeout(window.earIconTimeout);
+            delete window.earIconTimeout;
           }
           
-          // Show only thinking icon
+          // Force show only thinking icon
           thoughtIcon.style.display = 'block';
+          
+          console.log('After tool call setup - Icon states:', {
+            overlay: iconOverlay.style.display,
+            thought: thoughtIcon.style.display,
+            ear: earIcon.style.display,
+            sleep: sleepIcon.style.display
+          });
           
           // Call FileMaker script once
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
