@@ -130,7 +130,7 @@ function drawWaveform(dataArray) {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
   ctx.lineWidth = 3.5;
-  ctx.strokeStyle = '#006690';
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--waveform-color');
   ctx.beginPath();
   
   const bufferLength = dataArray.length;
