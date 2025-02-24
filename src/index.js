@@ -156,10 +156,6 @@ function drawWaveform(dataArray) {
 
 function startWaveform() {
   if (!animationId && audioAnalyser) {
-    const earIcon = document.getElementById('earIcon');
-    if (earIcon) {
-      earIcon.style.display = 'none';
-    }
     function draw() {
       animationId = requestAnimationFrame(draw);
       const dataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
@@ -212,11 +208,18 @@ function checkAudioActivity() {
     // Use a threshold to determine if there's meaningful audio
     const AUDIO_THRESHOLD = 10; // Adjust this value based on testing
     const hasAudio = average > AUDIO_THRESHOLD;
+    const earIcon = document.getElementById('earIcon');
     
     if (hasAudio) {
       startWaveform();
+      if (earIcon) {
+        earIcon.style.display = 'none';
+      }
     } else {
       stopWaveform();
+      if (earIcon && !isPaused) {
+        earIcon.style.display = 'block';
+      }
     }
     
     return hasAudio;
