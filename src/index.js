@@ -242,9 +242,6 @@ async function toggleAudioTransmission() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  loadSpeakingIndicator();
-  loadLogoIndicator();
-  
   // Initialize canvas and add click handlers
   initializeCanvas();
   document.getElementById('waveform').addEventListener('click', toggleAudioTransmission);
