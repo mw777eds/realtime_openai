@@ -336,36 +336,40 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
         console.log("Model tool calls:", toolCalls);
         if (window.FileMaker) {
-          // Show thinking icon before calling FileMaker and keep it showing
+          // Get fresh references to icons
+          const iconOverlay = document.getElementById('iconOverlay');
           const thoughtIcon = document.getElementById('thoughtIcon');
           const earIcon = document.getElementById('earIcon');
           const sleepIcon = document.getElementById('sleepIcon');
           
-          console.log('Before hiding icons:', {
+          // Ensure overlay is visible
+          iconOverlay.style.display = 'flex';
+          
+          // Remove any pending ear icon display timeouts
+          if (window.earIconTimeout) {
+            clearTimeout(window.earIconTimeout);
+          }
+          
+          console.log('Before state change:', {
             thought: thoughtIcon.style.display,
             ear: earIcon.style.display,
             sleep: sleepIcon.style.display
           });
           
-          // Hide all icons first
-          thoughtIcon.style.display = 'none';
-          earIcon.style.display = 'none';
-          sleepIcon.style.display = 'none';
+          // Force hide all icons and then show only thinking
+          thoughtIcon.style.cssText = 'display: none !important';
+          earIcon.style.cssText = 'display: none !important';
+          sleepIcon.style.cssText = 'display: none !important';
           
-          console.log('After hiding icons:', {
-            thought: thoughtIcon.style.display,
-            ear: earIcon.style.display,
-            sleep: sleepIcon.style.display
-          });
-          
-          // Show only thinking icon
-          thoughtIcon.style.display = 'block';
-          
-          console.log('After showing thinking:', {
-            thought: thoughtIcon.style.display,
-            ear: earIcon.style.display,
-            sleep: sleepIcon.style.display
-          });
+          // Small delay to ensure state is cleared
+          setTimeout(() => {
+            thoughtIcon.style.cssText = 'display: block !important';
+            console.log('After state change:', {
+              thought: thoughtIcon.style.display,
+              ear: earIcon.style.display,
+              sleep: sleepIcon.style.display
+            });
+          }, 0);
           
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
         }
