@@ -1,3 +1,5 @@
+import { showIcon } from './icons.js';
+
 let canvas;
 let ctx;
 let animationId;
@@ -245,19 +247,13 @@ async function toggleAudioTransmission() {
 
   if (isPaused) {
     await stopAudioTransmission();
-    iconOverlay.style.display = 'flex';
-    sleepIcon.style.display = 'block';
-    thoughtIcon.style.display = 'none';
-    earIcon.style.display = 'none';
+    showIcon('sleep');
   } else {
     if (!dc || dc.readyState !== "open") {
       console.log("Data channel not ready, reinitializing WebRTC");
       // Reset the paused state since we're reinitializing
       isPaused = false;
-      iconOverlay.style.display = 'flex';
-      sleepIcon.style.display = 'none';
-      thoughtIcon.style.display = 'none';
-      earIcon.style.display = 'block';
+      showIcon('ear');
       cleanupWebRTC(); // Clean up old connection
       // Trigger reinitialization from FileMaker
       if (window.FileMaker) {
@@ -265,10 +261,7 @@ async function toggleAudioTransmission() {
       }
     } else {
       startAudioTransmission();
-      iconOverlay.style.display = 'flex';
-      sleepIcon.style.display = 'none';
-      thoughtIcon.style.display = 'none';
-      earIcon.style.display = 'block';
+      showIcon('ear');
     }
   }
 }
@@ -280,10 +273,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById('iconOverlay').addEventListener('click', toggleAudioTransmission);
   
   // Show ear icon by default
-  const earIcon = document.getElementById('earIcon');
-  if (earIcon) {
-    earIcon.classList.add('visible');
-  }
+  showIcon('ear');
 });
 
 async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice) {
@@ -341,41 +331,13 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
         console.log("Model tool calls:", toolCalls);
         if (window.FileMaker) {
-          // Get fresh references to icons
-          const iconOverlay = document.getElementById('iconOverlay');
-          const thoughtIcon = document.getElementById('thoughtIcon');
-          const earIcon = document.getElementById('earIcon');
-          const sleepIcon = document.getElementById('sleepIcon');
-          
-          console.log('Before tool call - Icon states:', {
-            overlay: iconOverlay.style.display,
-            thought: thoughtIcon.classList.contains('visible'),
-            ear: earIcon.classList.contains('visible'),
-            sleep: sleepIcon.classList.contains('visible')
-          });
-
-          // Show overlay
-          iconOverlay.style.display = 'flex';
-          
-          // Remove visible class from all icons
-          earIcon.classList.remove('visible');
-          sleepIcon.classList.remove('visible');
-          
-          // Add visible class to thought icon
-          thoughtIcon.classList.add('visible');
+          showIcon('thought');
           
           // Clear any pending timeouts
           if (window.earIconTimeout) {
             clearTimeout(window.earIconTimeout);
             delete window.earIconTimeout;
           }
-          
-          console.log('After tool call setup - Icon states:', {
-            overlay: iconOverlay.style.display,
-            thought: thoughtIcon.classList.contains('visible'),
-            ear: earIcon.classList.contains('visible'),
-            sleep: sleepIcon.classList.contains('visible')
-          });
           
           // Call FileMaker script once
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
@@ -384,37 +346,11 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
       // Only handle response.done if it's not a function call
       if (realtimeEvent.type === "response.done" && !realtimeEvent.response.output?.some(item => item.type === "function_call")) {
-        console.log('Response done - Before changes:', {
-          thought: thoughtIcon.style.display,
-          ear: earIcon.style.display,
-          sleep: sleepIcon.style.display
-        });
-        
-        thoughtIcon.style.display = 'none';
-        
-        console.log('Response done - After hiding thought:', {
-          thought: thoughtIcon.style.display,
-          ear: earIcon.style.display,
-          sleep: sleepIcon.style.display
-        });
-        
         if (!isPaused) {
           // Set timeout to show ear icon after 500ms
           setTimeout(() => {
             if (!isPaused) {
-              console.log('Response done - Before showing ear:', {
-                thought: thoughtIcon.style.display,
-                ear: earIcon.style.display,
-                sleep: sleepIcon.style.display
-              });
-              
-              earIcon.style.display = 'block';
-              
-              console.log('Response done - After showing ear:', {
-                thought: thoughtIcon.style.display,
-                ear: earIcon.style.display,
-                sleep: sleepIcon.style.display
-              });
+              showIcon('ear');
             }
           }, 500);
         }
