@@ -278,7 +278,12 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeCanvas();
   document.getElementById('waveform').addEventListener('click', toggleAudioTransmission);
   document.getElementById('iconOverlay').addEventListener('click', toggleAudioTransmission);
-
+  
+  // Show ear icon by default
+  const earIcon = document.getElementById('earIcon');
+  if (earIcon) {
+    earIcon.style.display = 'block';
+  }
 });
 
 async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice) {

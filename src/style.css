@@ -66,7 +66,7 @@ h1 {
 .icon {
   width: 50%;
   height: 50%;
-  display: none !important;
+  display: none;
   fill: var(--icon-color);
 }
 
