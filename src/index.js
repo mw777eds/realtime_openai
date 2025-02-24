@@ -341,13 +341,31 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           const earIcon = document.getElementById('earIcon');
           const sleepIcon = document.getElementById('sleepIcon');
           
+          console.log('Before hiding icons:', {
+            thought: thoughtIcon.style.display,
+            ear: earIcon.style.display,
+            sleep: sleepIcon.style.display
+          });
+          
           // Hide all icons first
           thoughtIcon.style.display = 'none';
           earIcon.style.display = 'none';
           sleepIcon.style.display = 'none';
           
+          console.log('After hiding icons:', {
+            thought: thoughtIcon.style.display,
+            ear: earIcon.style.display,
+            sleep: sleepIcon.style.display
+          });
+          
           // Show only thinking icon
           thoughtIcon.style.display = 'block';
+          
+          console.log('After showing thinking:', {
+            thought: thoughtIcon.style.display,
+            ear: earIcon.style.display,
+            sleep: sleepIcon.style.display
+          });
           
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
         }
@@ -355,12 +373,37 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
       // Only handle response.done if it's not a function call
       if (realtimeEvent.type === "response.done" && !realtimeEvent.response.output?.some(item => item.type === "function_call")) {
+        console.log('Response done - Before changes:', {
+          thought: thoughtIcon.style.display,
+          ear: earIcon.style.display,
+          sleep: sleepIcon.style.display
+        });
+        
         thoughtIcon.style.display = 'none';
+        
+        console.log('Response done - After hiding thought:', {
+          thought: thoughtIcon.style.display,
+          ear: earIcon.style.display,
+          sleep: sleepIcon.style.display
+        });
+        
         if (!isPaused) {
           // Set timeout to show ear icon after 500ms
           setTimeout(() => {
             if (!isPaused) {
+              console.log('Response done - Before showing ear:', {
+                thought: thoughtIcon.style.display,
+                ear: earIcon.style.display,
+                sleep: sleepIcon.style.display
+              });
+              
               earIcon.style.display = 'block';
+              
+              console.log('Response done - After showing ear:', {
+                thought: thoughtIcon.style.display,
+                ear: earIcon.style.display,
+                sleep: sleepIcon.style.display
+              });
             }
           }, 500);
         }
