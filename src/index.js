@@ -361,18 +361,16 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             sleep: sleepIcon.style.display
           });
           
-          // Remove all icon classes first
-          thoughtIcon.className = 'icon';
-          earIcon.className = 'icon';
-          sleepIcon.className = 'icon';
-          
-          // Force initial display states
+          // Hide all icons first
           thoughtIcon.style.display = 'none';
           earIcon.style.display = 'none';
           sleepIcon.style.display = 'none';
           
           // Show only thinking icon
           thoughtIcon.style.display = 'block';
+          
+          // Call FileMaker script
+          window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
           
           console.log('After state change:', {
             thought: thoughtIcon.style.display,
