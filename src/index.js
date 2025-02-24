@@ -327,10 +327,12 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.some(item => item.type === "function_call")) {
         const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
         console.log("Model tool calls:", toolCalls);
-        thoughtIcon.style.display = 'block';
-        earIcon.style.display = 'none';
         if (window.FileMaker) {
-          /* Show thining icon at this point */
+          // Show thinking icon before calling FileMaker
+          const thoughtIcon = document.getElementById('thoughtIcon');
+          const earIcon = document.getElementById('earIcon');
+          thoughtIcon.style.display = 'block';
+          earIcon.style.display = 'none';
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
         }
       } else if (realtimeEvent.type === "tool_calls") {
