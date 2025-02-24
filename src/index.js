@@ -332,6 +332,9 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         if (window.FileMaker) {
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
         }
+      } else if (realtimeEvent.type === "tool_calls") {
+        thoughtIcon.style.display = 'block';
+        earIcon.style.display = 'none';
       }
 
       // Show ear icon when response is complete and not paused
