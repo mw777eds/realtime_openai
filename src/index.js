@@ -282,7 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Show ear icon by default
   const earIcon = document.getElementById('earIcon');
   if (earIcon) {
-    earIcon.style.display = 'block';
+    earIcon.classList.add('visible');
   }
 });
 
@@ -349,39 +349,32 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           
           console.log('Before tool call - Icon states:', {
             overlay: iconOverlay.style.display,
-            thought: thoughtIcon.style.display,
-            ear: earIcon.style.display,
-            sleep: sleepIcon.style.display
+            thought: thoughtIcon.classList.contains('visible'),
+            ear: earIcon.classList.contains('visible'),
+            sleep: sleepIcon.classList.contains('visible')
           });
 
-          // Force redraw by temporarily removing from DOM
-          const iconContainer = iconOverlay.parentNode;
-          iconContainer.removeChild(iconOverlay);
-          
-          // Reset all states
+          // Show overlay
           iconOverlay.style.display = 'flex';
-          thoughtIcon.style.display = 'none';
-          earIcon.style.display = 'none';
-          sleepIcon.style.display = 'none';
           
-          // Remove any pending ear icon display timeouts
+          // Remove visible class from all icons
+          earIcon.classList.remove('visible');
+          sleepIcon.classList.remove('visible');
+          
+          // Add visible class to thought icon
+          thoughtIcon.classList.add('visible');
+          
+          // Clear any pending timeouts
           if (window.earIconTimeout) {
             clearTimeout(window.earIconTimeout);
             delete window.earIconTimeout;
           }
           
-          // Force show only thinking icon
-          thoughtIcon.style.display = 'block';
-          
-          // Reinsert to force redraw
-          void iconOverlay.offsetHeight; // Trigger reflow
-          iconContainer.appendChild(iconOverlay);
-          
           console.log('After tool call setup - Icon states:', {
             overlay: iconOverlay.style.display,
-            thought: thoughtIcon.style.display,
-            ear: earIcon.style.display,
-            sleep: sleepIcon.style.display
+            thought: thoughtIcon.classList.contains('visible'),
+            ear: earIcon.classList.contains('visible'),
+            sleep: sleepIcon.classList.contains('visible')
           });
           
           // Call FileMaker script once

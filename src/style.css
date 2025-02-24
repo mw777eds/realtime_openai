@@ -66,8 +66,15 @@ h1 {
 .icon {
   width: 50%;
   height: 50%;
+  opacity: 0;
   display: none;
   fill: var(--icon-color);
+  transition: opacity 0.3s ease-in-out;
+}
+
+.icon.visible {
+  opacity: 1;
+  display: block;
 }
 
 img {
