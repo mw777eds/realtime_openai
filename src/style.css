@@ -68,6 +68,11 @@ h1 {
   height: 50%;
   display: none;
   fill: var(--icon-color);
+  transition: display 0.1s ease-out;
+}
+
+.icon.visible {
+  display: block;
 }
 
 #sleepIcon {

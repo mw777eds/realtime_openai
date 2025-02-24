@@ -339,10 +339,11 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           // Show thinking icon before calling FileMaker and keep it showing
           const thoughtIcon = document.getElementById('thoughtIcon');
           const earIcon = document.getElementById('earIcon');
-          console.log("before: ", earIcon);
-          earIcon.style.display = 'none';
-          console.log("after: ", earIcon);
           thoughtIcon.style.display = 'block';
+          // Force a reflow before changing ear icon display
+          earIcon.classList.remove('visible');
+          void earIcon.offsetHeight; // Trigger reflow
+          earIcon.style.display = 'none';
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
         }
       }
