@@ -334,10 +334,17 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         }
       }
 
-      // Show ear icon when response is complete
+      // Show ear icon when response is complete and not paused
       if (realtimeEvent.type === "response.done") {
         thoughtIcon.style.display = 'none';
-        earIcon.style.display = 'block';
+        if (!isPaused) {
+          // Set timeout to show ear icon after 500ms
+          setTimeout(() => {
+            if (!isPaused) {
+              earIcon.style.display = 'block';
+            }
+          }, 500);
+        }
       }
 
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
