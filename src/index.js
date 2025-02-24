@@ -42,6 +42,14 @@ function sendToolResponse(toolResponse) {
 // Function to trigger model response after tools
 function createModelResponse() {
   if (dc && dc.readyState === "open") {
+    // Get icon elements and switch from thinking to listening
+    const thoughtIcon = document.getElementById('thoughtIcon');
+    const earIcon = document.getElementById('earIcon');
+    thoughtIcon.style.display = 'none';
+    if (!isPaused) {
+      earIcon.style.display = 'block';
+    }
+
     const responseCreateEvent = {
       type: "response.create",
       response: {
@@ -328,16 +336,11 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
         console.log("Model tool calls:", toolCalls);
         if (window.FileMaker) {
-          // Show thinking icon before calling FileMaker
-          const thoughtIcon = document.getElementById('thoughtIcon');
-          const earIcon = document.getElementById('earIcon');
+          // Show thinking icon before calling FileMaker and keep it showing
           thoughtIcon.style.display = 'block';
           earIcon.style.display = 'none';
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
         }
-      } else if (realtimeEvent.type === "tool_calls") {
-        thoughtIcon.style.display = 'block';
-        earIcon.style.display = 'none';
       }
 
       // Show ear icon when response is complete and not paused
