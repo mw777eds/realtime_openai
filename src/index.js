@@ -218,17 +218,16 @@ function checkAudioActivity() {
     // Use a threshold to determine if there's meaningful audio
     const AUDIO_THRESHOLD = 10; // Adjust this value based on testing
     const hasAudio = average > AUDIO_THRESHOLD;
-    const earIcon = document.getElementById('earIcon');
+    const iconOverlay = document.getElementById('iconOverlay');
     
     if (hasAudio) {
       startWaveform();
-      if (earIcon) {
-        earIcon.style.display = 'none';
-      }
+      iconOverlay.style.display = 'none';
     } else {
       stopWaveform();
-      if (earIcon && !isPaused) {
-        earIcon.style.display = 'block';
+      if (!isPaused) {
+        iconOverlay.style.display = 'flex';
+        showIcon('ear');
       }
     }
     
