@@ -129,7 +129,7 @@ function drawWaveform(dataArray) {
   ctx.fillStyle = 'white';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 5;
   ctx.strokeStyle = '#006690';
   ctx.beginPath();
   
