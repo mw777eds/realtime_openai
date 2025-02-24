@@ -369,18 +369,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           // Show only thinking icon
           thoughtIcon.style.display = 'block';
           
-          // Call FileMaker script
-          window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
-          
-          console.log('After state change:', {
-            thought: thoughtIcon.style.display,
-            ear: earIcon.style.display,
-            sleep: sleepIcon.style.display,
-            thoughtClass: thoughtIcon.className,
-            earClass: earIcon.className,
-            sleepClass: sleepIcon.className
-          });
-          
+          // Call FileMaker script once
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
         }
       }
