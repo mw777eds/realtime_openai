@@ -1,5 +1,6 @@
-import { loadSpeakingIndicator } from "./imageLoader_speaking.js";
-import { loadLogoIndicator } from "./imageLoader_logo.js";
+let canvas;
+let ctx;
+let animationId;
 
 
 // Expose functions to FileMaker
@@ -90,9 +91,8 @@ async function stopAudioTransmission() {
       console.log("Muted AI output");
     }
 
-    // Show logo and hide speaking indicator
-    hideSpeakingIndicator();
-    showLogoIndicator();
+    // Stop waveform animation
+    stopWaveform();
     
     resolve();
   });
@@ -110,24 +110,71 @@ function cleanupWebRTC() {
   }
 }
 
-function showLogoIndicator() {
-  const logoIndicator = document.getElementById('logoIndicator');
-  logoIndicator.style.display = 'block';
+function initializeCanvas() {
+  canvas = document.getElementById('waveform');
+  ctx = canvas.getContext('2d');
+  
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
 }
 
-function hideLogoIndicator() {
-  const logoIndicator = document.getElementById('logoIndicator');
-  logoIndicator.style.display = 'none';
+function drawWaveform(dataArray) {
+  if (!ctx) return;
+  
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#006690';
+  ctx.beginPath();
+  
+  const bufferLength = dataArray.length;
+  const sliceWidth = (canvas.width * 1.0) / bufferLength;
+  let x = 0;
+  
+  for (let i = 0; i < bufferLength; i++) {
+    const v = dataArray[i] / 128.0;
+    const y = (v * canvas.height) / 2;
+    
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+    
+    x += sliceWidth;
+  }
+  
+  ctx.lineTo(canvas.width, canvas.height / 2);
+  ctx.stroke();
 }
 
-function showSpeakingIndicator() {
-  const indicator = document.getElementById('speakingIndicator');
-  indicator.style.display = 'block';
+function startWaveform() {
+  if (!animationId && audioAnalyser) {
+    function draw() {
+      animationId = requestAnimationFrame(draw);
+      const dataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+      audioAnalyser.getByteTimeDomainData(dataArray);
+      drawWaveform(dataArray);
+    }
+    draw();
+  }
 }
 
-function hideSpeakingIndicator() {
-  const indicator = document.getElementById('speakingIndicator');
-  indicator.style.display = 'none';
+function stopWaveform() {
+  if (animationId) {
+    cancelAnimationFrame(animationId);
+    animationId = null;
+    if (ctx) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  }
 }
 
 
@@ -159,11 +206,9 @@ function checkAudioActivity() {
     const hasAudio = average > AUDIO_THRESHOLD;
     
     if (hasAudio) {
-      showSpeakingIndicator();
-      hideLogoIndicator();
+      startWaveform();
     } else {
-      showLogoIndicator();
-      hideSpeakingIndicator();
+      stopWaveform();
     }
     
     return hasAudio;
@@ -200,9 +245,9 @@ document.addEventListener("DOMContentLoaded", () => {
   loadSpeakingIndicator();
   loadLogoIndicator();
   
-  // Add click handlers to both indicators and overlay
-  document.getElementById('speakingIndicator').addEventListener('click', toggleAudioTransmission);
-  document.getElementById('logoIndicator').addEventListener('click', toggleAudioTransmission);
+  // Initialize canvas and add click handlers
+  initializeCanvas();
+  document.getElementById('waveform').addEventListener('click', toggleAudioTransmission);
   document.getElementById('mutedOverlay').addEventListener('click', toggleAudioTransmission);
 
 });
