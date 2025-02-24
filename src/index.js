@@ -330,6 +330,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         thoughtIcon.style.display = 'block';
         earIcon.style.display = 'none';
         if (window.FileMaker) {
+          /* Show thining icon at this point */
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
         }
       } else if (realtimeEvent.type === "tool_calls") {
