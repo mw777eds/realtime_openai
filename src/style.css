@@ -59,8 +59,8 @@ h1 {
 }
 
 .icon {
-  width: 33%;
-  height: 33%;
+  width: 50%;
+  height: 50%;
   display: none;
   fill: rgba(0, 102, 144, 0.7);
 }
