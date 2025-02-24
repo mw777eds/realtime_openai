@@ -156,6 +156,10 @@ function drawWaveform(dataArray) {
 
 function startWaveform() {
   if (!animationId && audioAnalyser) {
+    const earIcon = document.getElementById('earIcon');
+    if (earIcon) {
+      earIcon.style.display = 'none';
+    }
     function draw() {
       animationId = requestAnimationFrame(draw);
       const dataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
@@ -173,6 +177,10 @@ function stopWaveform() {
     if (ctx) {
       ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    const earIcon = document.getElementById('earIcon');
+    if (earIcon && !isPaused) {
+      earIcon.style.display = 'block';
     }
   }
 }
