@@ -237,7 +237,7 @@ function checkAudioActivity() {
 
 async function toggleAudioTransmission() {
   isPaused = !isPaused;
-  const mutedOverlay = document.getElementById('mutedOverlay');
+  const iconOverlay = document.getElementById('iconOverlay');
   
   const sleepIcon = document.getElementById('sleepIcon');
   const thoughtIcon = document.getElementById('thoughtIcon');
@@ -245,7 +245,7 @@ async function toggleAudioTransmission() {
 
   if (isPaused) {
     await stopAudioTransmission();
-    mutedOverlay.style.display = 'flex';
+    iconOverlay.style.display = 'flex';
     sleepIcon.style.display = 'block';
     thoughtIcon.style.display = 'none';
     earIcon.style.display = 'none';
@@ -254,7 +254,7 @@ async function toggleAudioTransmission() {
       console.log("Data channel not ready, reinitializing WebRTC");
       // Reset the paused state since we're reinitializing
       isPaused = false;
-      mutedOverlay.style.display = 'flex';
+      iconOverlay.style.display = 'flex';
       sleepIcon.style.display = 'none';
       thoughtIcon.style.display = 'none';
       earIcon.style.display = 'block';
@@ -265,7 +265,7 @@ async function toggleAudioTransmission() {
       }
     } else {
       startAudioTransmission();
-      mutedOverlay.style.display = 'flex';
+      iconOverlay.style.display = 'flex';
       sleepIcon.style.display = 'none';
       thoughtIcon.style.display = 'none';
       earIcon.style.display = 'block';
@@ -277,7 +277,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize canvas and add click handlers
   initializeCanvas();
   document.getElementById('waveform').addEventListener('click', toggleAudioTransmission);
-  document.getElementById('mutedOverlay').addEventListener('click', toggleAudioTransmission);
+  document.getElementById('iconOverlay').addEventListener('click', toggleAudioTransmission);
 
 });
 
@@ -339,8 +339,10 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           // Show thinking icon before calling FileMaker and keep it showing
           const thoughtIcon = document.getElementById('thoughtIcon');
           const earIcon = document.getElementById('earIcon');
-          thoughtIcon.style.display = 'block';
+          console.log("before: ", earIcon);
           earIcon.style.display = 'none';
+          console.log("after: ", earIcon);
+          thoughtIcon.style.display = 'block';
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
         }
       }
