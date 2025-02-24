@@ -44,12 +44,9 @@ function sendToolResponse(toolResponse) {
 // Function to trigger model response after tools
 function createModelResponse() {
   if (dc && dc.readyState === "open") {
-    // Get icon elements and switch from thinking to listening
-    const thoughtIcon = document.getElementById('thoughtIcon');
-    const earIcon = document.getElementById('earIcon');
-    thoughtIcon.style.display = 'none';
+    // Switch from thinking to listening icon
     if (!isPaused) {
-      earIcon.style.display = 'block';
+      showIcon('ear');
     }
 
     const responseCreateEvent = {
