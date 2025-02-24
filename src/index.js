@@ -220,15 +220,25 @@ async function toggleAudioTransmission() {
   isPaused = !isPaused;
   const mutedOverlay = document.getElementById('mutedOverlay');
   
+  const sleepIcon = document.getElementById('sleepIcon');
+  const thoughtIcon = document.getElementById('thoughtIcon');
+  const earIcon = document.getElementById('earIcon');
+
   if (isPaused) {
     await stopAudioTransmission();
     mutedOverlay.style.display = 'flex';
+    sleepIcon.style.display = 'block';
+    thoughtIcon.style.display = 'none';
+    earIcon.style.display = 'none';
   } else {
     if (!dc || dc.readyState !== "open") {
       console.log("Data channel not ready, reinitializing WebRTC");
       // Reset the paused state since we're reinitializing
       isPaused = false;
-      mutedOverlay.style.display = 'none';
+      mutedOverlay.style.display = 'flex';
+      sleepIcon.style.display = 'none';
+      thoughtIcon.style.display = 'none';
+      earIcon.style.display = 'block';
       cleanupWebRTC(); // Clean up old connection
       // Trigger reinitialization from FileMaker
       if (window.FileMaker) {
@@ -303,9 +313,17 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.some(item => item.type === "function_call")) {
         const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
         console.log("Model tool calls:", toolCalls);
+        thoughtIcon.style.display = 'block';
+        earIcon.style.display = 'none';
         if (window.FileMaker) {
           window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
         }
+      }
+
+      // Show ear icon when response is complete
+      if (realtimeEvent.type === "response.done") {
+        thoughtIcon.style.display = 'none';
+        earIcon.style.display = 'block';
       }
 
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
