@@ -217,7 +217,7 @@ function checkAudioActivity() {
     const hasAudio = average > AUDIO_THRESHOLD;
     const iconOverlay = document.getElementById('iconOverlay');
     
-    if (hasAudio) {
+    if (hasAudio && !isPaused) {
       startWaveform();
       iconOverlay.style.display = 'none';
     } else {
@@ -234,17 +234,19 @@ function checkAudioActivity() {
 }
 
 async function toggleAudioTransmission() {
+  console.log('Toggle clicked. Current isPaused:', isPaused);
   isPaused = !isPaused;
-  const iconOverlay = document.getElementById('iconOverlay');
+  console.log('New isPaused state:', isPaused);
   
-  const sleepIcon = document.getElementById('sleepIcon');
-  const thoughtIcon = document.getElementById('thoughtIcon');
-  const earIcon = document.getElementById('earIcon');
+  const iconOverlay = document.getElementById('iconOverlay');
+  console.log('Icon overlay display:', iconOverlay.style.display);
 
   if (isPaused) {
+    console.log('Pausing audio transmission');
     await stopAudioTransmission();
     showIcon('sleep');
   } else {
+    console.log('Resuming audio transmission');
     if (!dc || dc.readyState !== "open") {
       console.log("Data channel not ready, reinitializing WebRTC");
       // Reset the paused state since we're reinitializing
