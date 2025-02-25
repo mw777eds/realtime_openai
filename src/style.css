@@ -53,6 +53,17 @@ h1 {
   padding:11px 11px 11px 0px;
 }
 
+#clickOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: transparent;
+  z-index: 2000;
+  cursor: pointer;
+}
+
 #iconOverlay {
   position: absolute;
   top: 0;
@@ -64,8 +75,7 @@ h1 {
   justify-content: center;
   align-items: center;
   z-index: 1000;
-  cursor: pointer;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .icon {

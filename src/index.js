@@ -268,8 +268,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize canvas
   initializeCanvas();
   
-  // Add click handler to the entire document body
-  document.body.addEventListener('click', toggleAudioTransmission);
+  // Add click handler to the click overlay
+  document.getElementById('clickOverlay').addEventListener('click', toggleAudioTransmission);
   
   // Show ear icon by default
   showIcon('ear');
