@@ -265,10 +265,11 @@ async function toggleAudioTransmission() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Initialize canvas and add click handlers
+  // Initialize canvas
   initializeCanvas();
-  document.getElementById('waveform').addEventListener('click', toggleAudioTransmission);
-  document.getElementById('iconOverlay').addEventListener('click', toggleAudioTransmission);
+  
+  // Add click handler to the entire document body
+  document.body.addEventListener('click', toggleAudioTransmission);
   
   // Show ear icon by default
   showIcon('ear');
