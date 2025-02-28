@@ -87,12 +87,18 @@ function startAudioTransmission() {
 // Function to send response.cancel event
 function sendResponseCancel() {
   if (dc && dc.readyState === "open") {
-    const cancelEvent = {
-      type: "response.cancel"
-    };
-    dc.send(JSON.stringify(cancelEvent));
-    console.log("Sent response.cancel event to interrupt model's speech");
-    return true;
+    // Check if audio is currently playing before sending cancel
+    if (audioEl && audioEl.srcObject && !audioEl.paused) {
+      const cancelEvent = {
+        type: "response.cancel"
+      };
+      dc.send(JSON.stringify(cancelEvent));
+      console.log("Sent response.cancel event to interrupt model's speech");
+      return true;
+    } else {
+      console.log("No active audio response to cancel");
+      return false;
+    }
   } else {
     console.error("Data channel is not open");
     return false;
@@ -274,7 +280,7 @@ async function toggleAudioTransmission() {
   if (isPaused) {
     console.log('Pausing audio transmission');
     await stopAudioTransmission();
-    // Only cancel the current response, don't stop the LLM completely
+    // Try to cancel any ongoing response, but don't worry if there isn't one
     sendResponseCancel();
     showIcon('sleep');
   } else {
