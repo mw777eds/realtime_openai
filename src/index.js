@@ -89,7 +89,10 @@ function startAudioTransmission() {
 function sendResponseCancel() {
   if (dc && dc.readyState === "open") {
     // Check if there's an active response by checking if audio is playing
-    if (audioEl && audioEl.srcObject && !audioEl.paused) {
+    // and if we have an active response ID
+    console.log("sendResponseCancel called, activeResponseId:", window.activeResponseId);
+    
+    if (window.activeResponseId) {
       const cancelEvent = {
         type: "response.cancel"
       };
@@ -97,7 +100,7 @@ function sendResponseCancel() {
       console.log("Sent response.cancel event to interrupt model's speech");
       return true;
     } else {
-      console.log("No active audio response to cancel - skipping cancel event");
+      console.log("No active response ID found - skipping cancel event");
       return false;
     }
   } else {
@@ -109,7 +112,14 @@ function sendResponseCancel() {
 // Function to check if there's an active response
 function hasActiveResponse() {
   // Check if audio is currently playing
-  return audioEl && audioEl.srcObject && !audioEl.paused;
+  const isPlaying = audioEl && audioEl.srcObject && !audioEl.paused;
+  console.log("hasActiveResponse check:", {
+    audioEl: !!audioEl,
+    srcObject: !!(audioEl && audioEl.srcObject),
+    notPaused: !!(audioEl && !audioEl.paused),
+    isPlaying: isPlaying
+  });
+  return isPlaying;
 }
 
 // Function to stop the LLM from generating more content
@@ -150,6 +160,9 @@ async function stopAudioTransmission() {
 
 // Function to cleanup WebRTC connection
 function cleanupWebRTC() {
+  // Clear active response ID when cleaning up
+  window.activeResponseId = null;
+  
   if (dc) {
     dc.close();
     dc = null;
@@ -288,8 +301,9 @@ async function toggleAudioTransmission() {
     console.log('Pausing audio transmission');
     await stopAudioTransmission();
     
-    // Only attempt to cancel if there's an active response
-    if (hasActiveResponse()) {
+    // Only attempt to cancel if we have an active response ID
+    console.log('Checking for active response before canceling, activeResponseId:', window.activeResponseId);
+    if (window.activeResponseId) {
       sendResponseCancel();
     }
     
@@ -325,6 +339,9 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice) {
+  // Initialize activeResponseId tracking
+  window.activeResponseId = null;
+  
   try {
     pc = new RTCPeerConnection();
 
@@ -374,6 +391,15 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       const realtimeEvent = JSON.parse(e.data);
       console.log(`[${new Date().toISOString()}] Type:`, realtimeEvent.type);
       console.log(`[${new Date().toISOString()}] Event:`, realtimeEvent);
+  
+      // Track response state for debugging
+      if (realtimeEvent.type === "response.created") {
+        console.log("Response created, setting activeResponseId:", realtimeEvent.response.id);
+        window.activeResponseId = realtimeEvent.response.id;
+      } else if (realtimeEvent.type === "response.done") {
+        console.log("Response done, clearing activeResponseId");
+        window.activeResponseId = null;
+      }
 
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.some(item => item.type === "function_call")) {
         const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
