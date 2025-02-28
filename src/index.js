@@ -96,7 +96,7 @@ function sendResponseCancel() {
       console.log("Sent response.cancel event to interrupt model's speech");
       return true;
     } else {
-      console.log("No active audio response to cancel");
+      console.log("No active audio response to cancel - skipping cancel event");
       return false;
     }
   } else {
