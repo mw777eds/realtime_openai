@@ -9,6 +9,7 @@ let animationId;
 window.initializeWebRTC = initializeWebRTC;
 window.startAudioTransmission = startAudioTransmission;
 window.stopAudioTransmission = stopAudioTransmission;
+window.sendResponseCancel = sendResponseCancel;
 window.cleanupWebRTC = cleanupWebRTC;
 window.sendToolResponse = sendToolResponse;
 window.createModelResponse = createModelResponse;
@@ -82,6 +83,21 @@ function startAudioTransmission() {
   }
 }
 
+// Function to send response.cancel event
+function sendResponseCancel() {
+  if (dc && dc.readyState === "open") {
+    const cancelEvent = {
+      type: "response.cancel"
+    };
+    dc.send(JSON.stringify(cancelEvent));
+    console.log("Sent response.cancel event to interrupt model's speech");
+    return true;
+  } else {
+    console.error("Data channel is not open");
+    return false;
+  }
+}
+
 // Function to stop audio transmission
 async function stopAudioTransmission() {
   return new Promise((resolve) => {
@@ -97,6 +113,9 @@ async function stopAudioTransmission() {
       audioTracks.forEach(track => track.enabled = false);
       console.log("Muted AI output");
     }
+
+    // Cancel any ongoing response from the model
+    sendResponseCancel();
 
     // Stop waveform animation
     stopWaveform();
