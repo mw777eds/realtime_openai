@@ -359,7 +359,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         console.log("Model response:", realtimeEvent.response.output[0]);
         if (window.FileMaker && realtimeEvent.response.output[0].content?.[0]?.transcript) {
           window.FileMaker.PerformScript("LogMessage", JSON.stringify({
-            roll: "assistant",
+            role: "assistant",
             message: realtimeEvent.response.output[0].content[0].transcript
           }));
         }
@@ -372,7 +372,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           console.log("User message:", transcript);
           if (window.FileMaker) {
             window.FileMaker.PerformScript("LogMessage", JSON.stringify({
-              roll: "user",
+              role: "user",
               message: transcript
             }));
           }
@@ -383,8 +383,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
       if (realtimeEvent.type === "error" || 
           realtimeEvent.type === "conversation.stopped") {
-        showLogoIndicator();
-        hideSpeakingIndicator();
+            showIcon('ear');
       }
 
       if (realtimeEvent.type === "error") {
