@@ -10,6 +10,7 @@ window.initializeWebRTC = initializeWebRTC;
 window.startAudioTransmission = startAudioTransmission;
 window.stopAudioTransmission = stopAudioTransmission;
 window.sendResponseCancel = sendResponseCancel;
+window.stopLLMGeneration = stopLLMGeneration;
 window.cleanupWebRTC = cleanupWebRTC;
 window.sendToolResponse = sendToolResponse;
 window.createModelResponse = createModelResponse;
@@ -98,6 +99,19 @@ function sendResponseCancel() {
   }
 }
 
+// Function to stop the LLM from generating more content
+function stopLLMGeneration() {
+  if (dc && dc.readyState === "open") {
+    const stopEvent = {
+      type: "stop"
+    };
+    dc.send(JSON.stringify(stopEvent));
+    console.log("Sent stop event to cut off LLM output");
+    return true;
+  }
+  return false;
+}
+
 // Function to stop audio transmission
 async function stopAudioTransmission() {
   return new Promise((resolve) => {
@@ -113,9 +127,6 @@ async function stopAudioTransmission() {
       audioTracks.forEach(track => track.enabled = false);
       console.log("Muted AI output");
     }
-
-    // Cancel any ongoing response from the model
-    sendResponseCancel();
 
     // Stop waveform animation
     stopWaveform();
@@ -263,6 +274,8 @@ async function toggleAudioTransmission() {
   if (isPaused) {
     console.log('Pausing audio transmission');
     await stopAudioTransmission();
+    // Only cancel the current response, don't stop the LLM completely
+    sendResponseCancel();
     showIcon('sleep');
   } else {
     console.log('Resuming audio transmission');
