@@ -281,7 +281,10 @@ async function toggleAudioTransmission() {
     console.log('Pausing audio transmission');
     await stopAudioTransmission();
     // Try to cancel any ongoing response, but don't worry if there isn't one
-    sendResponseCancel();
+    // Only attempt to cancel if audio is actually playing
+    if (audioEl && audioEl.srcObject && !audioEl.paused) {
+      sendResponseCancel();
+    }
     showIcon('sleep');
   } else {
     console.log('Resuming audio transmission');
