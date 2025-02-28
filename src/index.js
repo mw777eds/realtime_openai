@@ -11,6 +11,7 @@ window.startAudioTransmission = startAudioTransmission;
 window.stopAudioTransmission = stopAudioTransmission;
 window.sendResponseCancel = sendResponseCancel;
 window.stopLLMGeneration = stopLLMGeneration;
+window.hasActiveResponse = hasActiveResponse;
 window.cleanupWebRTC = cleanupWebRTC;
 window.sendToolResponse = sendToolResponse;
 window.createModelResponse = createModelResponse;
@@ -87,7 +88,7 @@ function startAudioTransmission() {
 // Function to send response.cancel event
 function sendResponseCancel() {
   if (dc && dc.readyState === "open") {
-    // Check if audio is currently playing before sending cancel
+    // Check if there's an active response by checking if audio is playing
     if (audioEl && audioEl.srcObject && !audioEl.paused) {
       const cancelEvent = {
         type: "response.cancel"
@@ -103,6 +104,12 @@ function sendResponseCancel() {
     console.error("Data channel is not open");
     return false;
   }
+}
+
+// Function to check if there's an active response
+function hasActiveResponse() {
+  // Check if audio is currently playing
+  return audioEl && audioEl.srcObject && !audioEl.paused;
 }
 
 // Function to stop the LLM from generating more content
@@ -280,11 +287,12 @@ async function toggleAudioTransmission() {
   if (isPaused) {
     console.log('Pausing audio transmission');
     await stopAudioTransmission();
-    // Try to cancel any ongoing response, but don't worry if there isn't one
-    // Only attempt to cancel if audio is actually playing
-    if (audioEl && audioEl.srcObject && !audioEl.paused) {
+    
+    // Only attempt to cancel if there's an active response
+    if (hasActiveResponse()) {
       sendResponseCancel();
     }
+    
     showIcon('sleep');
   } else {
     console.log('Resuming audio transmission');
