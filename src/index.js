@@ -1,11 +1,21 @@
 import { showIcon } from './icons.js';
 
+/* 
+ * Canvas-related variables for the audio waveform visualization
+ * canvas: The HTML canvas element
+ * ctx: The 2D rendering context
+ * animationId: Reference to the animation frame for cancellation
+ */
 let canvas;
 let ctx;
 let animationId;
 
 
-// Expose functions to FileMaker
+/* 
+ * Expose functions to FileMaker
+ * These functions can be called from FileMaker scripts to control
+ * the WebRTC connection and audio transmission
+ */
 window.initializeWebRTC = initializeWebRTC;
 window.startAudioTransmission = startAudioTransmission;
 window.stopAudioTransmission = stopAudioTransmission;
@@ -16,7 +26,14 @@ window.cleanupWebRTC = cleanupWebRTC;
 window.sendToolResponse = sendToolResponse;
 window.createModelResponse = createModelResponse;
 
-// Function to send tool response back to OpenAI
+/* 
+ * Function to send tool response back to OpenAI
+ * 
+ * This function takes the output from a tool execution in FileMaker
+ * and sends it back to the OpenAI API through the WebRTC data channel.
+ * 
+ * @param {string} toolResponse - JSON string containing the tool response data
+ */
 function sendToolResponse(toolResponse) {
   toolResponse = JSON.parse(toolResponse);
   
@@ -44,10 +61,16 @@ function sendToolResponse(toolResponse) {
   }
 }
 
-// Function to trigger model response after tools
+/* 
+ * Function to trigger model response after tools
+ * 
+ * After a tool has been executed and its response sent back to OpenAI,
+ * this function requests the model to generate a new response.
+ * It also updates the UI to show the listening icon.
+ */
 function createModelResponse() {
   if (dc && dc.readyState === "open") {
-    // Switch from thinking to listening icon
+    /* Switch from thinking to listening icon */
     if (!isPaused) {
       showIcon('ear');
     }
@@ -65,17 +88,22 @@ function createModelResponse() {
   }
 }
 
-// Function to start audio transmission
+/* 
+ * Function to start audio transmission
+ * 
+ * Enables both the microphone input and AI audio output tracks.
+ * Called when the user unmutes or starts a new conversation.
+ */
 function startAudioTransmission() {
   
-  // Unmute microphone input
+  /* Unmute microphone input */
   if (audioTrack) {
     audioTrack.enabled = true;
   } else {
     console.error("Microphone track not available");
   }
 
-  // Unmute AI output
+  /* Unmute AI output */
   if (audioEl && audioEl.srcObject) {
     const audioTracks = audioEl.srcObject.getAudioTracks();
     audioTracks.forEach(track => track.enabled = true);
@@ -85,11 +113,21 @@ function startAudioTransmission() {
   }
 }
 
-// Function to send response.cancel event
+/* 
+ * Function to send response.cancel event
+ * 
+ * Sends a cancel event to the OpenAI API to interrupt the model's
+ * current speech. This is used when the user mutes the audio or
+ * wants to interrupt the AI's response.
+ * 
+ * @returns {boolean} - True if cancel event was sent, false otherwise
+ */
 function sendResponseCancel() {
   if (dc && dc.readyState === "open") {
-    // Check if there's an active response by checking if audio is playing
-    // and if we have an active response ID
+    /* 
+     * Check if there's an active response by checking if audio is playing
+     * and if we have an active response ID 
+     */
     console.log("sendResponseCancel called, activeResponseId:", window.activeResponseId);
     
     if (window.activeResponseId) {
@@ -109,9 +147,16 @@ function sendResponseCancel() {
   }
 }
 
-// Function to check if there's an active response
+/* 
+ * Function to check if there's an active response
+ * 
+ * Determines if the AI is currently speaking by checking
+ * the audio element's state.
+ * 
+ * @returns {boolean} - True if AI is speaking, false otherwise
+ */
 function hasActiveResponse() {
-  // Check if audio is currently playing
+  /* Check if audio is currently playing */
   const isPlaying = audioEl && audioEl.srcObject && !audioEl.paused;
   console.log("hasActiveResponse check:", {
     audioEl: !!audioEl,
@@ -122,7 +167,15 @@ function hasActiveResponse() {
   return isPlaying;
 }
 
-// Function to stop the LLM from generating more content
+/* 
+ * Function to stop the LLM from generating more content
+ * 
+ * Sends a stop event to the OpenAI API to completely halt
+ * the language model's generation process. This is more
+ * aggressive than just canceling the current response.
+ * 
+ * @returns {boolean} - True if stop event was sent, false otherwise
+ */
 function stopLLMGeneration() {
   if (dc && dc.readyState === "open") {
     const stopEvent = {
@@ -135,32 +188,46 @@ function stopLLMGeneration() {
   return false;
 }
 
-// Function to stop audio transmission
+/* 
+ * Function to stop audio transmission
+ * 
+ * Disables both the microphone input and AI audio output tracks.
+ * Also stops the waveform animation.
+ * 
+ * @returns {Promise} - Resolves when audio transmission is stopped
+ */
 async function stopAudioTransmission() {
   return new Promise((resolve) => {
-    // Mute microphone input
+    /* Mute microphone input */
     if (audioTrack) {
       audioTrack.enabled = false;
       console.log("Muted microphone input");
     }
     
-    // Mute AI output
+    /* Mute AI output */
     if (audioEl && audioEl.srcObject) {
       const audioTracks = audioEl.srcObject.getAudioTracks();
       audioTracks.forEach(track => track.enabled = false);
       console.log("Muted AI output");
     }
 
-    // Stop waveform animation
+    /* Stop waveform animation */
     stopWaveform();
     
     resolve();
   });
 }
 
-// Function to cleanup WebRTC connection
+/* 
+ * Function to cleanup WebRTC connection
+ * 
+ * Closes the data channel and peer connection,
+ * and resets the active response ID.
+ * Called when reinitializing the connection or
+ * when the application is closed.
+ */
 function cleanupWebRTC() {
-  // Clear active response ID when cleaning up
+  /* Clear active response ID when cleaning up */
   window.activeResponseId = null;
   
   if (dc) {
@@ -173,6 +240,12 @@ function cleanupWebRTC() {
   }
 }
 
+/* 
+ * Function to initialize the canvas for waveform visualization
+ * 
+ * Sets up the canvas element and its context, and adds a resize
+ * event listener to ensure the canvas always fills the window.
+ */
 function initializeCanvas() {
   canvas = document.getElementById('waveform');
   ctx = canvas.getContext('2d');
@@ -186,12 +259,21 @@ function initializeCanvas() {
   window.addEventListener('resize', resizeCanvas);
 }
 
+/* 
+ * Function to draw the audio waveform visualization
+ * 
+ * Takes audio data and renders it as a waveform on the canvas.
+ * 
+ * @param {Uint8Array} dataArray - Audio data from the analyzer
+ */
 function drawWaveform(dataArray) {
   if (!ctx) return;
   
+  /* Clear the canvas with white background */
   ctx.fillStyle = 'white';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
+  /* Set up line style for the waveform */
   ctx.lineWidth = 3.5;
   ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--waveform-color');
   ctx.beginPath();
@@ -200,6 +282,7 @@ function drawWaveform(dataArray) {
   const sliceWidth = (canvas.width * 1.0) / bufferLength;
   let x = 0;
   
+  /* Draw the waveform line */
   for (let i = 0; i < bufferLength; i++) {
     const v = dataArray[i] / 128.0;
     const y = (v * canvas.height) / 2;
@@ -217,6 +300,12 @@ function drawWaveform(dataArray) {
   ctx.stroke();
 }
 
+/* 
+ * Function to start the waveform animation
+ * 
+ * Begins the animation loop that continuously samples audio data
+ * and updates the waveform visualization.
+ */
 function startWaveform() {
   if (!animationId && audioAnalyser) {
     function draw() {
@@ -229,6 +318,12 @@ function startWaveform() {
   }
 }
 
+/* 
+ * Function to stop the waveform animation
+ * 
+ * Cancels the animation frame, clears the canvas,
+ * and shows the ear icon if not paused.
+ */
 function stopWaveform() {
   if (animationId) {
     cancelAnimationFrame(animationId);
@@ -245,6 +340,18 @@ function stopWaveform() {
 }
 
 
+/* 
+ * WebRTC and audio processing variables
+ * 
+ * pc: RTCPeerConnection for WebRTC
+ * dc: Data channel for sending/receiving events
+ * isPaused: Flag indicating if audio transmission is paused
+ * audioTrack: The microphone audio track
+ * audioEl: Audio element for playing AI responses
+ * audioContext: Web Audio API context
+ * audioAnalyser: Analyser node for processing audio data
+ * audioDataArray: Buffer for audio data
+ */
 let pc = null;
 let dc = null;
 let isPaused = false;
@@ -254,6 +361,12 @@ let audioContext = null;
 let audioAnalyser = null;
 let audioDataArray = null;
 
+/* 
+ * Function to initialize the audio analyzer
+ * 
+ * Creates an audio context and analyzer for processing
+ * audio data to visualize the waveform and detect activity.
+ */
 function initAudioAnalyser() {
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -263,13 +376,22 @@ function initAudioAnalyser() {
   }
 }
 
+/* 
+ * Function to check for audio activity
+ * 
+ * Analyzes the audio data to determine if there's meaningful
+ * audio input. If there is, shows the waveform; otherwise,
+ * shows the ear icon.
+ * 
+ * @returns {boolean} - True if audio activity is detected, false otherwise
+ */
 function checkAudioActivity() {
   if (audioAnalyser && !isPaused) {
     audioAnalyser.getByteFrequencyData(audioDataArray);
     const average = audioDataArray.reduce((a, b) => a + b) / audioDataArray.length;
     
-    // Use a threshold to determine if there's meaningful audio
-    const AUDIO_THRESHOLD = 10; // Adjust this value based on testing
+    /* Use a threshold to determine if there's meaningful audio */
+    const AUDIO_THRESHOLD = 10; /* Adjust this value based on testing */
     const hasAudio = average > AUDIO_THRESHOLD;
     const iconOverlay = document.getElementById('iconOverlay');
     
@@ -289,6 +411,14 @@ function checkAudioActivity() {
   return false;
 }
 
+/* 
+ * Function to toggle audio transmission on/off
+ * 
+ * Handles the mute/unmute functionality when the user clicks
+ * the interface. When pausing, it stops audio transmission and
+ * cancels any active response. When resuming, it either restarts
+ * the existing connection or reinitializes WebRTC if needed.
+ */
 async function toggleAudioTransmission() {
   console.log('Toggle clicked. Current isPaused:', isPaused);
   isPaused = !isPaused;
@@ -301,7 +431,7 @@ async function toggleAudioTransmission() {
     console.log('Pausing audio transmission');
     await stopAudioTransmission();
     
-    // Only attempt to cancel if we have an active response ID
+    /* Only attempt to cancel if we have an active response ID */
     console.log('Checking for active response before canceling, activeResponseId:', window.activeResponseId);
     if (window.activeResponseId) {
       sendResponseCancel();
@@ -312,11 +442,11 @@ async function toggleAudioTransmission() {
     console.log('Resuming audio transmission');
     if (!dc || dc.readyState !== "open") {
       console.log("Data channel not ready, reinitializing WebRTC");
-      // Reset the paused state since we're reinitializing
+      /* Reset the paused state since we're reinitializing */
       isPaused = false;
       showIcon('ear');
-      cleanupWebRTC(); // Clean up old connection
-      // Trigger reinitialization from FileMaker
+      cleanupWebRTC(); /* Clean up old connection */
+      /* Trigger reinitialization from FileMaker */
       if (window.FileMaker) {
         window.FileMaker.PerformScript("SendToOpenAI", "");
       }
@@ -327,19 +457,37 @@ async function toggleAudioTransmission() {
   }
 }
 
+/* 
+ * Initialize the application when the DOM is fully loaded
+ * 
+ * Sets up the canvas, adds event listeners, and shows the initial ear icon.
+ */
 document.addEventListener("DOMContentLoaded", () => {
-  // Initialize canvas
+  /* Initialize canvas */
   initializeCanvas();
   
-  // Add click handler to the click overlay
+  /* Add click handler to the click overlay */
   document.getElementById('clickOverlay').addEventListener('click', toggleAudioTransmission);
   
-  // Show ear icon by default
+  /* Show ear icon by default */
   showIcon('ear');
 });
 
+/* 
+ * Function to initialize the WebRTC connection with OpenAI
+ * 
+ * Sets up the peer connection, data channel, and audio tracks
+ * for real-time communication with the OpenAI API.
+ * 
+ * @param {string} ephemeralKey - OpenAI API key
+ * @param {string} model - The model to use (e.g., "gpt-4o")
+ * @param {string} instructions - System instructions for the AI
+ * @param {string} toolsStr - JSON string of available tools
+ * @param {string} toolChoice - Tool selection strategy
+ * @returns {RTCPeerConnection} - The established peer connection
+ */
 async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice) {
-  // Initialize activeResponseId tracking
+  /* Initialize activeResponseId tracking */
   window.activeResponseId = null;
   
   try {
