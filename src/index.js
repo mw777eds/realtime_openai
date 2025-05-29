@@ -610,8 +610,9 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             
             // Handle insufficient_quota error specifically
             if (errorCode === "insufficient_quota") {
-              // Show a user-friendly error message
-              showErrorMessage("OpenAI API quota exceeded. Please check your billing details.");
+              // Show the complete error message without truncation
+              showErrorMessage(errorMessage);
+              console.log("Full error message:", errorMessage);
               
               // Notify FileMaker if available
               if (window.FileMaker) {
