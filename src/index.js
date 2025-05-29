@@ -525,9 +525,9 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           instructions: instructions || "You are a helpful AI assistant.",
           tools: toolsStr ? JSON.parse(toolsStr) : [],
           tool_choice: toolChoice || "auto",
-          input_audio_transcription: {
-            model: "whisper-1"
-          },
+          // input_audio_transcription: {
+          //   model: "whisper-1"
+          // },
           modalities: ["text", "audio"]
         }
       };
