@@ -568,24 +568,41 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       }
 
       // Only handle response.done if it's not a function call
-      if (realtimeEvent.type === "response.done" && !realtimeEvent.response.output?.some(item => item.type === "function_call")) {
-        if (!isPaused) {
-          // Set timeout to show ear icon after 500ms
-          setTimeout(() => {
-            if (!isPaused) {
-              showIcon('ear');
-            }
-          }, 500);
+      if (realtimeEvent.type === "response.done") {
+        // Check for error status
+        if (realtimeEvent.response.status === "failed") {
+          console.error("Response failed with status details:", realtimeEvent.response.status_details);
+          
+          if (realtimeEvent.response.status_details?.error) {
+            console.error("Error code:", realtimeEvent.response.status_details.error.code);
+            console.error("Error message:", realtimeEvent.response.status_details.error.message);
+            console.error("Error type:", realtimeEvent.response.status_details.error.type);
+          }
         }
-      }
+        
+        // Handle normal completion (no function call)
+        if (!realtimeEvent.response.output?.some(item => item.type === "function_call")) {
+          if (!isPaused) {
+            // Set timeout to show ear icon after 500ms
+            setTimeout(() => {
+              if (!isPaused) {
+                showIcon('ear');
+              }
+            }, 500);
+          }
+        }
 
-      if (realtimeEvent.type === "response.done" && realtimeEvent.response.output) {
-        console.log("Model response:", realtimeEvent.response.output[0]);
-        if (window.FileMaker && realtimeEvent.response.output[0].content?.[0]?.transcript) {
-          window.FileMaker.PerformScript("LogMessage", JSON.stringify({
-            role: "assistant",
-            message: realtimeEvent.response.output[0].content[0].transcript
-          }));
+        // Only try to access output if it exists and has elements
+        if (realtimeEvent.response.output && realtimeEvent.response.output.length > 0) {
+          console.log("Model response:", realtimeEvent.response.output[0]);
+          if (window.FileMaker && realtimeEvent.response.output[0].content?.[0]?.transcript) {
+            window.FileMaker.PerformScript("LogMessage", JSON.stringify({
+              role: "assistant",
+              message: realtimeEvent.response.output[0].content[0].transcript
+            }));
+          }
+        } else {
+          console.log("Model response: No output available");
         }
       }
 
