@@ -448,7 +448,8 @@ async function toggleAudioTransmission() {
       cleanupWebRTC(); /* Clean up old connection */
       /* Trigger reinitialization from FileMaker */
       if (window.FileMaker) {
-        window.FileMaker.PerformScript("SendToOpenAI", "");
+        /* This needs to be looked at this script should not be used */
+        //window.FileMaker.PerformScript("SendToOpenAI", "");
       }
     } else {
       startAudioTransmission();
