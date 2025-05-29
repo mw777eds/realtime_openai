@@ -551,9 +551,9 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           instructions: instructions || "You are a helpful AI assistant.",
           tools: toolsStr ? JSON.parse(toolsStr) : [],
           tool_choice: toolChoice || "auto",
-          // input_audio_transcription: {
-          //   model: "whisper-1"
-          // },
+          input_audio_transcription: {
+            model: "whisper-1"
+          },
           modalities: ["text", "audio"]
         }
       };
@@ -612,7 +612,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             if (errorCode === "insufficient_quota") {
               // Show the complete error message without truncation
               showErrorMessage(errorMessage);
-              console.log("Full error message:", errorMessage);
               
               // Notify FileMaker if available
               if (window.FileMaker) {
@@ -724,22 +723,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
     if (!sdpResponse.ok) {
       if (sdpResponse.status === 429) {
-        console.error("Rate limit error (429) encountered!");
-        console.log("Status:", sdpResponse.status);
-        console.log("Status Text:", sdpResponse.statusText);
-        
-        // Log important rate limit headers
-        console.log("Retry-After:", sdpResponse.headers.get("Retry-After"));
-        console.log("X-RateLimit-Limit-Requests:", sdpResponse.headers.get("X-RateLimit-Limit-Requests"));
-        console.log("X-RateLimit-Remaining-Requests:", sdpResponse.headers.get("X-RateLimit-Remaining-Requests"));
-        console.log("X-RateLimit-Limit-Tokens:", sdpResponse.headers.get("X-RateLimit-Limit-Tokens"));
-        console.log("X-RateLimit-Remaining-Tokens:", sdpResponse.headers.get("X-RateLimit-Remaining-Tokens"));
-        console.log("X-Request-Id:", sdpResponse.headers.get("X-Request-Id"));
-        
-        // Log response body for more details
-        sdpResponse.text().then(text => {
-          console.log("Response body:", text);
-        });
+        showErrorMessage("Rate limit error encountered. Please try again later.");
       }
       throw new Error(`SDP response error! status: ${sdpResponse.status}`);
     }
