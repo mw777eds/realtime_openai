@@ -319,6 +319,32 @@ function startWaveform() {
 }
 
 /* 
+ * Function to display an error message to the user
+ * 
+ * Creates and shows an error message overlay with the specified text.
+ * 
+ * @param {string} message - The error message to display
+ */
+function showErrorMessage(message) {
+  // Create error container if it doesn't exist
+  let errorContainer = document.getElementById('errorContainer');
+  if (!errorContainer) {
+    errorContainer = document.createElement('div');
+    errorContainer.id = 'errorContainer';
+    document.body.appendChild(errorContainer);
+  }
+  
+  // Set the error message
+  errorContainer.textContent = message;
+  errorContainer.style.display = 'flex';
+  
+  // Hide the error after 5 seconds
+  setTimeout(() => {
+    errorContainer.style.display = 'none';
+  }, 5000);
+}
+
+/* 
  * Function to stop the waveform animation
  * 
  * Cancels the animation frame, clears the canvas,
@@ -574,9 +600,28 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           console.error("Response failed with status details:", realtimeEvent.response.status_details);
           
           if (realtimeEvent.response.status_details?.error) {
-            console.error("Error code:", realtimeEvent.response.status_details.error.code);
-            console.error("Error message:", realtimeEvent.response.status_details.error.message);
-            console.error("Error type:", realtimeEvent.response.status_details.error.type);
+            const errorCode = realtimeEvent.response.status_details.error.code;
+            const errorMessage = realtimeEvent.response.status_details.error.message;
+            const errorType = realtimeEvent.response.status_details.error.type;
+            
+            console.error("Error code:", errorCode);
+            console.error("Error message:", errorMessage);
+            console.error("Error type:", errorType);
+            
+            // Handle insufficient_quota error specifically
+            if (errorCode === "insufficient_quota") {
+              // Show a user-friendly error message
+              showErrorMessage("OpenAI API quota exceeded. Please check your billing details.");
+              
+              // Notify FileMaker if available
+              if (window.FileMaker) {
+                window.FileMaker.PerformScript("HandleAPIError", JSON.stringify({
+                  code: errorCode,
+                  message: errorMessage,
+                  type: errorType
+                }));
+              }
+            }
           }
         }
         

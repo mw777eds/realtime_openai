@@ -104,3 +104,22 @@ button {
   background-color: #0091CE;
   color: #fff;
 }
+
+#errorContainer {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(255, 0, 0, 0.8);
+  color: white;
+  padding: 15px 20px;
+  border-radius: 5px;
+  font-size: 16px;
+  z-index: 3000;
+  display: none;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  max-width: 80%;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
