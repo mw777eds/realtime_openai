@@ -36,7 +36,7 @@ window.createModelResponse = createModelResponse;
  */
 function sendToolResponse(toolResponse) {
   toolResponse = JSON.parse(toolResponse);
-  
+
   if (!toolResponse.call_id) {
     console.error("Missing call_id in toolResponse");
     return;
@@ -53,7 +53,7 @@ function sendToolResponse(toolResponse) {
     };
     console.log("Preparing to send response:", response);
     console.log("Response stringified:", JSON.stringify(response));
-    
+
     dc.send(JSON.stringify(response));
     console.log("Sent tool response");
   } else {
@@ -95,7 +95,7 @@ function createModelResponse() {
  * Called when the user unmutes or starts a new conversation.
  */
 function startAudioTransmission() {
-  
+
   /* Unmute microphone input */
   if (audioTrack) {
     audioTrack.enabled = true;
@@ -129,7 +129,7 @@ function sendResponseCancel() {
      * and if we have an active response ID 
      */
     console.log("sendResponseCancel called, activeResponseId:", window.activeResponseId);
-    
+
     if (window.activeResponseId) {
       const cancelEvent = {
         type: "response.cancel"
@@ -203,7 +203,7 @@ async function stopAudioTransmission() {
       audioTrack.enabled = false;
       console.log("Muted microphone input");
     }
-    
+
     /* Mute AI output */
     if (audioEl && audioEl.srcObject) {
       const audioTracks = audioEl.srcObject.getAudioTracks();
@@ -213,7 +213,7 @@ async function stopAudioTransmission() {
 
     /* Stop waveform animation */
     stopWaveform();
-    
+
     resolve();
   });
 }
@@ -229,7 +229,7 @@ async function stopAudioTransmission() {
 function cleanupWebRTC() {
   /* Clear active response ID when cleaning up */
   window.activeResponseId = null;
-  
+
   if (dc) {
     dc.close();
     dc = null;
@@ -249,12 +249,12 @@ function cleanupWebRTC() {
 function initializeCanvas() {
   canvas = document.getElementById('waveform');
   ctx = canvas.getContext('2d');
-  
+
   function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
   }
-  
+
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
 }
@@ -268,34 +268,34 @@ function initializeCanvas() {
  */
 function drawWaveform(dataArray) {
   if (!ctx) return;
-  
+
   /* Clear the canvas with white background */
   ctx.fillStyle = 'white';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  
+
   /* Set up line style for the waveform */
   ctx.lineWidth = 3.5;
   ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--waveform-color');
   ctx.beginPath();
-  
+
   const bufferLength = dataArray.length;
   const sliceWidth = (canvas.width * 1.0) / bufferLength;
   let x = 0;
-  
+
   /* Draw the waveform line */
   for (let i = 0; i < bufferLength; i++) {
     const v = dataArray[i] / 128.0;
     const y = (v * canvas.height) / 2;
-    
+
     if (i === 0) {
       ctx.moveTo(x, y);
     } else {
       ctx.lineTo(x, y);
     }
-    
+
     x += sliceWidth;
   }
-  
+
   ctx.lineTo(canvas.width, canvas.height / 2);
   ctx.stroke();
 }
@@ -333,11 +333,11 @@ function showErrorMessage(message) {
     errorContainer.id = 'errorContainer';
     document.body.appendChild(errorContainer);
   }
-  
+
   // Set the error message
   errorContainer.textContent = message;
   errorContainer.style.display = 'flex';
-  
+
   // Hide the error after 5 seconds
   setTimeout(() => {
     errorContainer.style.display = 'none';
@@ -415,12 +415,12 @@ function checkAudioActivity() {
   if (audioAnalyser && !isPaused) {
     audioAnalyser.getByteFrequencyData(audioDataArray);
     const average = audioDataArray.reduce((a, b) => a + b) / audioDataArray.length;
-    
+
     /* Use a threshold to determine if there's meaningful audio */
     const AUDIO_THRESHOLD = 10; /* Adjust this value based on testing */
     const hasAudio = average > AUDIO_THRESHOLD;
     const iconOverlay = document.getElementById('iconOverlay');
-    
+
     if (hasAudio && !isPaused) {
       startWaveform();
       iconOverlay.style.display = 'none';
@@ -431,7 +431,7 @@ function checkAudioActivity() {
         showIcon('ear');
       }
     }
-    
+
     return hasAudio;
   }
   return false;
@@ -449,20 +449,20 @@ async function toggleAudioTransmission() {
   console.log('Toggle clicked. Current isPaused:', isPaused);
   isPaused = !isPaused;
   console.log('New isPaused state:', isPaused);
-  
+
   const iconOverlay = document.getElementById('iconOverlay');
   console.log('Icon overlay display:', iconOverlay.style.display);
 
   if (isPaused) {
     console.log('Pausing audio transmission');
     await stopAudioTransmission();
-    
+
     /* Only attempt to cancel if we have an active response ID */
     console.log('Checking for active response before canceling, activeResponseId:', window.activeResponseId);
     if (window.activeResponseId) {
       sendResponseCancel();
     }
-    
+
     showIcon('sleep');
   } else {
     console.log('Resuming audio transmission');
@@ -492,10 +492,10 @@ async function toggleAudioTransmission() {
 document.addEventListener("DOMContentLoaded", () => {
   /* Initialize canvas */
   initializeCanvas();
-  
+
   /* Add click handler to the click overlay */
   document.getElementById('clickOverlay').addEventListener('click', toggleAudioTransmission);
-  
+
   /* Show ear icon by default */
   showIcon('ear');
 });
@@ -516,7 +516,7 @@ document.addEventListener("DOMContentLoaded", () => {
 async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice) {
   /* Initialize activeResponseId tracking */
   window.activeResponseId = null;
-  
+
   try {
     pc = new RTCPeerConnection();
 
@@ -529,12 +529,12 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       if (isPaused) {
         audioTracks.forEach(track => track.enabled = false);
       }
-      
+
       // Set up audio analysis
       initAudioAnalyser();
       const source = audioContext.createMediaStreamSource(e.streams[0]);
       source.connect(audioAnalyser);
-      
+
       // Start monitoring audio levels
       setInterval(checkAudioActivity, 100);
     };
@@ -566,7 +566,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       const realtimeEvent = JSON.parse(e.data);
       console.log(`[${new Date().toISOString()}] Type:`, realtimeEvent.type);
       console.log(`[${new Date().toISOString()}] Event:`, realtimeEvent);
-  
+
       // Track response state for debugging
       if (realtimeEvent.type === "response.created") {
         console.log("Response created, setting activeResponseId:", realtimeEvent.response.id);
@@ -581,15 +581,15 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         console.log("Model tool calls:", toolCalls);
         if (window.FileMaker) {
           showIcon('thought');
-          
+
           // Clear any pending timeouts
           if (window.earIconTimeout) {
             clearTimeout(window.earIconTimeout);
             delete window.earIconTimeout;
           }
-          
+
           // Call FileMaker script once
-          window.FileMaker.PerformScript("CallTools", JSON.stringify({'toolCalls':toolCalls}));
+          window.FileMaker.PerformScript("CallTools", JSON.stringify({ 'toolCalls': toolCalls }));
         }
       }
 
@@ -598,21 +598,21 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         // Check for error status
         if (realtimeEvent.response.status === "failed") {
           console.error("Response failed with status details:", realtimeEvent.response.status_details);
-          
+
           if (realtimeEvent.response.status_details?.error) {
             const errorCode = realtimeEvent.response.status_details.error.code;
             const errorMessage = realtimeEvent.response.status_details.error.message;
             const errorType = realtimeEvent.response.status_details.error.type;
-            
+
             console.error("Error code:", errorCode);
             console.error("Error message:", errorMessage);
             console.error("Error type:", errorType);
-            
+
             // Handle insufficient_quota error specifically
             if (errorCode === "insufficient_quota") {
               // Show the complete error message without truncation
               showErrorMessage(errorMessage);
-              
+
               // Notify FileMaker if available
               if (window.FileMaker) {
                 window.FileMaker.PerformScript("HandleAPIError", JSON.stringify({
@@ -624,7 +624,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             }
           }
         }
-        
+
         // Handle normal completion (no function call)
         if (!realtimeEvent.response.output?.some(item => item.type === "function_call")) {
           if (!isPaused) {
@@ -667,9 +667,9 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
 
 
-      if (realtimeEvent.type === "error" || 
-          realtimeEvent.type === "conversation.stopped") {
-            showIcon('ear');
+      if (realtimeEvent.type === "error" ||
+        realtimeEvent.type === "conversation.stopped") {
+        showIcon('ear');
       }
 
       if (realtimeEvent.type === "error") {
