@@ -25,6 +25,7 @@ window.hasActiveResponse = hasActiveResponse;
 window.cleanupWebRTC = cleanupWebRTC;
 window.sendToolResponse = sendToolResponse;
 window.createModelResponse = createModelResponse;
+window.updateSession = updateSession;
 
 /* 
  * Function to send tool response back to OpenAI
@@ -85,6 +86,56 @@ function createModelResponse() {
     console.log("Requested new model response");
   } else {
     console.error("Data channel not ready for response creation");
+  }
+}
+
+/* 
+ * Function to update session configuration
+ * 
+ * Updates specific session parameters by sending a session.update event
+ * to the OpenAI API. Only the provided parameters will be updated.
+ * Supports: instructions, temperature, max_response_output_tokens, tools, modalities, speed
+ * Note: voice cannot be changed during an active session.
+ * 
+ * @param {string} updateParamsJson - JSON string containing session parameters to update
+ * @returns {boolean} - True if update was sent, false otherwise
+ */
+function updateSession(updateParamsJson) {
+  if (!dc || dc.readyState !== "open") {
+    console.error("Data channel not ready for session update");
+    return false;
+  }
+
+  try {
+    const updateParams = JSON.parse(updateParamsJson);
+    
+    /* Validate that only allowed parameters are being updated */
+    const allowedParams = ['instructions', 'temperature', 'max_response_output_tokens', 'tools', 'modalities', 'speed'];
+    const providedParams = Object.keys(updateParams);
+    const invalidParams = providedParams.filter(param => !allowedParams.includes(param));
+    
+    if (invalidParams.length > 0) {
+      console.warn("Invalid session parameters ignored:", invalidParams);
+      /* Remove invalid parameters */
+      invalidParams.forEach(param => delete updateParams[param]);
+    }
+    
+    if (Object.keys(updateParams).length === 0) {
+      console.error("No valid parameters provided for session update");
+      return false;
+    }
+    
+    const sessionUpdateEvent = {
+      type: "session.update",
+      session: updateParams
+    };
+    
+    dc.send(JSON.stringify(sessionUpdateEvent));
+    console.log("Sent session update:", updateParams);
+    return true;
+  } catch (error) {
+    console.error("Failed to update session:", error);
+    return false;
   }
 }
 
