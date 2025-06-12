@@ -399,10 +399,22 @@ function createToastContainers() {
  * @param {Object|string} jsonData - The full JSON data for FileMaker script (optional)
  */
 function showToast(message, type, side, jsonData = null) {
+  console.log('=== showToast called ===');
+  console.log('Parameters received:');
+  console.log('  message:', message);
+  console.log('  type:', type);
+  console.log('  side:', side);
+  console.log('  jsonData:', jsonData);
+  console.log('  jsonData type:', typeof jsonData);
+  console.log('  jsonData is null:', jsonData === null);
+  console.log('  jsonData is undefined:', jsonData === undefined);
+  console.log('  jsonData is falsy:', !jsonData);
+  
   createToastContainers();
   
   const container = document.getElementById(`toast-container-${side}`);
   if (!container) {
+    console.log('Container not found for side:', side);
     return;
   }
   
@@ -452,6 +464,7 @@ function showToast(message, type, side, jsonData = null) {
     });
   } else {
     console.log('=== Toast without JSON data created ===');
+    console.log('jsonData was falsy, so adding dismiss handler');
     
     // Add click to dismiss if no JSON data
     toast.addEventListener('click', (e) => {
