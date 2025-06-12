@@ -415,27 +415,53 @@ function showToast(message, type, side, jsonData = null) {
   
   // Add click handler based on whether JSON data is provided
   if (jsonData) {
+    console.log('=== Toast with JSON data created ===');
+    console.log('JSON data type:', typeof jsonData);
+    console.log('JSON data value:', jsonData);
+    
     // Ensure jsonData is a string for FileMaker
     let jsonString = jsonData;
     if (typeof jsonData !== 'string') {
       jsonString = JSON.stringify(jsonData);
     }
+    console.log('JSON string for FileMaker:', jsonString);
     
     toast.addEventListener('click', (e) => {
+      console.log('=== Toast with JSON clicked ===');
+      console.log('Event:', e);
+      console.log('Target:', e.target);
+      console.log('Current target:', e.currentTarget);
+      
       e.preventDefault();
       e.stopPropagation();
+      
+      console.log('window.FileMaker exists:', !!window.FileMaker);
       if (window.FileMaker) {
-        window.FileMaker.PerformScript("ShowJSON", jsonString);
+        console.log('Calling FileMaker script ShowJSON with:', jsonString);
+        try {
+          window.FileMaker.PerformScript("ShowJSON", jsonString);
+          console.log('FileMaker script call completed');
+        } catch (error) {
+          console.error('Error calling FileMaker script:', error);
+        }
+      } else {
+        console.error('window.FileMaker is not available');
       }
-      // Don't dismiss the toast when clicking to show JSON
+      
+      console.log('Toast click handler completed - NOT dismissing toast');
     });
   } else {
+    console.log('=== Toast without JSON data created ===');
+    
     // Add click to dismiss if no JSON data
     toast.addEventListener('click', (e) => {
+      console.log('=== Toast without JSON clicked - dismissing ===');
+      
       e.preventDefault();
       e.stopPropagation();
       // Cancel auto-dismiss and dismiss immediately
       if (autoDismissTimeout) {
+        console.log('Clearing auto-dismiss timeout');
         clearTimeout(autoDismissTimeout);
       }
       dismissToast(toast);
@@ -456,13 +482,23 @@ function showToast(message, type, side, jsonData = null) {
  * @param {HTMLElement} toast - The toast element to dismiss
  */
 function dismissToast(toast) {
+  console.log('=== dismissToast called ===');
+  console.log('Toast element:', toast);
+  console.log('Toast parent node:', toast ? toast.parentNode : 'no toast');
+  
   if (toast && toast.parentNode) {
+    console.log('Adding fade-out class and setting timeout');
     toast.classList.add('fade-out');
     setTimeout(() => {
       if (toast.parentNode) {
+        console.log('Removing toast from DOM');
         toast.parentNode.removeChild(toast);
+      } else {
+        console.log('Toast parent no longer exists when trying to remove');
       }
     }, 300);
+  } else {
+    console.log('Cannot dismiss toast - missing toast or parent node');
   }
 }
 
