@@ -27,6 +27,7 @@ window.sendToolResponse = sendToolResponse;
 window.createModelResponse = createModelResponse;
 window.updateSession = updateSession;
 window.enableToastNotifications = enableToastNotifications;
+window.showToast = showToast;
 
 /* 
  * Function to send tool response back to OpenAI
@@ -41,7 +42,6 @@ function sendToolResponse(toolResponse) {
 
   if (!toolResponse.call_id) {
     console.error("Missing call_id in toolResponse");
-    showToast("Tool Error: Missing call_id", 'tool-error', 'right', toolResponse);
     return;
   }
 
@@ -55,10 +55,6 @@ function sendToolResponse(toolResponse) {
       }
     };
     
-    // Show success toast
-    const toolName = toolResponse.tool_name || 'Unknown Tool';
-    showToast(`Tool Response: ${toolName}`, 'tool-response', 'right', toolResponse);
-    
     console.log("Preparing to send response:", response);
     console.log("Response stringified:", JSON.stringify(response));
 
@@ -66,7 +62,6 @@ function sendToolResponse(toolResponse) {
     console.log("Sent tool response");
   } else {
     console.error("Data channel not ready for tool response. State:", dc ? dc.readyState : "no dc");
-    showToast("Tool Error: Data channel not ready", 'tool-error', 'right', toolResponse);
   }
 }
 
@@ -412,11 +407,9 @@ function createToastContainers() {
  * @param {string} message - The message to display
  * @param {string} type - The type of toast (tool-call, tool-response, tool-error)
  * @param {string} side - Which side to show on (left, right)
- * @param {Object} jsonData - The full JSON data for right-click viewing
+ * @param {Object|string} jsonData - The full JSON data for right-click viewing (optional)
  */
 function showToast(message, type, side, jsonData = null) {
-  if (!toastNotificationsEnabled) return;
-  
   createToastContainers();
   
   const container = document.getElementById(`toast-container-${side}`);
@@ -430,11 +423,21 @@ function showToast(message, type, side, jsonData = null) {
     dismissToast(toast);
   });
   
-  // Add right-click for JSON view
+  // Add right-click for JSON view if jsonData is provided
   if (jsonData) {
+    // Parse jsonData if it's a string
+    let parsedData = jsonData;
+    if (typeof jsonData === 'string') {
+      try {
+        parsedData = JSON.parse(jsonData);
+      } catch (e) {
+        parsedData = { data: jsonData };
+      }
+    }
+    
     toast.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      showJsonModal(message, jsonData);
+      showJsonModal(message, parsedData);
     });
   }
   
@@ -762,11 +765,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.some(item => item.type === "function_call")) {
         const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
         console.log("Model tool calls:", toolCalls);
-        
-        // Show toast for each tool call
-        toolCalls.forEach(toolCall => {
-          showToast(`Tool Call: ${toolCall.name}`, 'tool-call', 'left', toolCall);
-        });
         
         if (window.FileMaker) {
           showIcon('thought');
