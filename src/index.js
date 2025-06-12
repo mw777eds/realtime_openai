@@ -390,8 +390,9 @@ function createToastTimeline() {
  * @param {string} type - The type of toast (tool-call, tool-response, tool-error, agent)
  * @param {string} side - Which side to show on (left, right)
  * @param {Object|string} jsonData - The full JSON data for FileMaker script (optional)
+ * @param {number} durationSeconds - How long to show the toast in seconds (default: 5)
  */
-function showToast(message, type, side, jsonData = null) {
+function showToast(message, type, side, jsonData = null, durationSeconds = 5) {
   createToastTimeline();
   
   const timeline = document.getElementById('toast-timeline');
@@ -448,10 +449,10 @@ function showToast(message, type, side, jsonData = null) {
   toastRow.appendChild(toast);
   timeline.appendChild(toastRow);
   
-  // Auto-dismiss after 5 seconds
+  // Auto-dismiss after specified duration
   autoDismissTimeout = setTimeout(() => {
     dismissToast(toastRow);
-  }, 5000);
+  }, durationSeconds * 1000);
 }
 
 /* 
