@@ -433,16 +433,9 @@ function showToast(message, type, side, jsonData = null) {
     console.log('Toast className:', toast.className);
     console.log('Toast textContent:', toast.textContent);
     
-    // Add click to dismiss
-    toast.addEventListener('click', (e) => {
-      console.log('Toast clicked - dismissing');
-      e.preventDefault();
-      dismissToast(toast);
-    });
-    
-    // Add right-click for JSON view if jsonData is provided
+    // Add click handler based on whether JSON data is provided
     if (jsonData) {
-      console.log('Adding right-click handler for JSON data');
+      console.log('Adding click handler for JSON data');
       // Parse jsonData if it's a string
       let parsedData = jsonData;
       if (typeof jsonData === 'string') {
@@ -455,13 +448,19 @@ function showToast(message, type, side, jsonData = null) {
         }
       }
       
-      toast.addEventListener('contextmenu', (e) => {
-        console.log('Toast right-clicked - showing JSON modal');
+      toast.addEventListener('click', (e) => {
+        console.log('Toast clicked - showing JSON modal');
         e.preventDefault();
         showJsonModal(message, parsedData);
       });
     } else {
-      console.log('No JSON data provided - skipping right-click handler');
+      console.log('No JSON data provided - adding click to dismiss');
+      // Add click to dismiss if no JSON data
+      toast.addEventListener('click', (e) => {
+        console.log('Toast clicked - dismissing');
+        e.preventDefault();
+        dismissToast(toast);
+      });
     }
     
     container.appendChild(toast);
