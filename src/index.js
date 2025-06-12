@@ -375,31 +375,19 @@ function startWaveform() {
  * Function to create toast containers if they don't exist
  */
 function createToastContainers() {
-  console.log('Creating toast containers...');
-  
   if (!document.getElementById('toast-container-left')) {
-    console.log('Creating left toast container');
     const leftContainer = document.createElement('div');
     leftContainer.id = 'toast-container-left';
     leftContainer.className = 'toast-container left';
     document.body.appendChild(leftContainer);
-    console.log('Left container created and appended');
-  } else {
-    console.log('Left toast container already exists');
   }
   
   if (!document.getElementById('toast-container-right')) {
-    console.log('Creating right toast container');
     const rightContainer = document.createElement('div');
     rightContainer.id = 'toast-container-right';
     rightContainer.className = 'toast-container right';
     document.body.appendChild(rightContainer);
-    console.log('Right container created and appended');
-  } else {
-    console.log('Right toast container already exists');
   }
-  
-  console.log('Toast containers setup complete');
 }
 
 /* 
@@ -408,76 +396,48 @@ function createToastContainers() {
  * @param {string} message - The message to display
  * @param {string} type - The type of toast (tool-call, tool-response, tool-error)
  * @param {string} side - Which side to show on (left, right)
- * @param {Object|string} jsonData - The full JSON data for right-click viewing (optional)
+ * @param {Object|string} jsonData - The full JSON data for FileMaker script (optional)
  */
 function showToast(message, type, side, jsonData = null) {
-  console.log('=== showToast called ===');
-  console.log('Parameters:', { message, type, side, jsonData });
+  createToastContainers();
   
-  try {
-    createToastContainers();
-    console.log('Toast containers created successfully');
-    
-    const container = document.getElementById(`toast-container-${side}`);
-    console.log('Container found:', container);
-    
-    if (!container) {
-      console.error(`Container not found for side: ${side}`);
-      return;
-    }
-    
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    console.log('Toast element created:', toast);
-    console.log('Toast className:', toast.className);
-    console.log('Toast textContent:', toast.textContent);
-    
-    // Add click handler based on whether JSON data is provided
-    if (jsonData) {
-      console.log('Adding click handler for JSON data');
-      // Parse jsonData if it's a string
-      let parsedData = jsonData;
-      if (typeof jsonData === 'string') {
-        try {
-          parsedData = JSON.parse(jsonData);
-          console.log('JSON data parsed successfully:', parsedData);
-        } catch (e) {
-          console.log('JSON parse failed, using raw data:', e);
-          parsedData = { data: jsonData };
-        }
-      }
-      
-      toast.addEventListener('click', (e) => {
-        console.log('Toast clicked - showing JSON modal');
-        e.preventDefault();
-        showJsonModal(message, parsedData);
-      });
-    } else {
-      console.log('No JSON data provided - adding click to dismiss');
-      // Add click to dismiss if no JSON data
-      toast.addEventListener('click', (e) => {
-        console.log('Toast clicked - dismissing');
-        e.preventDefault();
-        dismissToast(toast);
-      });
-    }
-    
-    container.appendChild(toast);
-    console.log('Toast appended to container');
-    console.log('Container children count:', container.children.length);
-    
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-      console.log('Auto-dismissing toast after 5 seconds');
-      dismissToast(toast);
-    }, 5000);
-    
-    console.log('=== showToast completed successfully ===');
-  } catch (error) {
-    console.error('Error in showToast:', error);
-    console.error('Error stack:', error.stack);
+  const container = document.getElementById(`toast-container-${side}`);
+  if (!container) {
+    return;
   }
+  
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  
+  // Add click handler based on whether JSON data is provided
+  if (jsonData) {
+    // Ensure jsonData is a string for FileMaker
+    let jsonString = jsonData;
+    if (typeof jsonData !== 'string') {
+      jsonString = JSON.stringify(jsonData);
+    }
+    
+    toast.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (window.FileMaker) {
+        window.FileMaker.PerformScript("ShowJSON", jsonString);
+      }
+    });
+  } else {
+    // Add click to dismiss if no JSON data
+    toast.addEventListener('click', (e) => {
+      e.preventDefault();
+      dismissToast(toast);
+    });
+  }
+  
+  container.appendChild(toast);
+  
+  // Auto-dismiss after 5 seconds
+  setTimeout(() => {
+    dismissToast(toast);
+  }, 5000);
 }
 
 /* 
@@ -486,78 +446,16 @@ function showToast(message, type, side, jsonData = null) {
  * @param {HTMLElement} toast - The toast element to dismiss
  */
 function dismissToast(toast) {
-  console.log('=== dismissToast called ===');
-  console.log('Toast element:', toast);
-  
   if (toast && toast.parentNode) {
-    console.log('Adding fade-out class to toast');
     toast.classList.add('fade-out');
     setTimeout(() => {
       if (toast.parentNode) {
-        console.log('Removing toast from DOM');
         toast.parentNode.removeChild(toast);
-        console.log('Toast removed successfully');
-      } else {
-        console.log('Toast parent no longer exists');
       }
     }, 300);
-  } else {
-    console.log('Toast or parent node not found - cannot dismiss');
   }
 }
 
-/* 
- * Function to show JSON data in a modal
- * 
- * @param {string} title - The title for the modal
- * @param {Object} jsonData - The JSON data to display
- */
-function showJsonModal(title, jsonData) {
-  console.log('=== showJsonModal called ===');
-  console.log('Title:', title);
-  console.log('JSON data:', jsonData);
-  
-  try {
-    // Remove existing modal if present
-    const existingModal = document.getElementById('json-modal');
-    if (existingModal) {
-      console.log('Removing existing modal');
-      existingModal.remove();
-    }
-    
-    const modal = document.createElement('div');
-    modal.id = 'json-modal';
-    modal.className = 'json-modal';
-    console.log('Modal element created');
-    
-    modal.innerHTML = `
-      <div class="json-modal-content">
-        <div class="json-modal-header">
-          <div class="json-modal-title">${title}</div>
-          <button class="json-modal-close">&times;</button>
-        </div>
-        <div class="json-content">${JSON.stringify(jsonData, null, 2)}</div>
-      </div>
-    `;
-    console.log('Modal HTML set');
-    
-    // Close modal when clicking close button or outside
-    modal.addEventListener('click', (e) => {
-      console.log('Modal clicked, target:', e.target);
-      if (e.target === modal || e.target.classList.contains('json-modal-close')) {
-        console.log('Closing modal');
-        modal.remove();
-      }
-    });
-    
-    document.body.appendChild(modal);
-    console.log('Modal appended to body');
-    console.log('=== showJsonModal completed ===');
-  } catch (error) {
-    console.error('Error in showJsonModal:', error);
-    console.error('Error stack:', error.stack);
-  }
-}
 
 /* 
  * Function to display an error message to the user
