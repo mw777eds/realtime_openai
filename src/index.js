@@ -26,7 +26,6 @@ window.cleanupWebRTC = cleanupWebRTC;
 window.sendToolResponse = sendToolResponse;
 window.createModelResponse = createModelResponse;
 window.updateSession = updateSession;
-window.enableToastNotifications = enableToastNotifications;
 window.showToast = showToast;
 
 /* 
@@ -373,16 +372,6 @@ function startWaveform() {
 }
 
 /* 
- * Function to enable/disable toast notifications
- * 
- * @param {boolean} enabled - Whether to show toast notifications
- */
-function enableToastNotifications(enabled) {
-  toastNotificationsEnabled = enabled;
-  console.log("Toast notifications", enabled ? "enabled" : "disabled");
-}
-
-/* 
  * Function to create toast containers if they don't exist
  */
 function createToastContainers() {
@@ -561,7 +550,6 @@ function stopWaveform() {
  * audioContext: Web Audio API context
  * audioAnalyser: Analyser node for processing audio data
  * audioDataArray: Buffer for audio data
- * toastNotificationsEnabled: Flag for showing toast notifications
  */
 let pc = null;
 let dc = null;
@@ -571,7 +559,6 @@ let audioEl = null;
 let audioContext = null;
 let audioAnalyser = null;
 let audioDataArray = null;
-let toastNotificationsEnabled = false;
 
 /* 
  * Function to initialize the audio analyzer
