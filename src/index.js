@@ -426,7 +426,8 @@ function showToast(message, type, side, jsonData = null) {
   let autoDismissTimeout;
   
   // Add click handler based on whether JSON data is provided
-  if (jsonData) {
+  // Check for non-empty string or valid object
+  if (jsonData && (typeof jsonData === 'object' || (typeof jsonData === 'string' && jsonData.trim() !== ''))) {
     console.log('=== Toast with JSON data created ===');
     console.log('JSON data type:', typeof jsonData);
     console.log('JSON data value:', jsonData);
@@ -464,7 +465,7 @@ function showToast(message, type, side, jsonData = null) {
     });
   } else {
     console.log('=== Toast without JSON data created ===');
-    console.log('jsonData was falsy, so adding dismiss handler');
+    console.log('jsonData was falsy or empty, so adding dismiss handler');
     
     // Add click to dismiss if no JSON data
     toast.addEventListener('click', (e) => {
