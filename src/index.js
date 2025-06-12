@@ -410,6 +410,9 @@ function showToast(message, type, side, jsonData = null) {
   toast.className = `toast ${type}`;
   toast.textContent = message;
   
+  // Store the auto-dismiss timeout ID so we can cancel it if needed
+  let autoDismissTimeout;
+  
   // Add click handler based on whether JSON data is provided
   if (jsonData) {
     // Ensure jsonData is a string for FileMaker
@@ -420,14 +423,21 @@ function showToast(message, type, side, jsonData = null) {
     
     toast.addEventListener('click', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       if (window.FileMaker) {
         window.FileMaker.PerformScript("ShowJSON", jsonString);
       }
+      // Don't dismiss the toast when clicking to show JSON
     });
   } else {
     // Add click to dismiss if no JSON data
     toast.addEventListener('click', (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      // Cancel auto-dismiss and dismiss immediately
+      if (autoDismissTimeout) {
+        clearTimeout(autoDismissTimeout);
+      }
       dismissToast(toast);
     });
   }
@@ -435,7 +445,7 @@ function showToast(message, type, side, jsonData = null) {
   container.appendChild(toast);
   
   // Auto-dismiss after 5 seconds
-  setTimeout(() => {
+  autoDismissTimeout = setTimeout(() => {
     dismissToast(toast);
   }, 5000);
 }
