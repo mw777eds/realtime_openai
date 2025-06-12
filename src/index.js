@@ -26,6 +26,7 @@ window.cleanupWebRTC = cleanupWebRTC;
 window.sendToolResponse = sendToolResponse;
 window.createModelResponse = createModelResponse;
 window.updateSession = updateSession;
+window.enableToastNotifications = enableToastNotifications;
 
 /* 
  * Function to send tool response back to OpenAI
@@ -40,6 +41,7 @@ function sendToolResponse(toolResponse) {
 
   if (!toolResponse.call_id) {
     console.error("Missing call_id in toolResponse");
+    showToast("Tool Error: Missing call_id", 'tool-error', 'right', toolResponse);
     return;
   }
 
@@ -52,6 +54,11 @@ function sendToolResponse(toolResponse) {
         output: JSON.stringify(toolResponse.output)
       }
     };
+    
+    // Show success toast
+    const toolName = toolResponse.tool_name || 'Unknown Tool';
+    showToast(`Tool Response: ${toolName}`, 'tool-response', 'right', toolResponse);
+    
     console.log("Preparing to send response:", response);
     console.log("Response stringified:", JSON.stringify(response));
 
@@ -59,6 +66,7 @@ function sendToolResponse(toolResponse) {
     console.log("Sent tool response");
   } else {
     console.error("Data channel not ready for tool response. State:", dc ? dc.readyState : "no dc");
+    showToast("Tool Error: Data channel not ready", 'tool-error', 'right', toolResponse);
   }
 }
 
@@ -370,6 +378,128 @@ function startWaveform() {
 }
 
 /* 
+ * Function to enable/disable toast notifications
+ * 
+ * @param {boolean} enabled - Whether to show toast notifications
+ */
+function enableToastNotifications(enabled) {
+  toastNotificationsEnabled = enabled;
+  console.log("Toast notifications", enabled ? "enabled" : "disabled");
+}
+
+/* 
+ * Function to create toast containers if they don't exist
+ */
+function createToastContainers() {
+  if (!document.getElementById('toast-container-left')) {
+    const leftContainer = document.createElement('div');
+    leftContainer.id = 'toast-container-left';
+    leftContainer.className = 'toast-container left';
+    document.body.appendChild(leftContainer);
+  }
+  
+  if (!document.getElementById('toast-container-right')) {
+    const rightContainer = document.createElement('div');
+    rightContainer.id = 'toast-container-right';
+    rightContainer.className = 'toast-container right';
+    document.body.appendChild(rightContainer);
+  }
+}
+
+/* 
+ * Function to show a toast notification
+ * 
+ * @param {string} message - The message to display
+ * @param {string} type - The type of toast (tool-call, tool-response, tool-error)
+ * @param {string} side - Which side to show on (left, right)
+ * @param {Object} jsonData - The full JSON data for right-click viewing
+ */
+function showToast(message, type, side, jsonData = null) {
+  if (!toastNotificationsEnabled) return;
+  
+  createToastContainers();
+  
+  const container = document.getElementById(`toast-container-${side}`);
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  
+  // Add click to dismiss
+  toast.addEventListener('click', (e) => {
+    e.preventDefault();
+    dismissToast(toast);
+  });
+  
+  // Add right-click for JSON view
+  if (jsonData) {
+    toast.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showJsonModal(message, jsonData);
+    });
+  }
+  
+  container.appendChild(toast);
+  
+  // Auto-dismiss after 5 seconds
+  setTimeout(() => {
+    dismissToast(toast);
+  }, 5000);
+}
+
+/* 
+ * Function to dismiss a toast with animation
+ * 
+ * @param {HTMLElement} toast - The toast element to dismiss
+ */
+function dismissToast(toast) {
+  if (toast && toast.parentNode) {
+    toast.classList.add('fade-out');
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+    }, 300);
+  }
+}
+
+/* 
+ * Function to show JSON data in a modal
+ * 
+ * @param {string} title - The title for the modal
+ * @param {Object} jsonData - The JSON data to display
+ */
+function showJsonModal(title, jsonData) {
+  // Remove existing modal if present
+  const existingModal = document.getElementById('json-modal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+  
+  const modal = document.createElement('div');
+  modal.id = 'json-modal';
+  modal.className = 'json-modal';
+  
+  modal.innerHTML = `
+    <div class="json-modal-content">
+      <div class="json-modal-header">
+        <div class="json-modal-title">${title}</div>
+        <button class="json-modal-close">&times;</button>
+      </div>
+      <div class="json-content">${JSON.stringify(jsonData, null, 2)}</div>
+    </div>
+  `;
+  
+  // Close modal when clicking close button or outside
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal || e.target.classList.contains('json-modal-close')) {
+      modal.remove();
+    }
+  });
+  
+  document.body.appendChild(modal);
+}
+
+/* 
  * Function to display an error message to the user
  * 
  * Creates and shows an error message overlay with the specified text.
@@ -428,6 +558,7 @@ function stopWaveform() {
  * audioContext: Web Audio API context
  * audioAnalyser: Analyser node for processing audio data
  * audioDataArray: Buffer for audio data
+ * toastNotificationsEnabled: Flag for showing toast notifications
  */
 let pc = null;
 let dc = null;
@@ -437,6 +568,7 @@ let audioEl = null;
 let audioContext = null;
 let audioAnalyser = null;
 let audioDataArray = null;
+let toastNotificationsEnabled = false;
 
 /* 
  * Function to initialize the audio analyzer
@@ -630,6 +762,12 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.some(item => item.type === "function_call")) {
         const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
         console.log("Model tool calls:", toolCalls);
+        
+        // Show toast for each tool call
+        toolCalls.forEach(toolCall => {
+          showToast(`Tool Call: ${toolCall.name}`, 'tool-call', 'left', toolCall);
+        });
+        
         if (window.FileMaker) {
           showIcon('thought');
 
