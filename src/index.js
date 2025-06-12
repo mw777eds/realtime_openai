@@ -372,21 +372,14 @@ function startWaveform() {
 }
 
 /* 
- * Function to create toast containers if they don't exist
+ * Function to create toast timeline container if it doesn't exist
  */
-function createToastContainers() {
-  if (!document.getElementById('toast-container-left')) {
-    const leftContainer = document.createElement('div');
-    leftContainer.id = 'toast-container-left';
-    leftContainer.className = 'toast-container left';
-    document.body.appendChild(leftContainer);
-  }
-  
-  if (!document.getElementById('toast-container-right')) {
-    const rightContainer = document.createElement('div');
-    rightContainer.id = 'toast-container-right';
-    rightContainer.className = 'toast-container right';
-    document.body.appendChild(rightContainer);
+function createToastTimeline() {
+  if (!document.getElementById('toast-timeline')) {
+    const timeline = document.createElement('div');
+    timeline.id = 'toast-timeline';
+    timeline.className = 'toast-timeline';
+    document.body.appendChild(timeline);
   }
 }
 
@@ -394,29 +387,21 @@ function createToastContainers() {
  * Function to show a toast notification
  * 
  * @param {string} message - The message to display
- * @param {string} type - The type of toast (tool-call, tool-response, tool-error)
+ * @param {string} type - The type of toast (tool-call, tool-response, tool-error, agent)
  * @param {string} side - Which side to show on (left, right)
  * @param {Object|string} jsonData - The full JSON data for FileMaker script (optional)
  */
 function showToast(message, type, side, jsonData = null) {
-  console.log('=== showToast called ===');
-  console.log('Parameters received:');
-  console.log('  message:', message);
-  console.log('  type:', type);
-  console.log('  side:', side);
-  console.log('  jsonData:', jsonData);
-  console.log('  jsonData type:', typeof jsonData);
-  console.log('  jsonData is null:', jsonData === null);
-  console.log('  jsonData is undefined:', jsonData === undefined);
-  console.log('  jsonData is falsy:', !jsonData);
+  createToastTimeline();
   
-  createToastContainers();
-  
-  const container = document.getElementById(`toast-container-${side}`);
-  if (!container) {
-    console.log('Container not found for side:', side);
+  const timeline = document.getElementById('toast-timeline');
+  if (!timeline) {
     return;
   }
+  
+  // Create a row for this toast
+  const toastRow = document.createElement('div');
+  toastRow.className = `toast-row ${side}`;
   
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
@@ -428,91 +413,63 @@ function showToast(message, type, side, jsonData = null) {
   // Add click handler based on whether JSON data is provided
   // Check for non-empty string or valid object
   if (jsonData && (typeof jsonData === 'object' || (typeof jsonData === 'string' && jsonData.trim() !== ''))) {
-    console.log('=== Toast with JSON data created ===');
-    console.log('JSON data type:', typeof jsonData);
-    console.log('JSON data value:', jsonData);
-    
     // Ensure jsonData is a string for FileMaker
     let jsonString = jsonData;
     if (typeof jsonData !== 'string') {
       jsonString = JSON.stringify(jsonData);
     }
-    console.log('JSON string for FileMaker:', jsonString);
     
     toast.addEventListener('click', (e) => {
-      console.log('=== Toast with JSON clicked ===');
-      console.log('Event:', e);
-      console.log('Target:', e.target);
-      console.log('Current target:', e.currentTarget);
-      
       e.preventDefault();
       e.stopPropagation();
       
-      console.log('window.FileMaker exists:', !!window.FileMaker);
       if (window.FileMaker) {
-        console.log('Calling FileMaker script ShowJSON with:', jsonString);
         try {
           window.FileMaker.PerformScript("ShowJSON", jsonString);
-          console.log('FileMaker script call completed');
         } catch (error) {
           console.error('Error calling FileMaker script:', error);
         }
-      } else {
-        console.error('window.FileMaker is not available');
       }
-      
-      console.log('Toast click handler completed - NOT dismissing toast');
     });
   } else {
-    console.log('=== Toast without JSON data created ===');
-    console.log('jsonData was falsy or empty, so adding dismiss handler');
-    
     // Add click to dismiss if no JSON data
     toast.addEventListener('click', (e) => {
-      console.log('=== Toast without JSON clicked - dismissing ===');
-      
       e.preventDefault();
       e.stopPropagation();
       // Cancel auto-dismiss and dismiss immediately
       if (autoDismissTimeout) {
-        console.log('Clearing auto-dismiss timeout');
         clearTimeout(autoDismissTimeout);
       }
-      dismissToast(toast);
+      dismissToast(toastRow);
     });
   }
   
-  container.appendChild(toast);
+  // Add toast to row, then row to timeline
+  toastRow.appendChild(toast);
+  timeline.appendChild(toastRow);
   
   // Auto-dismiss after 5 seconds
   autoDismissTimeout = setTimeout(() => {
-    dismissToast(toast);
+    dismissToast(toastRow);
   }, 5000);
 }
 
 /* 
  * Function to dismiss a toast with animation
  * 
- * @param {HTMLElement} toast - The toast element to dismiss
+ * @param {HTMLElement} toastRow - The toast row element to dismiss
  */
-function dismissToast(toast) {
-  console.log('=== dismissToast called ===');
-  console.log('Toast element:', toast);
-  console.log('Toast parent node:', toast ? toast.parentNode : 'no toast');
-  
-  if (toast && toast.parentNode) {
-    console.log('Adding fade-out class and setting timeout');
-    toast.classList.add('fade-out');
+function dismissToast(toastRow) {
+  if (toastRow && toastRow.parentNode) {
+    const toast = toastRow.querySelector('.toast');
+    if (toast) {
+      toast.classList.add('fade-out');
+    }
     setTimeout(() => {
-      if (toast.parentNode) {
-        console.log('Removing toast from DOM');
-        toast.parentNode.removeChild(toast);
-      } else {
-        console.log('Toast parent no longer exists when trying to remove');
+      if (toastRow.parentNode) {
+        toastRow.parentNode.removeChild(toastRow);
       }
     }, 300);
-  } else {
-    console.log('Cannot dismiss toast - missing toast or parent node');
   }
 }
 

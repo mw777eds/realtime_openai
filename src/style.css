@@ -130,19 +130,28 @@ button {
 }
 
 /* Toast notification styles */
-.toast-container {
+.toast-timeline {
   position: fixed;
   top: 20px;
+  left: 0;
+  right: 0;
   z-index: 4000;
   pointer-events: none;
+  padding: 0 20px;
 }
 
-.toast-container.left {
-  left: 20px;
+.toast-row {
+  display: flex;
+  margin-bottom: 10px;
+  width: 100%;
 }
 
-.toast-container.right {
-  right: 20px;
+.toast-row.left {
+  justify-content: flex-start;
+}
+
+.toast-row.right {
+  justify-content: flex-end;
 }
 
 .toast {
@@ -150,7 +159,6 @@ button {
   color: white;
   padding: 12px 16px;
   border-radius: 8px;
-  margin-bottom: 10px;
   font-size: 14px;
   font-weight: 500;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -173,6 +181,10 @@ button {
 
 .toast.tool-error {
   background-color: rgba(220, 53, 69, 0.9); /* Red */
+}
+
+.toast.agent {
+  background-color: rgba(255, 193, 7, 0.9); /* Yellow */
 }
 
 .toast.fade-out {
