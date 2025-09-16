@@ -27,10 +27,311 @@ window.sendToolResponse = sendToolResponse;
 window.createModelResponse = createModelResponse;
 window.updateSession = updateSession;
 window.showToast = showToast;
+window.sendContainerImageToRealtime = sendContainerImageToRealtime;
 
-/* 
+const DEFAULT_MODALITIES = ["text", "audio"];
+const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
+  type: "function",
+  name: "request_container_image",
+  description: "Request the latest image stored in the FileMaker container field so the assistant can use it as visual context.",
+  parameters: {
+    type: "object",
+    properties: {
+      prompt: {
+        type: "string",
+        description: "Optional guidance for the user about the kind of image that should be provided."
+      }
+    }
+  }
+});
+
+let defaultResponseModalities = [...DEFAULT_MODALITIES];
+let containerImageToolName = DEFAULT_CONTAINER_IMAGE_TOOL.name;
+let currentSessionConfig = null;
+
+function parseJsonSafely(value, label) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'object') {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    console.error(`Failed to parse JSON for ${label}:`, error);
+    return null;
+  }
+}
+
+function deepMerge(target = {}, source = {}) {
+  const output = Array.isArray(target) ? [...target] : { ...target };
+
+  if (!source || typeof source !== 'object') {
+    return output;
+  }
+
+  Object.keys(source).forEach((key) => {
+    const sourceValue = source[key];
+
+    if (Array.isArray(sourceValue)) {
+      output[key] = [...sourceValue];
+    } else if (sourceValue && typeof sourceValue === 'object') {
+      const base = output[key] && typeof output[key] === 'object' && !Array.isArray(output[key])
+        ? output[key]
+        : {};
+      output[key] = deepMerge(base, sourceValue);
+    } else if (sourceValue !== undefined) {
+      output[key] = sourceValue;
+    }
+  });
+
+  return output;
+}
+
+function prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfigStr) {
+  let tools = [];
+
+  const parsedTools = parseJsonSafely(toolsStr, 'tools');
+  if (Array.isArray(parsedTools)) {
+    tools = parsedTools;
+  }
+
+  const additionalConfig = parseJsonSafely(sessionConfigStr, 'session configuration') || {};
+
+  let disableContainerImageTool = false;
+  if (typeof additionalConfig.disableDefaultContainerImageTool !== 'undefined') {
+    disableContainerImageTool = Boolean(additionalConfig.disableDefaultContainerImageTool);
+    delete additionalConfig.disableDefaultContainerImageTool;
+  } else if (typeof additionalConfig.disable_container_image_tool !== 'undefined') {
+    disableContainerImageTool = Boolean(additionalConfig.disable_container_image_tool);
+    delete additionalConfig.disable_container_image_tool;
+  }
+
+  let containerImageToolDefinition = null;
+  if (additionalConfig.containerImageTool && typeof additionalConfig.containerImageTool === 'object') {
+    containerImageToolDefinition = additionalConfig.containerImageTool;
+    delete additionalConfig.containerImageTool;
+  } else if (additionalConfig.container_image_tool && typeof additionalConfig.container_image_tool === 'object') {
+    containerImageToolDefinition = additionalConfig.container_image_tool;
+    delete additionalConfig.container_image_tool;
+  }
+
+  let defaultModalitiesOverride = null;
+  if (additionalConfig.defaultResponseModalities) {
+    defaultModalitiesOverride = additionalConfig.defaultResponseModalities;
+    delete additionalConfig.defaultResponseModalities;
+  } else if (additionalConfig.default_response_modalities) {
+    defaultModalitiesOverride = additionalConfig.default_response_modalities;
+    delete additionalConfig.default_response_modalities;
+  }
+
+  if (Array.isArray(additionalConfig.tools)) {
+    tools = additionalConfig.tools;
+    delete additionalConfig.tools;
+  }
+
+  const imageTool = containerImageToolDefinition
+    ? JSON.parse(JSON.stringify(containerImageToolDefinition))
+    : JSON.parse(JSON.stringify(DEFAULT_CONTAINER_IMAGE_TOOL));
+  if (!disableContainerImageTool) {
+    const existingNames = new Set(tools.map(tool => tool && tool.name));
+    if (!existingNames.has(imageTool.name)) {
+      tools.push(imageTool);
+    }
+  }
+
+  const defaultSessionConfig = {
+    instructions: instructions || "You are a helpful AI assistant.",
+    tools,
+    tool_choice: toolChoice || "auto",
+    input_audio_transcription: {
+      model: "gpt-4o-mini-transcribe"
+    },
+    modalities: [...DEFAULT_MODALITIES],
+    voice: "verse"
+  };
+
+  const sessionConfig = deepMerge(defaultSessionConfig, additionalConfig);
+
+  if (!Array.isArray(sessionConfig.modalities) || sessionConfig.modalities.length === 0) {
+    sessionConfig.modalities = [...DEFAULT_MODALITIES];
+  }
+
+  sessionConfig.tools = Array.isArray(sessionConfig.tools) ? sessionConfig.tools : [];
+
+  const defaultModalities = Array.isArray(defaultModalitiesOverride) && defaultModalitiesOverride.length > 0
+    ? defaultModalitiesOverride
+    : sessionConfig.modalities;
+
+  return {
+    sessionConfig,
+    defaultModalities,
+    containerToolName: imageTool.name
+  };
+}
+
+function getResponseModalities(modalitiesOverride) {
+  if (Array.isArray(modalitiesOverride) && modalitiesOverride.length > 0) {
+    return modalitiesOverride;
+  }
+
+  return defaultResponseModalities && defaultResponseModalities.length > 0
+    ? defaultResponseModalities
+    : [...DEFAULT_MODALITIES];
+}
+
+function normalizeModalitiesList(modalities) {
+  if (Array.isArray(modalities)) {
+    return modalities
+      .map(modality => typeof modality === 'string' ? modality.trim() : modality)
+      .filter(modality => typeof modality === 'string' && modality.length > 0);
+  }
+
+  if (typeof modalities === 'string') {
+    try {
+      const parsed = JSON.parse(modalities);
+      return normalizeModalitiesList(parsed);
+    } catch (error) {
+      return modalities
+        .split(',')
+        .map(modality => modality.trim())
+        .filter(modality => modality.length > 0);
+    }
+  }
+
+  return null;
+}
+
+function normalizeImagePayload(imagePayload) {
+  if (!imagePayload || typeof imagePayload !== 'object') {
+    return null;
+  }
+
+  let base64Data = imagePayload.base64 || imagePayload.imageBase64 || imagePayload.image_base64 || null;
+  let mimeType = imagePayload.mimeType || imagePayload.mime_type || imagePayload.contentType || null;
+
+  if (!base64Data && typeof imagePayload.dataUrl === 'string') {
+    const match = imagePayload.dataUrl.match(/^data:(.+?);base64,(.+)$/);
+    if (match) {
+      mimeType = mimeType || match[1];
+      base64Data = match[2];
+    }
+  }
+
+  if (!base64Data && typeof imagePayload.data_url === 'string') {
+    const match = imagePayload.data_url.match(/^data:(.+?);base64,(.+)$/);
+    if (match) {
+      mimeType = mimeType || match[1];
+      base64Data = match[2];
+    }
+  }
+
+  if (!base64Data || typeof base64Data !== 'string') {
+    return null;
+  }
+
+  base64Data = base64Data.replace(/\s+/g, '');
+
+  return {
+    base64Data,
+    mimeType: mimeType || 'image/png'
+  };
+}
+
+function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
+  if (!dc || dc.readyState !== "open") {
+    console.error("Data channel not ready for sending image context");
+    return false;
+  }
+
+  let payload = imagePayload;
+  if (typeof imagePayload === 'string') {
+    payload = parseJsonSafely(imagePayload, 'image payload') || { dataUrl: imagePayload };
+  }
+
+  const normalized = normalizeImagePayload(payload);
+  if (!normalized) {
+    console.error("Invalid image payload supplied to sendContainerImageToRealtime");
+    return false;
+  }
+
+  const content = [];
+
+  const promptText = payload && typeof payload.prompt === 'string'
+    ? payload.prompt
+    : (typeof payload.text === 'string' ? payload.text : null);
+
+  if (promptText && promptText.trim() !== '') {
+    content.push({
+      type: "input_text",
+      text: promptText.trim()
+    });
+  }
+
+  const imageContent = {
+    type: "input_image",
+    image_base64: normalized.base64Data
+  };
+
+  if (normalized.mimeType) {
+    imageContent.mime_type = normalized.mimeType;
+  }
+
+  if (payload && payload.metadata && typeof payload.metadata === 'object') {
+    imageContent.metadata = payload.metadata;
+  }
+
+  content.push(imageContent);
+
+  const conversationEvent = {
+    type: "conversation.item.create",
+    item: {
+      type: "message",
+      role: "user",
+      content
+    }
+  };
+
+  dc.send(JSON.stringify(conversationEvent));
+
+  const shouldRequestResponse = typeof payload?.requestResponse === 'boolean'
+    ? payload.requestResponse
+    : requestResponse;
+
+  if (shouldRequestResponse) {
+    const normalizedModalitiesOverride = normalizeModalitiesList(payload?.modalities) || payload?.modalities;
+    const modalities = getResponseModalities(normalizedModalitiesOverride);
+    const responseCreateEvent = {
+      type: "response.create",
+      response: {
+        modalities
+      }
+    };
+    dc.send(JSON.stringify(responseCreateEvent));
+  }
+
+  if (window.FileMaker) {
+    try {
+      window.FileMaker.PerformScript("LogMessage", JSON.stringify({
+        role: "user",
+        message: promptText ? `${promptText} [image shared]` : "[image shared]"
+      }));
+    } catch (error) {
+      console.warn("Failed to log image message to FileMaker:", error);
+    }
+  }
+
+  showToast("Shared image context with assistant", "tool-response", "left", null, 4);
+
+  return true;
+}
+
+/*
  * Function to send tool response back to OpenAI
- * 
+ *
  * This function takes the output from a tool execution in FileMaker
  * and sends it back to the OpenAI API through the WebRTC data channel.
  * 
@@ -81,7 +382,7 @@ function createModelResponse() {
     const responseCreateEvent = {
       type: "response.create",
       response: {
-        modalities: ["text", "audio"]
+        modalities: getResponseModalities()
       }
     };
     dc.send(JSON.stringify(responseCreateEvent));
@@ -109,31 +410,151 @@ function updateSession(updateParamsJson) {
   }
 
   try {
-    const updateParams = JSON.parse(updateParamsJson);
-    
-    /* Validate that only allowed parameters are being updated */
-    const allowedParams = ['instructions', 'temperature', 'max_response_output_tokens', 'tools', 'modalities', 'speed'];
-    const providedParams = Object.keys(updateParams);
-    const invalidParams = providedParams.filter(param => !allowedParams.includes(param));
-    
+    const parsedUpdate = parseJsonSafely(updateParamsJson, 'session update');
+
+    if (!parsedUpdate || typeof parsedUpdate !== 'object') {
+      console.error("Session update payload must be a JSON object");
+      return false;
+    }
+
+    let disableContainerImageTool = false;
+    if (typeof parsedUpdate.disableDefaultContainerImageTool !== 'undefined') {
+      disableContainerImageTool = Boolean(parsedUpdate.disableDefaultContainerImageTool);
+      delete parsedUpdate.disableDefaultContainerImageTool;
+    } else if (typeof parsedUpdate.disable_container_image_tool !== 'undefined') {
+      disableContainerImageTool = Boolean(parsedUpdate.disable_container_image_tool);
+      delete parsedUpdate.disable_container_image_tool;
+    }
+
+    let containerImageToolDefinition = null;
+    if (parsedUpdate.containerImageTool && typeof parsedUpdate.containerImageTool === 'object') {
+      containerImageToolDefinition = parsedUpdate.containerImageTool;
+      delete parsedUpdate.containerImageTool;
+    } else if (parsedUpdate.container_image_tool && typeof parsedUpdate.container_image_tool === 'object') {
+      containerImageToolDefinition = parsedUpdate.container_image_tool;
+      delete parsedUpdate.container_image_tool;
+    }
+
+    let newDefaultModalities = null;
+    if (Object.prototype.hasOwnProperty.call(parsedUpdate, 'defaultResponseModalities')) {
+      newDefaultModalities = normalizeModalitiesList(parsedUpdate.defaultResponseModalities);
+      delete parsedUpdate.defaultResponseModalities;
+    }
+    if (Object.prototype.hasOwnProperty.call(parsedUpdate, 'default_response_modalities')) {
+      const override = normalizeModalitiesList(parsedUpdate.default_response_modalities);
+      newDefaultModalities = override || newDefaultModalities;
+      delete parsedUpdate.default_response_modalities;
+    }
+
+    const allowedParams = new Set([
+      'instructions',
+      'temperature',
+      'max_response_output_tokens',
+      'tools',
+      'modalities',
+      'speed',
+      'turn_detection',
+      'input_audio_transcription',
+      'input_audio_format',
+      'output_audio_format',
+      'voice',
+      'response_format',
+      'conversation',
+      'tool_choice'
+    ]);
+
+    const updateParams = {};
+    const invalidParams = [];
+
+    Object.keys(parsedUpdate).forEach((key) => {
+      if (allowedParams.has(key)) {
+        updateParams[key] = parsedUpdate[key];
+      } else {
+        invalidParams.push(key);
+      }
+    });
+
     if (invalidParams.length > 0) {
       console.warn("Invalid session parameters ignored:", invalidParams);
-      /* Remove invalid parameters */
-      invalidParams.forEach(param => delete updateParams[param]);
     }
-    
+
+    if (typeof updateParams.tools === 'string') {
+      const normalizedTools = parseJsonSafely(updateParams.tools, 'session tools update');
+      if (Array.isArray(normalizedTools)) {
+        updateParams.tools = normalizedTools;
+      } else {
+        console.warn("Ignoring tools update; expected an array.");
+        delete updateParams.tools;
+      }
+    }
+
+    if (updateParams.tools && !Array.isArray(updateParams.tools)) {
+      console.warn("Ignoring tools update; expected an array.");
+      delete updateParams.tools;
+    }
+
+    if (Array.isArray(updateParams.tools)) {
+      if (containerImageToolDefinition && containerImageToolDefinition.name) {
+        containerImageToolName = containerImageToolDefinition.name;
+      }
+
+      const containerToolFromConfig = containerImageToolDefinition
+        || (currentSessionConfig?.tools || []).find(tool => tool && tool.name === containerImageToolName)
+        || DEFAULT_CONTAINER_IMAGE_TOOL;
+
+      const containerToolToUse = containerToolFromConfig && containerToolFromConfig.name
+        ? JSON.parse(JSON.stringify(containerToolFromConfig))
+        : null;
+
+      const existingNames = new Set(updateParams.tools.map(tool => tool && tool.name));
+
+      if (disableContainerImageTool) {
+        updateParams.tools = updateParams.tools.filter(tool => tool && tool.name !== containerImageToolName);
+      } else if (containerToolToUse && !existingNames.has(containerToolToUse.name)) {
+        updateParams.tools.push(containerToolToUse);
+      }
+    }
+
+    if (containerImageToolDefinition && Array.isArray(updateParams.tools)) {
+      const index = updateParams.tools.findIndex(tool => tool && tool.name === containerImageToolName);
+      if (index >= 0) {
+        updateParams.tools[index] = JSON.parse(JSON.stringify(containerImageToolDefinition));
+      }
+    }
+
+    const normalizedModalities = normalizeModalitiesList(updateParams.modalities);
+    if (normalizedModalities && normalizedModalities.length > 0) {
+      updateParams.modalities = normalizedModalities;
+      defaultResponseModalities = [...normalizedModalities];
+    } else if (updateParams.modalities !== undefined) {
+      console.warn("Ignoring modalities update; expected an array or comma-separated string.");
+      delete updateParams.modalities;
+    }
+
+    if (newDefaultModalities && newDefaultModalities.length > 0) {
+      defaultResponseModalities = [...newDefaultModalities];
+    } else if (newDefaultModalities && newDefaultModalities.length === 0) {
+      defaultResponseModalities = [...DEFAULT_MODALITIES];
+    }
+
     if (Object.keys(updateParams).length === 0) {
+      if (newDefaultModalities) {
+        return true;
+      }
       console.error("No valid parameters provided for session update");
       return false;
     }
-    
+
     const sessionUpdateEvent = {
       type: "session.update",
       session: updateParams
     };
-    
+
     dc.send(JSON.stringify(sessionUpdateEvent));
     console.log("Sent session update:", updateParams);
+
+    currentSessionConfig = deepMerge(currentSessionConfig || {}, updateParams);
+
     return true;
   } catch (error) {
     console.error("Failed to update session:", error);
@@ -282,6 +703,8 @@ async function stopAudioTransmission() {
 function cleanupWebRTC() {
   /* Clear active response ID when cleaning up */
   window.activeResponseId = null;
+  currentSessionConfig = null;
+  defaultResponseModalities = [...DEFAULT_MODALITIES];
 
   if (dc) {
     dc.close();
@@ -670,11 +1093,19 @@ document.addEventListener("DOMContentLoaded", () => {
  * @param {string} toolChoice - Tool selection strategy
  * @returns {RTCPeerConnection} - The established peer connection
  */
-async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice) {
+async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice, sessionConfigStr) {
   /* Initialize activeResponseId tracking */
   window.activeResponseId = null;
 
   try {
+    const preparedConfig = prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfigStr);
+    const sessionConfig = preparedConfig.sessionConfig;
+    defaultResponseModalities = Array.isArray(preparedConfig.defaultModalities) && preparedConfig.defaultModalities.length > 0
+      ? [...preparedConfig.defaultModalities]
+      : [...DEFAULT_MODALITIES];
+    containerImageToolName = preparedConfig.containerToolName || DEFAULT_CONTAINER_IMAGE_TOOL.name;
+    currentSessionConfig = sessionConfig;
+
     pc = new RTCPeerConnection();
 
     audioEl = document.createElement("audio");
@@ -704,15 +1135,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     dc.addEventListener("open", () => {
       const sessionUpdateEvent = {
         type: "session.update",
-        session: {
-          instructions: instructions || "You are a helpful AI assistant.",
-          tools: toolsStr ? JSON.parse(toolsStr) : [],
-          tool_choice: toolChoice || "auto",
-          input_audio_transcription: {
-            model: "whisper-1"
-          },
-          modalities: ["text", "audio"]
-        }
+        session: sessionConfig
       };
       dc.send(JSON.stringify(sessionUpdateEvent));
       startAudioTransmission();
@@ -733,16 +1156,20 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         window.activeResponseId = null;
       }
 
-      if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.some(item => item.type === "function_call")) {
-        const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
-        console.log("Model tool calls:", toolCalls);
-        
-        if (window.FileMaker) {
-          showIcon('thought');
+        if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.some(item => item.type === "function_call")) {
+          const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
+          console.log("Model tool calls:", toolCalls);
 
-          // Clear any pending timeouts
-          if (window.earIconTimeout) {
-            clearTimeout(window.earIconTimeout);
+          if (toolCalls.some(call => call.name === containerImageToolName)) {
+            showToast("Assistant requested an image from FileMaker", "tool-call", "right", JSON.stringify({ toolCalls }), 8);
+          }
+
+          if (window.FileMaker) {
+            showIcon('thought');
+
+            // Clear any pending timeouts
+            if (window.earIconTimeout) {
+              clearTimeout(window.earIconTimeout);
             delete window.earIconTimeout;
           }
 
