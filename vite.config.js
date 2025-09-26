@@ -4,11 +4,11 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 
 export default defineConfig({
   server: {
-    host: "michaelwallace.org",
+    host: "localhost",
     port: 1234,
     https: {
-      key: fs.readFileSync('localhost-key.pem'),
-      cert: fs.readFileSync('localhost-cert.pem'),
+      key: fs.readFileSync('../localhost-key.pem'),
+      cert: fs.readFileSync('../localhost-cert.pem'),
     },
   },
   https: {
