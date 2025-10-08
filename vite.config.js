@@ -12,8 +12,8 @@ export default defineConfig({
     },
   },
   https: {
-    key: fs.readFileSync('localhost-key.pem'),
-    cert: fs.readFileSync('localhost-cert.pem'),
+    key: fs.readFileSync('../localhost-key.pem'),
+    cert: fs.readFileSync('../localhost-cert.pem'),
   },
   plugins: [viteSingleFile()],
   build: {
