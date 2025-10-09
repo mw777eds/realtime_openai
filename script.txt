@@ -1,0 +1,181 @@
+FileMaker Scripts Mockups — Save/Load Grid Layout (per-mode)
+
+Overview
+- We persist two layouts per session: one when Conversations is Docked (sidebar visible) and one when Undocked (Conversations as a widget).
+- Web app calls:
+  - Grid_SaveLayout(sessionId; JSON): saves current mode’s layout with key "docked" or "undocked".
+  - Grid_LoadLayout(sessionId; key): returns saved JSON for the given key (or empty if none).
+  - Optionally: Grid_RestoreDefaultLayout(sessionId; key): returns a default layout JSON for the given key.
+
+Suggested schema (example)
+- Table: GridLayouts
+  - SessionId (Text)
+  - Key (Text) // "docked" | "undocked"
+  - Payload (Text) // JSON string as saved
+  - Float (Number) // 0/1
+  - UpdatedAt (Timestamp)
+- Relationship: GridLayouts by SessionId + Key (Unique)
+
+JSON payload from Web
+{
+  "key": "docked" | "undocked",
+  "layout": [
+    { "widget": "realtime", "x": 0, "y": 0, "w": 4, "h": 4 },
+    { "widget": "toasts", "x": 8, "y": 0, "w": 4, "h": 6 },
+    { "widget": "text", "x": 0, "y": 12, "w": 12, "h": 6 }
+  ],
+  "convos": { "docked": true, "node": null },
+  "float": true
+}
+
+Script: Grid_SaveLayout [ sessionId ; payloadJSON ]
+Purpose: Save current mode’s layout for a session.
+
+Parameters:
+- ScriptParameter expected as JSON string when called directly from Web.
+- If you prefer 2 parameters, wrap the pair into a JSON container: { "sessionId": "...", "payload": { ... } }.
+
+Pseudo-steps:
+1) Set Variable [ $raw = Get ( ScriptParameter ) ]
+2) If [ IsEmpty ( $raw ) ] 
+     Show Custom Dialog [ "Missing payload" ]
+     Exit Script [ Result: "ERROR:EMPTY_PARAM" ]
+   End If
+3) Set Variable [ $json = JSONFormatElements ( $raw ) ]
+4) Set Variable [ $sessionId =
+      Case(
+        not IsEmpty ( JSONGetElement ( $json ; "sessionId" ) ) ; JSONGetElement ( $json ; "sessionId" ) ;
+        not IsEmpty ( $$SessionId ) ; $$SessionId ;
+        Get ( AccountName )
+      )
+   ]
+5) Set Variable [ $key = JSONGetElement ( $json ; "key" ) ]
+6) If [ IsEmpty ( $key ) ]
+     Set Variable [ $key = "docked" ]
+   End If
+7) Set Variable [ $float = JSONGetElement ( $json ; "float" ) ]
+8) Go to Layout [ “GridLayouts” (GridLayouts) ]
+9) Enter Find Mode [ Pause: Off ]
+10) Set Field [ GridLayouts::SessionId ; $sessionId ]
+11) Set Field [ GridLayouts::Key ; $key ]
+12) Perform Find
+13) If [ Get ( FoundCount ) = 0 ]
+      New Record/Request
+      Set Field [ GridLayouts::SessionId ; $sessionId ]
+      Set Field [ GridLayouts::Key ; $key ]
+    End If
+14) Set Field [ GridLayouts::Payload ; $json ]
+15) Set Field [ GridLayouts::Float ; Case ( $float ; 1 ; 0 ) ]
+16) Set Field [ GridLayouts::UpdatedAt ; Get ( CurrentTimestamp ) ]
+17) Commit Records/Requests [ No dialog ]
+18) Exit Script [ Result: "OK" ]
+
+Script: Grid_LoadLayout [ sessionId ; key ]
+Purpose: Return the saved layout JSON for a given session + key to the Web Viewer.
+
+Parameters (as JSON or plain):
+- If using JSON param: { "sessionId": "...", "key": "docked" }
+- If using plain param: pass just the key and rely on $$SessionId.
+
+Pseudo-steps:
+1) Set Variable [ $raw = Get ( ScriptParameter ) ]
+2) Set Variable [ $key =
+      Case(
+        PatternCount ( $raw ; "{" ) ;
+          JSONGetElement ( $raw ; "key" ) ;
+        not PatternCount ( $raw ; "{" ) ;
+          $raw ;
+        "" )
+   ]
+3) If [ IsEmpty ( $key ) ] Set Variable [ $key = "docked" ]
+4) Set Variable [ $sessionId =
+      Case(
+        PatternCount ( $raw ; "{" ) ;
+          JSONGetElement ( $raw ; "sessionId" ) ;
+        not PatternCount ( $raw ; "{" ) and not IsEmpty ( $$SessionId ) ;
+          $$SessionId ;
+        Get ( AccountName )
+      )
+   ]
+5) Go to Layout [ “GridLayouts” (GridLayouts) ]
+6) Enter Find Mode [ Pause: Off ]
+7) Set Field [ GridLayouts::SessionId ; $sessionId ]
+8) Set Field [ GridLayouts::Key ; $key ]
+9) Perform Find
+10) If [ Get ( FoundCount ) = 0 ]
+      Exit Script [ Result: "" ] // none saved
+    End If
+11) Set Variable [ $payload = GridLayouts::Payload ]
+12) Exit Script [ Result: $payload ]
+
+Script: Grid_RestoreDefaultLayout [ sessionId ; key ]
+Purpose: Return a default layout JSON for given mode; Web applies it as a reset.
+
+Parameters:
+- Similar to Grid_LoadLayout; determine $key and $sessionId the same way.
+
+Pseudo-steps:
+1) Determine $key (default "docked")
+2) Compute $payload:
+   If [ $key = "docked" ]
+     Set Variable [ $payload = 
+       JSONSetElement ( "{}" ;
+         [ "key" ; "docked" ; JSONString ] ;
+         [ "float" ; 1 ; JSONNumber ] ;
+         [ "convos.docked" ; 1 ; JSONNumber ] ;
+         [ "convos.node" ; "" ; JSONNull ] ;
+         [ "layout[0].widget" ; "realtime" ; JSONString ] ;
+         [ "layout[0].x" ; 0 ; JSONNumber ] ;
+         [ "layout[0].y" ; 0 ; JSONNumber ] ;
+         [ "layout[0].w" ; 4 ; JSONNumber ] ;
+         [ "layout[0].h" ; 4 ; JSONNumber ] ;
+         [ "layout[1].widget" ; "toasts" ; JSONString ] ;
+         [ "layout[1].x" ; 8 ; JSONNumber ] ;
+         [ "layout[1].y" ; 0 ; JSONNumber ] ;
+         [ "layout[1].w" ; 4 ; JSONNumber ] ;
+         [ "layout[1].h" ; 6 ; JSONNumber ] ;
+         [ "layout[2].widget" ; "text" ; JSONString ] ;
+         [ "layout[2].x" ; 0 ; JSONNumber ] ;
+         [ "layout[2].y" ; 12 ; JSONNumber ] ;
+         [ "layout[2].w" ; 12 ; JSONNumber ] ;
+         [ "layout[2].h" ; 6 ; JSONNumber ]
+       )
+     ]
+   Else
+     Set Variable [ $payload = 
+       JSONSetElement ( "{}" ;
+         [ "key" ; "undocked" ; JSONString ] ;
+         [ "float" ; 1 ; JSONNumber ] ;
+         [ "convos.docked" ; 0 ; JSONNumber ] ;
+         [ "convos.node.x" ; 0 ; JSONNumber ] ;
+         [ "convos.node.y" ; 0 ; JSONNumber ] ;
+         [ "convos.node.w" ; 3 ; JSONNumber ] ;
+         [ "convos.node.h" ; 8 ; JSONNumber ] ;
+         [ "layout[0].widget" ; "conversations" ; JSONString ] ;
+         [ "layout[0].x" ; 0 ; JSONNumber ] ;
+         [ "layout[0].y" ; 0 ; JSONNumber ] ;
+         [ "layout[0].w" ; 3 ; JSONNumber ] ;
+         [ "layout[0].h" ; 8 ; JSONNumber ] ;
+         [ "layout[1].widget" ; "realtime" ; JSONString ] ;
+         [ "layout[1].x" ; 3 ; JSONNumber ] ;
+         [ "layout[1].y" ; 0 ; JSONNumber ] ;
+         [ "layout[1].w" ; 5 ; JSONNumber ] ;
+         [ "layout[1].h" ; 4 ; JSONNumber ] ;
+         [ "layout[2].widget" ; "toasts" ; JSONString ] ;
+         [ "layout[2].x" ; 8 ; JSONNumber ] ;
+         [ "layout[2].y" ; 0 ; JSONNumber ] ;
+         [ "layout[2].w" ; 4 ; JSONNumber ] ;
+         [ "layout[2].h" ; 6 ; JSONNumber ] ;
+         [ "layout[3].widget" ; "text" ; JSONString ] ;
+         [ "layout[3].x" ; 0 ; JSONNumber ] ;
+         [ "layout[3].y" ; 12 ; JSONNumber ] ;
+         [ "layout[3].w" ; 12 ; JSONNumber ] ;
+         [ "layout[3].h" ; 6 ; JSONNumber ]
+       )
+     ]
+   End If
+3) Exit Script [ Result: $payload ]
+
+Notes
+- If you need per-user persistence, include AccountName in the key.
+- If you want autosave, trigger Grid_SaveLayout from Web on dragstop/resizestop/remove.

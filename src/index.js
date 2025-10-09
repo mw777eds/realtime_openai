@@ -1477,7 +1477,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Inject menu (hamburger) icon SVG
   if (menuToggle) {
     menuToggle.innerHTML = '';
-    const svg = createMenuIcon(22);
+    const svg = createMenuIcon(33);
     if (svg) menuToggle.appendChild(svg);
   }
 
