@@ -1295,7 +1295,7 @@ function saveCurrentLayout() {
       x: n.x, y: n.y, w: n.w, h: n.h
     }));
     const key = isConvosDocked ? 'docked' : 'undocked';
-    const payload = { key, layout: nodes, dockedConvo: !!isConvosDocked, float: !!floatEnabled };
+    const payload = { key, layout: nodes, float: !!floatEnabled };
     if (window.FileMaker) {
       window.FileMaker.PerformScript('Grid_SaveLayout', JSON.stringify(payload));
     } else {
@@ -1372,12 +1372,7 @@ function applyLayout(payload) {
     grid.float(floatEnabled);
   }
 
-  // Ensure conversations docked state matches payload
-  if (payload.dockedConvo === false && isConvosDocked) {
-    undockConvos();
-  } else if (payload.dockedConvo !== false && !isConvosDocked) {
-    dockConvos();
-  }
+  // Conversations docked state is determined by the current mode key; no adjustment here.
 
   // Remove all existing widgets
   const existing = [...(grid.engine?.nodes || [])];
