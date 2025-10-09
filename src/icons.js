@@ -164,4 +164,29 @@ function createNewConvoIcon(size = 18) {
   return createInlineIcon('edit', size);
 }
 
-export { showIcon, createAnchorIcon, createNewConvoIcon };
+function createMenuIcon(size = 22) {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("aria-hidden", "true");
+  const paths = [
+    "M3 6h18",
+    "M3 12h18",
+    "M3 18h18"
+  ];
+  paths.forEach(d => {
+    const path = document.createElementNS(svgNS, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "2");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(path);
+  });
+  return svg;
+}
+
+export { showIcon, createAnchorIcon, createNewConvoIcon, createMenuIcon };

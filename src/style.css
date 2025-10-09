@@ -113,6 +113,12 @@ html, body, #app {
   border-color: #006690;
   background: #ffffff;
 }
+/* Non-toggle buttons (e.g., Save/Restore/Float): blue text on white */
+.menu-panel .menu-item:not(.toggle) {
+  color: #006690;
+  border-color: #006690;
+  background: #ffffff;
+}
 .menu-panel hr {
   border: none;
   border-top: 1px solid #e5e7eb;

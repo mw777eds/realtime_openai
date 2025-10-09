@@ -1,4 +1,4 @@
-import { showIcon, createAnchorIcon, createNewConvoIcon } from './icons.js';
+import { showIcon, createAnchorIcon, createNewConvoIcon, createMenuIcon } from './icons.js';
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 
@@ -1474,6 +1474,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnToggleFloat = document.getElementById('btn-toggle-float');
   const btnSaveLayout = document.getElementById('btn-save-layout');
   const btnRestoreLayout = document.getElementById('btn-restore-layout');
+  // Inject menu (hamburger) icon SVG
+  if (menuToggle) {
+    menuToggle.innerHTML = '';
+    const svg = createMenuIcon(22);
+    if (svg) menuToggle.appendChild(svg);
+  }
 
   // Menu toggle behavior
   menuToggle?.addEventListener('click', (e) => {
