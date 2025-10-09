@@ -58,6 +58,31 @@ html, body, #app {
   font-size: 14px;
   line-height: 1;
 }
+/* Header-specific icon buttons: transparent with white outline */
+.icon-btn.header-icon {
+  border: none;
+  background: transparent;
+  padding: 4px;
+  cursor: pointer;
+  line-height: 0;
+}
+.icon-btn.header-icon svg {
+  width: 18px;
+  height: 18px;
+  color: #fff; /* stroke uses currentColor */
+  stroke: currentColor;
+  fill: none;
+}
+.icon-btn.header-icon:hover {
+  opacity: 0.85;
+}
+#dock-convos-btn[aria-pressed="true"] svg {
+  opacity: 0.85;
+}
+.sidebar-actions {
+  display: flex;
+  gap: 6px;
+}
 
 /* Sidebar search area */
 .sidebar-search {

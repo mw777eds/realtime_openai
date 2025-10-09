@@ -16,6 +16,7 @@ let realtimeWidgetEl = null;
 let toastsWidgetEl = null;
 let textWidgetEl = null;
 let convosWidgetEl = null;
+let isConvosDocked = true;
 let waveformResizeObserver = null;
 
 
@@ -1247,7 +1248,6 @@ function setUISettings(updateParamsJson) {
     const toasts = settings.toasts ?? settings.debug_toasts ?? settings.debug;
     const voiceEl = document.getElementById('toggle-voice');
     const textEl = document.getElementById('toggle-text');
-    const convosEl = document.getElementById('toggle-convos');
     const toastsEl = document.getElementById('toggle-toasts');
     if (voiceEl != null && voice !== undefined) {
       voiceEl.checked = !!voice;
@@ -1257,9 +1257,12 @@ function setUISettings(updateParamsJson) {
       textEl.checked = !!text;
       textEl.dispatchEvent(new Event('change'));
     }
-    if (convosEl != null && convos !== undefined) {
-      convosEl.checked = !!convos;
-      convosEl.dispatchEvent(new Event('change'));
+    if (convos !== undefined) {
+      if (convos) {
+        undockConvos();
+      } else {
+        dockConvos();
+      }
     }
     if (toastsEl != null && toasts !== undefined) {
       toastsEl.checked = !!toasts;
@@ -1304,7 +1307,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const voiceToggle = document.getElementById('toggle-voice');
   const textToggle = document.getElementById('toggle-text');
   const toastsToggle = document.getElementById('toggle-toasts');
-  const convosToggle = document.getElementById('toggle-convos');
   const sidebarEl = document.querySelector('.sidebar');
 
   // Sidebar search wiring
@@ -1420,6 +1422,35 @@ document.addEventListener("DOMContentLoaded", () => {
     convosWidgetEl = null;
   }
 
+  function dockConvos() {
+    const sidebar = document.querySelector('.sidebar');
+    const dockBtn = document.getElementById('dock-convos-btn');
+    sidebar?.classList.remove('hidden');
+    if (convosWidgetEl) {
+      grid.removeWidget(convosWidgetEl);
+      convosWidgetEl = null;
+    }
+    isConvosDocked = true;
+    if (dockBtn) {
+      dockBtn.setAttribute('aria-pressed', 'false');
+      dockBtn.title = 'Undock to grid';
+    }
+  }
+
+  function undockConvos() {
+    const sidebar = document.querySelector('.sidebar');
+    const dockBtn = document.getElementById('dock-convos-btn');
+    sidebar?.classList.add('hidden');
+    if (!convosWidgetEl) {
+      addConversationsWidget();
+    }
+    isConvosDocked = false;
+    if (dockBtn) {
+      dockBtn.setAttribute('aria-pressed', 'true');
+      dockBtn.title = 'Dock back to sidebar';
+    }
+  }
+
   function addTextWidget() {
     if (textWidgetEl) return;
     const el = grid.addWidget({ x: 0, y: 12, w: 12, h: 6 });
@@ -1483,16 +1514,20 @@ document.addEventListener("DOMContentLoaded", () => {
     if (voiceToggle?.checked) addRealtimeWidget(); else removeRealtimeWidget();
     if (textToggle?.checked) addTextWidget(); else removeTextWidget();
     if (toastsToggle?.checked) addToastsWidget(); else removeToastsWidget();
-    if (convosToggle?.checked) { addConversationsWidget(); sidebarEl?.classList.add('hidden'); } else { removeConversationsWidget(); sidebarEl?.classList.remove('hidden'); }
+    // Conversations docking is controlled by the anchor button, not grid toggles
   }
 
   voiceToggle?.addEventListener('change', syncWidgets);
   textToggle?.addEventListener('change', syncWidgets);
   toastsToggle?.addEventListener('change', syncWidgets);
-  convosToggle?.addEventListener('change', syncWidgets);
   document.getElementById('save-layout-btn')?.addEventListener('click', saveCurrentLayout);
+  document.getElementById('dock-convos-btn')?.addEventListener('click', () => {
+    if (isConvosDocked) undockConvos(); else dockConvos();
+  });
 
-  // Initial mount based on toggles
+  // Initial mount: conversations docked in sidebar by default
+  dockConvos();
+  // Mount other widgets based on toggles
   syncWidgets();
 });
 
