@@ -55,7 +55,7 @@ Pseudo-steps:
       Case(
         not IsEmpty ( JSONGetElement ( $json ; "sessionId" ) ) ; JSONGetElement ( $json ; "sessionId" ) ;
         not IsEmpty ( $$SessionId ) ; $$SessionId ;
-        Get ( AccountName )
+        Get ( UUID )
       )
    ]
 5) Set Variable [ $key = JSONGetElement ( $json ; "key" ) ]
