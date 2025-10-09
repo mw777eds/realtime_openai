@@ -1437,17 +1437,14 @@ function saveCurrentLayout() {
     try {
       localStorage.setItem(`settings:${key}`, JSON.stringify({
         key,
-        machineId: window.__machineId || "",
-        sessionId: window.__sessionId || "",
         settings: settingsSnapshot
       }));
     } catch (_) {}
 
-    // Send to FileMaker
+    // Send to FileMaker (user-scoped default; FileMaker derives user via Get( Username ))
     const envelope = {
+      scope: "user",
       key,
-      machineId: window.__machineId || "",
-      sessionId: window.__sessionId || "",
       settings: settingsSnapshot
     };
     if (window.FileMaker) {
