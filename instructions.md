@@ -26,7 +26,10 @@ FileMaker AI Chat + Realtime API Unified Interface — Revised Requirements
   - draggable: { handle: '.gs-handle', scroll: true }, resizable: { handles: 'e, se, s, sw, w' }.
 - Persistence:
   - Maintain two saved layouts per machine and mode: Docked (sidebar visible) and Undocked (Conversations as a widget). Saved under machineId (and optionally sessionId if you prefer per-chat layouts).
-  - Save Layout sends an envelope: { key, machineId, sessionId, settings { version, columns, cellHeight?, float, voice, text, toasts|debug, layout: [...] } } where layout is an array of nodes like { x, y, w, h, widget: "voice"|"text"|"toasts"|"convo" }.
+  - Save Layout sends an envelope with scope: { scope: "machine" | "session", key, machineId, sessionId, settings { version, columns, cellHeight?, float, voice, text, toasts|debug, layout: [...] } } where layout is an array of nodes like { x, y, w, h, widget: "voice"|"text"|"toasts"|"convo" }.
+    - When the user clicks Save Layout in the menu, scope must be "machine" (sets the default template for new sessions and Restore Default).
+    - Session layouts are auto-saved with scope "session" at boundaries (session switch, viewer close), and may be debounced on drag/resize if desired.
+    - If scope is omitted, FileMaker may infer scope as "session" when sessionId is present, otherwise "machine".
   - Restore loads the envelope for the current mode and applies settings (float and toggles) and settings.layout to rebuild widgets. If none is saved, defaults are applied and users can arrange, then Save Layout.
   - Front-end caching: on load, fetch both “docked” and “undocked” settings once and cache them in-memory; docking/undocking applies the cached settings immediately without a round-trip. Save Layout updates both FileMaker and the in-memory cache for the current mode.
 - Widgets:
@@ -187,7 +190,8 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Header hamburger menu (top-right) groups controls: buttons for Voice/Text/Debug Toasts (active/inactive), Save Layout, Restore Default Layout, and Float On/Off toggle.
   - Conversations docking controlled by an anchor button in the sidebar and mirrored on the Conversations widget; undocking hides the sidebar and shows the widget; docking restores the sidebar and removes the widget.
   - setUISettings exposed to FileMaker to flip toggles programmatically; setUISettings({ convos: true }) undocks; setUISettings({ convos: false }) docks.
-  - Save Layout saves the current mode using the envelope shape above (key/machineId/sessionId/settings{version,columns,cellHeight?,float,voice,text,toasts|debug,layout[...]}) and calls Grid_SaveLayout; Restore applies the saved envelope.
+  - Save Layout (menu) saves the current mode as a machine template using the envelope shape above with scope:"machine" and calls Grid_SaveLayout; Restore applies the saved machine envelope.
+  - Session layouts are authoritative and kept in memory; they are flushed to FileMaker with scope:"session" on session switch and Web Viewer close (optionally debounced on grid changes). Dock/undock applies the current session’s cached layout for that mode, falling back to machine template, then app defaults.
 
 15. Next steps
 - Initialization and per-machine config

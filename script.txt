@@ -12,6 +12,7 @@ Overview
   - Grid_SaveLayout(sessionId; JSON): saves a layout envelope (scope:"session" or "machine") for the current mode key ("docked"|"undocked").
   - Grid_LoadLayout(sessionId; machineId; key): returns the saved envelope for the requested key/scope (see parameters), or empty if none.
   - Optionally: Grid_RestoreDefaultLayout(sessionId; key): returns a default envelope for the requested key.
+  - Scope inference (when not provided): treat as "session" if sessionId is present, otherwise "machine".
 - History persistence (separate from layout):
   - Chat_SaveHistory(sessionId; JSON): append-or-snapshot canonical history.
   - Chat_GetHistory(sessionId): returns canonical history for the chat.
@@ -75,7 +76,14 @@ Pseudo-steps:
    End If
 3) Set Variable [ $json = JSONFormatElements ( $raw ) ]
 4) Set Variable [ $scope = Lower ( JSONGetElement ( $json ; "scope" ) ) ]
-5) Set Variable [ $key = JSONGetElement ( $json ; "key" ) ]
+5) If [ IsEmpty ( $scope ) ]
+     If [ not IsEmpty ( JSONGetElement ( $json ; "sessionId" ) ) ]
+        Set Variable [ $scope = "session" ]
+     Else
+        Set Variable [ $scope = "machine" ]
+     End If
+   End If
+6) Set Variable [ $key = JSONGetElement ( $json ; "key" ) ]
 6) If [ IsEmpty ( $key ) ] Set Variable [ $key = "docked" ]
 7) Set Variable [ $sessionId =
       Case(
