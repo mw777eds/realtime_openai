@@ -828,6 +828,23 @@ function createToastTimeline() {
 }
 
 /*
+ * Conversations helpers
+ */
+function filterConversations(listEl, query) {
+  if (!listEl) return;
+  const q = (query || '').toLowerCase();
+  Array.from(listEl.children || []).forEach((item) => {
+    const text = (item.textContent || '').toLowerCase();
+    item.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+function attachConversationSearch(inputEl, listEl) {
+  if (!inputEl || !listEl) return;
+  inputEl.addEventListener('input', () => filterConversations(listEl, inputEl.value));
+}
+
+/*
  * Text chat helpers
  */
 
@@ -1290,6 +1307,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const convosToggle = document.getElementById('toggle-convos');
   const sidebarEl = document.querySelector('.sidebar');
 
+  // Sidebar search wiring
+  const sidebarSearchEl = document.getElementById('conversation-search');
+  const sidebarListEl = document.getElementById('conversation-list');
+  attachConversationSearch(sidebarSearchEl, sidebarListEl);
+
   grid = GridStack.init(
     {
       column: 12,
@@ -1368,19 +1390,28 @@ document.addEventListener("DOMContentLoaded", () => {
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
       <div class="conversations-widget">
-        <div class="gs-handle">Conversations</div>
+        <div class="gs-handle">
+          <span>Conversations</span>
+          <button class="icon-btn new-convo-btn" title="New conversation">📝</button>
+        </div>
+        <div class="sidebar-search">
+          <input type="search" class="conversation-search-input" placeholder="Search conversations..." />
+        </div>
         <div class="conversation-list" style="flex:1 1 auto; overflow:auto; padding:8px;"></div>
-        <button class="new-convo-btn" style="margin:8px;">+ New</button>
       </div>`;
     convosWidgetEl = el;
     el.dataset.widget = 'conversations';
     // prevent drag from inner content
     const listEl = contentEl.querySelector('.conversation-list');
     const btnEl = contentEl.querySelector('.new-convo-btn');
+    const searchEl = contentEl.querySelector('.conversation-search-input');
     ['mousedown','touchstart','pointerdown'].forEach(evt => {
       listEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
       btnEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
+      searchEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
     });
+    // wire search
+    attachConversationSearch(searchEl, listEl);
   }
 
   function removeConversationsWidget() {

@@ -21,9 +21,14 @@
       </header>
       <div class="app-main">
         <aside class="sidebar">
-          <div class="sidebar-header">Conversations</div>
+          <div class="sidebar-header">
+            <div class="sidebar-title">Conversations</div>
+            <button id="new-conversation-btn" class="icon-btn new-convo-btn" title="New conversation">📝</button>
+          </div>
+          <div class="sidebar-search">
+            <input type="search" id="conversation-search" placeholder="Search conversations..." />
+          </div>
           <div id="conversation-list" class="conversation-list"></div>
-          <button id="new-conversation-btn" class="new-convo-btn">+ New</button>
         </aside>
         <section class="workspace">
           <div class="grid-stack" id="appGrid"></div>

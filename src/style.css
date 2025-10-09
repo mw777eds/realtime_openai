@@ -47,6 +47,55 @@ html, body, #app {
   font-size: 14px;
 }
 
+/* Small icon button for headers */
+.icon-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #111827;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Sidebar search area */
+.sidebar-search {
+  padding: 8px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+}
+.sidebar-search input[type="search"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+}
+
+/* Conversations widget styling */
+.conversations-widget {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+.conversations-widget .gs-handle {
+  cursor: move;
+  background: #006690;
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.conversations-widget .sidebar-search {
+  padding: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
 .app-main {
   display: flex;
   height: calc(100% - 48px);
@@ -64,12 +113,14 @@ html, body, #app {
 }
 
 .sidebar-header {
-  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
   font-weight: 600;
   font-size: 14px;
-  color: #333;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fff;
+  color: #fff;
+  background: #006690;
 }
 
 .conversation-list {
