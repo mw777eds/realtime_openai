@@ -178,10 +178,10 @@ Each item is append-only. Realtime is the authority while active; all modes read
 - Toasts widget:
   - Separated debug toasts into their own optional widget with a dedicated #toast-timeline container.
 - Toggles and programmatic control:
-  - Voice/Text/Toasts toggles add/remove widgets dynamically.
-  - Conversations docking controlled by an anchor button in the sidebar; state toggles between docked (sidebar visible) and undocked (grid widget).
+  - Header hamburger menu groups controls: buttons for Voice/Text/Debug Toasts (active/inactive), Save Layout, Restore Default Layout, and Float On/Off toggle.
+  - Conversations docking controlled by an anchor button in the sidebar and mirrored on the Conversations widget; undocking hides the sidebar and shows the widget; docking restores the sidebar and removes the widget.
   - setUISettings exposed to FileMaker to flip toggles programmatically; setUISettings({ convos: true }) undocks; setUISettings({ convos: false }) docks.
-  - Save Layout button serializes current grid positions/sizes with widget types and calls Grid_SaveLayout.
+  - Save Layout serializes current grid positions/sizes with widget types, current float setting, and the Conversations docked state (and its position if undocked), and calls Grid_SaveLayout.
 
 15. Next steps
 - Text Chat widget:

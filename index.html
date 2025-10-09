@@ -12,10 +12,22 @@
       <header class="app-header">
         <div class="app-title">Empowered Agents</div>
         <div class="app-controls">
-          <label><input type="checkbox" id="toggle-voice" checked /> Voice</label>
-          <label><input type="checkbox" id="toggle-text" /> Text</label>
-          <label><input type="checkbox" id="toggle-toasts" checked /> Debug Toasts</label>
-          <button id="save-layout-btn" class="save-btn" title="Save current grid layout">Save Layout</button>
+          <div class="menu">
+            <button id="menu-toggle" class="menu-toggle" aria-expanded="false" aria-haspopup="true" title="Menu">
+              <span class="bar"></span>
+              <span class="bar"></span>
+              <span class="bar"></span>
+            </button>
+            <div id="menu-panel" class="menu-panel" hidden>
+              <button id="btn-voice" class="menu-item toggle active" aria-pressed="true">Voice</button>
+              <button id="btn-text" class="menu-item toggle" aria-pressed="false">Text</button>
+              <button id="btn-toasts" class="menu-item toggle active" aria-pressed="true">Debug Toasts</button>
+              <hr />
+              <button id="btn-toggle-float" class="menu-item">Float On</button>
+              <button id="btn-save-layout" class="menu-item">Save Layout</button>
+              <button id="btn-restore-layout" class="menu-item">Restore Default Layout</button>
+            </div>
+          </div>
         </div>
       </header>
       <div class="app-main">
@@ -23,17 +35,8 @@
           <div class="sidebar-header">
             <div class="sidebar-title">Conversations</div>
             <div class="sidebar-actions">
-              <button id="dock-convos-btn" class="icon-btn header-icon" title="Undock to grid" aria-pressed="false">
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                  <path d="M12 3v3M9 6h6M6 9a6 6 0 0012 0M5 12c0 3.866 3.134 7 7 7s7-3.134 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-              <button id="new-conversation-btn" class="icon-btn header-icon new-convo-btn" title="New conversation">
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                  <path d="M4 4h10a2 2 0 012 2v3M4 20h10a2 2 0 002-2v-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M14.5 5.5l4 4M7 17l-1.5 3.5L9 19l8.5-8.5-4-4L7 17z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
+              <button id="dock-convos-btn" class="icon-btn header-icon" title="Undock to grid" aria-pressed="false"></button>
+              <button id="new-conversation-btn" class="icon-btn header-icon new-convo-btn" title="New conversation"></button>
             </div>
           </div>
           <div class="sidebar-search">

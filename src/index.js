@@ -1,4 +1,4 @@
-import { showIcon } from './icons.js';
+import { showIcon, createAnchorIcon, createNewConvoIcon } from './icons.js';
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 
@@ -17,6 +17,7 @@ let toastsWidgetEl = null;
 let textWidgetEl = null;
 let convosWidgetEl = null;
 let isConvosDocked = true;
+let floatEnabled = true;
 let waveformResizeObserver = null;
 
 
@@ -1246,17 +1247,24 @@ function setUISettings(updateParamsJson) {
     const text = settings.text ?? settings.chat;
     const convos = settings.convos ?? settings.conversations ?? settings.sidebar;
     const toasts = settings.toasts ?? settings.debug_toasts ?? settings.debug;
-    const voiceEl = document.getElementById('toggle-voice');
-    const textEl = document.getElementById('toggle-text');
-    const toastsEl = document.getElementById('toggle-toasts');
-    if (voiceEl != null && voice !== undefined) {
-      voiceEl.checked = !!voice;
-      voiceEl.dispatchEvent(new Event('change'));
+
+    const btnVoice = document.getElementById('btn-voice');
+    const btnText = document.getElementById('btn-text');
+    const btnToasts = document.getElementById('btn-toasts');
+
+    if (btnVoice && voice !== undefined) {
+      btnVoice.classList.toggle('active', !!voice);
+      btnVoice.setAttribute('aria-pressed', String(!!voice));
     }
-    if (textEl != null && text !== undefined) {
-      textEl.checked = !!text;
-      textEl.dispatchEvent(new Event('change'));
+    if (btnText && text !== undefined) {
+      btnText.classList.toggle('active', !!text);
+      btnText.setAttribute('aria-pressed', String(!!text));
     }
+    if (btnToasts && toasts !== undefined) {
+      btnToasts.classList.toggle('active', !!toasts);
+      btnToasts.setAttribute('aria-pressed', String(!!toasts));
+    }
+
     if (convos !== undefined) {
       if (convos) {
         undockConvos();
@@ -1264,9 +1272,10 @@ function setUISettings(updateParamsJson) {
         dockConvos();
       }
     }
-    if (toastsEl != null && toasts !== undefined) {
-      toastsEl.checked = !!toasts;
-      toastsEl.dispatchEvent(new Event('change'));
+
+    // Apply changes
+    if (typeof syncWidgets === 'function') {
+      syncWidgets();
     }
     return true;
   } catch (e) {
@@ -1285,7 +1294,15 @@ function saveCurrentLayout() {
       widget: n.el?.dataset?.widget || null,
       x: n.x, y: n.y, w: n.w, h: n.h
     }));
-    const payload = { layout: nodes };
+    // Include conversations docked state and its position if undocked
+    let convos = { docked: isConvosDocked, node: null };
+    if (!isConvosDocked && convosWidgetEl) {
+      const node = (grid.engine?.nodes || []).find(n => n.el === convosWidgetEl);
+      if (node) {
+        convos.node = { x: node.x, y: node.y, w: node.w, h: node.h };
+      }
+    }
+    const payload = { layout: nodes, convos, float: !!floatEnabled };
     if (window.FileMaker) {
       window.FileMaker.PerformScript('Grid_SaveLayout', JSON.stringify(payload));
     } else {
@@ -1298,21 +1315,92 @@ function saveCurrentLayout() {
   }
 }
 
+/*
+ * Restore default layout: dock conversations, clear grid, and re-add widgets in default positions
+ */
+function restoreDefaultLayout() {
+  try {
+    dockConvos();
+    // remove all widgets
+    const nodes = [...(grid.engine?.nodes || [])];
+    nodes.forEach(n => {
+      if (n?.el) {
+        grid.removeWidget(n.el);
+      }
+    });
+    // Reset to defaults: Voice on, Toasts on, Text off
+    const btnVoice = document.getElementById('btn-voice');
+    const btnText = document.getElementById('btn-text');
+    const btnToasts = document.getElementById('btn-toasts');
+    if (btnVoice) { btnVoice.classList.add('active'); btnVoice.setAttribute('aria-pressed', 'true'); }
+    if (btnText) { btnText.classList.remove('active'); btnText.setAttribute('aria-pressed', 'false'); }
+    if (btnToasts) { btnToasts.classList.add('active'); btnToasts.setAttribute('aria-pressed', 'true'); }
+    // Re-mount widgets
+    syncWidgets();
+    return true;
+  } catch (e) {
+    console.error('Failed to restore default layout', e);
+    return false;
+  }
+}
+
 /* 
  * Initialize the application when the DOM is fully loaded
  * 
  * Bootstraps GridStack and mounts the Realtime / Toasts / Text widgets based on toggles.
  */
 document.addEventListener("DOMContentLoaded", () => {
-  const voiceToggle = document.getElementById('toggle-voice');
-  const textToggle = document.getElementById('toggle-text');
-  const toastsToggle = document.getElementById('toggle-toasts');
   const sidebarEl = document.querySelector('.sidebar');
 
   // Sidebar search wiring
   const sidebarSearchEl = document.getElementById('conversation-search');
   const sidebarListEl = document.getElementById('conversation-list');
   attachConversationSearch(sidebarSearchEl, sidebarListEl);
+
+  // Inject white outline icons into sidebar buttons
+  const sidebarDockBtn = document.getElementById('dock-convos-btn');
+  const sidebarNewBtn = document.getElementById('new-conversation-btn');
+  if (sidebarDockBtn) {
+    sidebarDockBtn.innerHTML = '';
+    const svg = createAnchorIcon(18);
+    if (svg) sidebarDockBtn.appendChild(svg);
+  }
+  if (sidebarNewBtn) {
+    sidebarNewBtn.innerHTML = '';
+    const svg = createNewConvoIcon(18);
+    if (svg) sidebarNewBtn.appendChild(svg);
+  }
+
+  // Hamburger menu elements
+  const menuToggle = document.getElementById('menu-toggle');
+  const menuPanel = document.getElementById('menu-panel');
+  const btnVoice = document.getElementById('btn-voice');
+  const btnText = document.getElementById('btn-text');
+  const btnToasts = document.getElementById('btn-toasts');
+  const btnToggleFloat = document.getElementById('btn-toggle-float');
+  const btnSaveLayout = document.getElementById('btn-save-layout');
+  const btnRestoreLayout = document.getElementById('btn-restore-layout');
+
+  // Menu toggle behavior
+  menuToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
+    menuToggle.setAttribute('aria-expanded', String(!expanded));
+    if (menuPanel) {
+      menuPanel.hidden = expanded;
+    }
+  });
+  document.addEventListener('click', () => {
+    if (!menuPanel?.hidden) {
+      menuPanel.hidden = true;
+      menuToggle?.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  // Float button initial label
+  if (btnToggleFloat) {
+    btnToggleFloat.textContent = floatEnabled ? 'Float On' : 'Float Off';
+  }
 
   grid = GridStack.init(
     {
@@ -1394,7 +1482,10 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="conversations-widget">
         <div class="gs-handle">
           <span>Conversations</span>
-          <button class="icon-btn new-convo-btn" title="New conversation">📝</button>
+          <div class="sidebar-actions">
+            <button class="icon-btn header-icon dock-convos-widget-btn" title="Dock to sidebar" aria-pressed="true"></button>
+            <button class="icon-btn header-icon new-convo-btn" title="New conversation"></button>
+          </div>
         </div>
         <div class="sidebar-search">
           <input type="search" class="conversation-search-input" placeholder="Search conversations..." />
@@ -1407,11 +1498,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const listEl = contentEl.querySelector('.conversation-list');
     const btnEl = contentEl.querySelector('.new-convo-btn');
     const searchEl = contentEl.querySelector('.conversation-search-input');
+    const dockBtn = contentEl.querySelector('.dock-convos-widget-btn');
     ['mousedown','touchstart','pointerdown'].forEach(evt => {
       listEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
       btnEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
       searchEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
+      dockBtn?.addEventListener(evt, (e) => e.stopPropagation(), true);
     });
+    // Inject icons
+    if (dockBtn) {
+      dockBtn.innerHTML = '';
+      const svg = createAnchorIcon(18);
+      if (svg) dockBtn.appendChild(svg);
+      dockBtn.addEventListener('click', () => dockConvos());
+    }
+    if (btnEl) {
+      btnEl.innerHTML = '';
+      const svg = createNewConvoIcon(18);
+      if (svg) btnEl.appendChild(svg);
+    }
     // wire search
     attachConversationSearch(searchEl, listEl);
   }
@@ -1511,17 +1616,55 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function syncWidgets() {
-    if (voiceToggle?.checked) addRealtimeWidget(); else removeRealtimeWidget();
-    if (textToggle?.checked) addTextWidget(); else removeTextWidget();
-    if (toastsToggle?.checked) addToastsWidget(); else removeToastsWidget();
-    // Conversations docking is controlled by the anchor button, not grid toggles
+    const voiceOn = document.getElementById('btn-voice')?.classList.contains('active');
+    const textOn = document.getElementById('btn-text')?.classList.contains('active');
+    const toastsOn = document.getElementById('btn-toasts')?.classList.contains('active');
+
+    if (voiceOn) addRealtimeWidget(); else removeRealtimeWidget();
+    if (textOn) addTextWidget(); else removeTextWidget();
+    if (toastsOn) addToastsWidget(); else removeToastsWidget();
+    // Conversations docking is controlled by the anchor buttons
   }
 
-  voiceToggle?.addEventListener('change', syncWidgets);
-  textToggle?.addEventListener('change', syncWidgets);
-  toastsToggle?.addEventListener('change', syncWidgets);
-  document.getElementById('save-layout-btn')?.addEventListener('click', saveCurrentLayout);
-  document.getElementById('dock-convos-btn')?.addEventListener('click', () => {
+  // Toggle buttons
+  btnVoice?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    btnVoice.classList.toggle('active');
+    btnVoice.setAttribute('aria-pressed', String(btnVoice.classList.contains('active')));
+    syncWidgets();
+  });
+  btnText?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    btnText.classList.toggle('active');
+    btnText.setAttribute('aria-pressed', String(btnText.classList.contains('active')));
+    syncWidgets();
+  });
+  btnToasts?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    btnToasts.classList.toggle('active');
+    btnToasts.setAttribute('aria-pressed', String(btnToasts.classList.contains('active')));
+    syncWidgets();
+  });
+
+  // Float toggle
+  btnToggleFloat?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    floatEnabled = !floatEnabled;
+    if (typeof grid.float === 'function') {
+      grid.float(floatEnabled);
+    } else {
+      // fallback: update option (may not reflow immediately in older versions)
+      grid?.opts && (grid.opts.float = floatEnabled);
+    }
+    btnToggleFloat.textContent = floatEnabled ? 'Float On' : 'Float Off';
+  });
+
+  // Save/Restore
+  btnSaveLayout?.addEventListener('click', (e) => { e.stopPropagation(); saveCurrentLayout(); });
+  btnRestoreLayout?.addEventListener('click', (e) => { e.stopPropagation(); restoreDefaultLayout(); });
+
+  document.getElementById('dock-convos-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
     if (isConvosDocked) undockConvos(); else dockConvos();
   });
 

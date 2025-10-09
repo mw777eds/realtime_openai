@@ -47,6 +47,67 @@ html, body, #app {
   font-size: 14px;
 }
 
+/* Hamburger menu */
+.menu {
+  position: relative;
+}
+.menu-toggle {
+  border: none;
+  background: transparent;
+  width: 34px;
+  height: 28px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.menu-toggle .bar {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #fff;
+  margin: 3px 0;
+  border-radius: 1px;
+}
+.menu-panel {
+  position: absolute;
+  right: 0;
+  top: 40px;
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+  padding: 8px;
+  border-radius: 8px;
+  min-width: 220px;
+  z-index: 4000;
+}
+.menu-panel[hidden] {
+  display: none;
+}
+.menu-panel .menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 4px 0;
+  cursor: pointer;
+  font-size: 14px;
+}
+.menu-panel .menu-item.toggle.active {
+  background: #006690;
+  color: #fff;
+  border-color: #006690;
+}
+.menu-panel hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 6px 0;
+}
+
 /* Small icon button for headers */
 .icon-btn {
   border: 1px solid #cbd5e1;

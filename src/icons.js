@@ -76,4 +76,56 @@ function showIcon(type) {
   });
 }
 
-export { showIcon };
+/*
+ * Inline SVG icons (white outline) for header/buttons
+ */
+const INLINE_ICONS = {
+  anchor: {
+    viewBox: '0 0 64 64',
+    paths: [
+      // anchor.svg paths (converted to outline via stroke)
+      "m58.40131 21.836a1.56178 1.56178 0 0 0 .97992-2.6c-4.35992-4.79-7.62994-4.81-7.98993-4.81a.98543.98543 0 0 0 -.87.56c-1.37 2.81-.89 6.79-.48 8.92a1.55432 1.55432 0 0 0 2.69.71.18181.18181 0 0 1 .2-.05.202.202 0 0 1 .15.18 16.65361 16.65361 0 0 1 -1.31 8.37005 16.46146 16.46146 0 0 1 -4.74 6.13.97662.97662 0 0 1 -1.29-.05l-19.18-17.48a1.00772 1.00772 0 0 1 -.04-1.45l5.45995-5.5a3.52864 3.52864 0 0 0 -4.98-4.99994l-5.50997 5.54989a1.02686 1.02686 0 0 1 -1.42 0l-1.4-1.4a1.087 1.087 0 0 1 -.24-.99c2.0129-10.54477-13.58982-12.45157-14.22001-1.74986a7.24417 7.24417 0 0 0 8.8601 7.10979 1.05273 1.05273 0 0 1 1.00994.25011l1.42 1.42a1.00511 1.00511 0 0 1 -.01 1.41l-5.45 5.5a3.52894 3.52894 0 1 0 4.91012 5.06989l5.4299-5.47992a1.01212 1.01212 0 0 1 1.45.04l17.35 19.33a.99846.99846 0 0 1 .05 1.28c-2.94824 4.15449-9.45144 6.86251-14.38011 6.10973a.215.215 0 0 1 -.08983-.39978 1.5585 1.5585 0 0 0 .44-1.57 1.52566 1.52566 0 0 0 -1.19-1.09c-2.11-.41-6.07-.9-8.86.48a1.02071 1.02071 0 0 0 -.56.86c-.01.37.03 3.67 4.77 8.06a1.54742 1.54742 0 0 0 2.6-1.07.20537.20537 0 0 1 .28-.17c7.6292 3.14663 15.78333.1738 22.62006-3.06007a15.43718 15.43718 0 0 1 5.65-1.56987 3.40155 3.40155 0 0 0 3.14-3.2 15.2442 15.2442 0 0 1 .31-2.45 14.7527 14.7527 0 0 1 1.17-3.14c3.20523-6.88975 6.13491-15.10341 3.01985-22.77991-.02312-.1899-.00251-.23811.25001-.28011zm-49.28-8.61a3.04436 3.04436 0 0 1 4.30007-4.30993c2.74041 2.92182-1.39368 7.09766-4.3001 4.30993z",
+      "m11.28657 9.46847a1.61513 1.61513 0 0 0 -1.12592 2.7386 1.57942 1.57942 0 0 0 2.22132 0 1.61523 1.61523 0 0 0 -1.0954-2.7386z"
+    ]
+  },
+  edit: {
+    viewBox: '0 0 24 24',
+    paths: [
+      // edit.svg paths (converted to outline via stroke)
+      "m19 12c-.553 0-1 .448-1 1v8c0 .551-.448 1-1 1h-14c-.552 0-1-.449-1-1v-14c0-.551.448-1 1-1h8c.553 0 1-.448 1-1s-.447-1-1-1h-8c-1.654 0-3 1.346-3 3v14c0 1.654 1.346 3 3 3h14c1.654 0 3-1.346 3-3v-8c0-.553-.447-1-1-1z",
+      "m9.376 11.089c-.07.07-.117.159-.137.255l-.707 3.536c-.033.164.019.333.137.452.095.095.223.146.354.146.032 0 .065-.003.098-.01l3.535-.707c.098-.02.187-.067.256-.137l7.912-7.912-3.535-3.535z",
+      "m23.268.732c-.975-.975-2.561-.975-3.535 0l-1.384 1.384 3.535 3.535 1.384-1.384c.472-.471.732-1.099.732-1.767s-.26-1.296-.732-1.768z"
+    ]
+  }
+};
+
+function createInlineIcon(name, size = 18) {
+  const def = INLINE_ICONS[name];
+  if (!def) return null;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", def.viewBox);
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("aria-hidden", "true");
+  def.paths.forEach(d => {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "2");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(path);
+  });
+  return svg;
+}
+
+function createAnchorIcon(size = 18) {
+  return createInlineIcon('anchor', size);
+}
+
+function createNewConvoIcon(size = 18) {
+  return createInlineIcon('edit', size);
+}
+
+export { showIcon, createAnchorIcon, createNewConvoIcon };
