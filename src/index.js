@@ -1122,9 +1122,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function addRealtimeWidget() {
     if (realtimeWidgetEl) return;
-    realtimeWidgetEl = grid.addWidget({
-      x: 0, y: 0, w: 8, h: 12,
-      content: `
+    const el = grid.addWidget({ x: 0, y: 0, w: 8, h: 12 });
+    const contentEl = el.querySelector('.grid-stack-item-content') || el;
+    contentEl.innerHTML = `
         <div class="realtime-widget">
           <div class="gs-handle">Realtime</div>
           <div class="rt-body">
@@ -1132,8 +1132,8 @@ document.addEventListener("DOMContentLoaded", () => {
             <div id="clickOverlay"></div>
             <div id="iconOverlay"></div>
           </div>
-        </div>`
-    });
+        </div>`;
+    realtimeWidgetEl = el;
     // Hook up canvas and click handlers inside the widget
     initializeCanvas();
     const clickOverlay = document.getElementById('clickOverlay');
@@ -1151,14 +1151,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function addToastsWidget() {
     if (toastsWidgetEl) return;
-    toastsWidgetEl = grid.addWidget({
-      x: 8, y: 0, w: 4, h: 6,
-      content: `
+    const el = grid.addWidget({ x: 8, y: 0, w: 4, h: 6 });
+    const contentEl = el.querySelector('.grid-stack-item-content') || el;
+    contentEl.innerHTML = `
         <div class="toasts-widget">
           <div class="gs-handle">Activity</div>
           <div class="toast-timeline" id="toast-timeline"></div>
-        </div>`
-    });
+        </div>`;
+    toastsWidgetEl = el;
   }
 
   function removeToastsWidget() {
@@ -1169,16 +1169,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function addTextWidget() {
     if (textWidgetEl) return;
-    textWidgetEl = grid.addWidget({
-      x: 0, y: 12, w: 12, h: 6,
-      content: `
+    const el = grid.addWidget({ x: 0, y: 12, w: 12, h: 6 });
+    const contentEl = el.querySelector('.grid-stack-item-content') || el;
+    contentEl.innerHTML = `
         <div class="text-widget">
           <div class="gs-handle">Text Chat</div>
           <div class="text-body" style="padding:8px;color:#333;">
             Text chat UI will appear here. This is a placeholder.
           </div>
-        </div>`
-    });
+        </div>`;
+    textWidgetEl = el;
   }
 
   function removeTextWidget() {
