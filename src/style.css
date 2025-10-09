@@ -66,13 +66,14 @@ html, body, #app {
   cursor: pointer;
   pointer-events: auto;
 }
-.menu-toggle .bar {
-  display: block;
-  width: 22px;
-  height: 3px;
-  background: #fff;
-  margin: 3px 0;
-  border-radius: 1px;
+/* Scoped + hardened to prevent overrides from generic `.bar` rules */
+.app-header .menu-toggle .bar {
+  display: block !important;
+  width: 22px !important;
+  height: 3px !important;
+  background-color: #fff !important;
+  margin: 3px 0 !important;
+  border-radius: 1px !important;
 }
 .menu-panel {
   position: absolute;
@@ -105,6 +106,12 @@ html, body, #app {
   background: #006690;
   color: #fff;
   border-color: #006690;
+}
+/* Inactive toggle buttons: blue text on white for contrast */
+.menu-panel .menu-item.toggle {
+  color: #006690;
+  border-color: #006690;
+  background: #ffffff;
 }
 .menu-panel hr {
   border: none;

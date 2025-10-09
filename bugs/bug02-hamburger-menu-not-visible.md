@@ -1,6 +1,6 @@
 # Bug 02 — Hamburger menu not visible in header (top-right)
 
-Status: Testing
+Status: In Progress
 Owner: Frontend
 Created: 2025-10-09
 
@@ -98,6 +98,14 @@ Implementation changes (attempt 1)
   - .menu-toggle explicitly set to pointer-events: auto.
   - Increased bar thickness to 3px for better visibility.
 - CSS: Reconfirmed overlay/handle z-index relationships so nothing covers the header.
+
+Implementation changes (attempt 2)
+- CSS: Scoped and forced hamburger bar styling to avoid override by any global `.bar` rules.
+  - New selector: `.app-header .menu-toggle .bar { display:block; width:22px; height:3px; background-color:#fff; margin:3px 0; border-radius:1px; }` with `!important` to win specificity.
+- CSS: Fixed inactive toggle button contrast in the menu panel.
+  - `.menu-panel .menu-item.toggle { color:#006690; border-color:#006690; background:#fff; }`
+  - Active remains inverted: white on blue.
+- HTML: No changes required (button exists and menu opens). Focus is on CSS visibility.
 
 Verification steps
 - Add a temporary outline to confirm visibility and stacking:
