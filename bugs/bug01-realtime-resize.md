@@ -1,6 +1,6 @@
 # Bug 01 — Realtime widget does not resize correctly inside GridStack
 
-Status: Open
+Status: Resolved
 Owner: Frontend
 Created: 2025-10-09
 
@@ -57,18 +57,26 @@ Investigation plan
 - Verify handles are clickable: check elementFromPoint at edges; confirm pointer-events reach .gs-resize-handle.
 - If needed, add grid.on('resizestop') to force a final canvas resize.
 
-Fix implemented (current)
-- initializeCanvas now:
-  - Locates the closest .rt-body and sizes the canvas to its rect.
-  - Attaches a ResizeObserver to re-size on layout changes.
-  - Disconnects previous observer when removing the widget.
-- Realtime widget default size changed to 4x4.
+Resolution (final)
+- Root causes:
+  - GridStack injected widget content as text when using options.content; fixed by setting innerHTML on .grid-stack-item-content after addWidget.
+  - Canvas sizing used window dimensions; fixed by measuring .rt-body and using a ResizeObserver to track changes.
+  - Overlay covered resize handles; fixed by adding 8px gutters and ensuring resize handles/headers sit above overlays; drag restricted to .gs-handle.
+- Implemented changes in code:
+  - Widgets are created via grid.addWidget(...) and then innerHTML is set on .grid-stack-item-content (Realtime, Toasts, Text).
+  - initializeCanvas resizes to the container and installs a ResizeObserver; observer is disconnected on widget removal.
+  - clickOverlay leaves an 8px perimeter gutter; CSS ensures resize handles z-index above overlays.
+  - GridStack configured with dragHandle and header-only drag.
+- Default size set to 4x4 for the Realtime widget.
 
-Next steps / Validation
-- Manual: Drag to multiple sizes; confirm waveform matches widget.
-- Edge: Rapid resize; verify no flicker and no overlay intercept clicks on handles.
-- Optional: Add devicePixelRatio scaling for crispness (post-fix).
-- Optional: Hook grid ‘resizestop’ to call the same resize function.
+Validation
+- Manual resize across multiple sizes confirms the waveform matches the widget; handles are clickable and do not mute the session.
+- Rapid resizing shows no overlay interference or flicker.
+- Bug considered resolved.
+
+Follow-ups
+- Enhancement: devicePixelRatio-aware canvas for retina rendering.
+- Optional: Call resizeToContainer on grid resizestop for belt-and-suspenders.
 
 Rollback plan
 - Revert to window sizing if observer causes instability (not expected).

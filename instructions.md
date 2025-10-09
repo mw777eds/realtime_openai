@@ -163,3 +163,43 @@ Each item is append-only. Realtime is the authority while active; all modes read
 - Example canonical JSON logs (Realtime + Text).
 - Example tool calls/results with artifacts.
 - Screenshots of prior tests for reference.
+
+14. Progress to date
+- Grid shell:
+  - Integrated GridStack as the main workspace and initialized a 12-column grid.
+  - Added header controls (Voice, Text, Debug Toasts) and a left sidebar for conversations.
+- Realtime widget:
+  - Encapsulated current canvas/overlays/audio UI inside a GridStack widget with header-only drag.
+  - Fixed content injection by setting innerHTML on .grid-stack-item-content after addWidget.
+  - Fixed resizing: canvas now sizes to the widget container via ResizeObserver (no window sizing).
+  - Resolved overlay interference: 8px gutters around clickOverlay; resize handles/headers float above overlays.
+  - Default size set to 4x4.
+- Toasts widget:
+  - Separated debug toasts into their own optional widget with a dedicated #toast-timeline container.
+- Toggles and programmatic control:
+  - Voice/Text/Toasts toggles add/remove widgets dynamically.
+  - setUISettings exposed to FileMaker to flip toggles programmatically.
+
+15. Next steps
+- Text Chat widget:
+  - Implement unified chat UI that renders from the canonical log and supports streaming and tool nesting.
+  - Support typing while Realtime is active; append to canonical and forward into Realtime (input_text/input_image).
+- Canonical history + adapters:
+  - Implement canonical JSON log read/write in both modes.
+  - Build adapters:
+    - Realtime: preload canonical via conversation.item.create; map response/function_call events to canonical.
+    - Chat Completions: transform canonical → messages[] with token budgeting and optional summarization.
+- Artifacts and tools:
+  - Implement Tools_Invoke and map tool_call/tool_result into canonical.
+  - Spawn artifact widgets programmatically from tool results and persist layout.
+- Persistence:
+  - Wire Grid_SaveLayout/Grid_LoadLayout to save/restore grid layout per session.
+- Concurrency and synchronization:
+  - Ensure typed messages/images during Realtime are appended to canonical and sent over the data channel immediately.
+  - On Realtime stop, next text request uses updated canonical context.
+- UX/quality:
+  - Sentence consolidation for transcripts to avoid partial fragments.
+  - Add devicePixelRatio scaling for the canvas for crisp rendering.
+  - Error handling toasts + modal already scaffolded; integrate HandleAPIError.
+- Validation:
+  - Add simple end-to-end checks for mode switch, artifact spawn, and layout restore.
