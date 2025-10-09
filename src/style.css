@@ -120,7 +120,7 @@ html, body, #app {
   width: 100%;
   height: 100%;
   background-color: transparent;
-  z-index: 2000;
+  z-index: 1000;
   cursor: pointer;
 }
 
@@ -387,4 +387,16 @@ button {
   white-space: pre-wrap;
   word-wrap: break-word;
   color: #333;
+}
+
+/* Ensure GridStack resize handles sit above overlays and are clickable */
+.grid-stack-item .ui-resizable-handle,
+.grid-stack-item .gs-resize-handle {
+  z-index: 5000;
+  pointer-events: auto;
+}
+
+/* Default cursor inside content so dragging only feels correct on header */
+.grid-stack-item-content {
+  cursor: default;
 }

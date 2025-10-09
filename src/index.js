@@ -1114,6 +1114,7 @@ document.addEventListener("DOMContentLoaded", () => {
       column: 12,
       float: true,
       margin: 6,
+      dragHandle: '.gs-handle',
       draggable: { handle: '.gs-handle' },
       resizable: { handles: 'e,se,s,sw,w' }
     },
@@ -1139,6 +1140,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const clickOverlay = document.getElementById('clickOverlay');
     if (clickOverlay) {
       clickOverlay.addEventListener('click', toggleAudioTransmission);
+      // Prevent GridStack drag from starting anywhere except the header handle
+      ['mousedown','touchstart','pointerdown'].forEach(evt => {
+        clickOverlay.addEventListener(evt, (e) => e.stopPropagation(), true);
+      });
+    }
+    const rtBody = contentEl.querySelector('.rt-body');
+    if (rtBody) {
+      ['mousedown','touchstart','pointerdown'].forEach(evt => {
+        rtBody.addEventListener(evt, (e) => {
+          if (!e.target.closest('.gs-handle')) {
+            e.stopPropagation();
+          }
+        }, true);
+      });
     }
     showIcon('ear');
   }
@@ -1159,6 +1174,13 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="toast-timeline" id="toast-timeline"></div>
         </div>`;
     toastsWidgetEl = el;
+    // Prevent dragging from inside the timeline; only header should drag
+    const timelineEl = contentEl.querySelector('.toast-timeline');
+    if (timelineEl) {
+      ['mousedown','touchstart','pointerdown'].forEach(evt => {
+        timelineEl.addEventListener(evt, (e) => e.stopPropagation(), true);
+      });
+    }
   }
 
   function removeToastsWidget() {
