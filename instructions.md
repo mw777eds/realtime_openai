@@ -242,3 +242,36 @@ Each item is append-only. Realtime is the authority while active; all modes read
 - Update Grid_SaveLayout/Grid_LoadLayout to store/retrieve layouts by (machineId, sessionId, key=mode).
 - Add Settings_SavePreferences(sessionId; machineId; JSON) to persist toggle states per machine.
 - Maintain canonical history rules across Realtime/Text as above.
+
+18. Session state, persistence and flush policy
+- In-memory is authoritative during an active session:
+  - sessionHistory: append-only canonical JSON array for the current sessionId (user, assistant, tool_call, tool_result, artifacts).
+  - sessionLayouts: per-mode settings for the current sessionId: { docked: {version, columns, cellHeight?, float, voice, text, toasts, layout[]}, undocked: {…} }.
+  - These are kept in memory within the Web Viewer, with optional localStorage fallback for crash recovery during development.
+- Two scopes of persisted layouts:
+  - Session scope (sessionId + key): authoritative saved state for this chat. Always updated on meaningful boundaries (see below). Contains full layout for this session, including any session-only widgets (charts/artifacts).
+  - Machine scope (machineId + key): template/default for new sessions and “Restore Default Layout.” Only updated when the user clicks Save Layout.
+- Precedence when applying a layout (for a given mode key):
+  1) Session scope (sessionId + key) if present.
+  2) Machine scope (machineId + key) if present.
+  3) App defaults.
+- When to persist (minimize FileMaker round-trips):
+  - History flushes (sessionId):
+    - On assistant turn end (response.done).
+    - On user transcript commit (conversation.item.input_audio_transcription.completed).
+    - On tool_call and tool_result (including artifacts created).
+    - On text submit (user typed message).
+    - On session switch and on Web Viewer close (hard flush).
+    - Optional: periodic autosave every 30–60s if there are unflushed history changes.
+  - Layout flushes (sessionId + key):
+    - On session switch and on Web Viewer close (flush if layout changed).
+    - Optional: debounce 1–2s autosave on dragstop/resizestop/remove for robust recovery.
+  - Machine templates (machineId + key):
+    - Only when the user clicks Save Layout in the menu (explicit action).
+- JavaScript API surface (Web Viewer functions):
+  - bootstrapApp({ machineId, sessionId, mode, settings? }): seeds in-memory state for current session; do not start Voice until the Voice widget mounts.
+  - SaveSessionState(): flush sessionHistory and sessionLayouts[current mode key] to FileMaker (Chat_SaveHistory + Grid_SaveLayout with scope:"session").
+  - GetSessionState(): returns { sessionId, mode, history, layouts: {docked, undocked}, dirty: {history, layout} } for FileMaker-side logic.
+  - SwitchSession(newSessionId): calls SaveSessionState(); loads new session layouts/history; updates in-memory state; re-renders using precedence.
+- Dock/undock behavior:
+  - On dock/undock toggle, apply the current session’s layout for that mode if available; otherwise fall back to machine template for that mode; otherwise app defaults. Keep the session layout authoritative and update it on the next flush.
