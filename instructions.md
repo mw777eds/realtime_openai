@@ -26,11 +26,11 @@ FileMaker AI Chat + Realtime API Unified Interface — Revised Requirements
   - draggable: { handle: '.gs-handle', scroll: true }, resizable: { handles: 'e, se, s, sw, w' }.
 - Persistence:
   - Maintain two saved layouts per session: one for Docked (sidebar visible) and one for Undocked (Conversations as a widget).
-  - Save Layout stores the current mode’s grid nodes (x,y,w,h + widget type), the float setting, and Conversations docked state (and its node if undocked).
+  - Save Layout stores the current mode’s grid nodes (x,y,w,h + widget type), the float setting, and Conversations docked state via dockedConvo boolean (no separate node stored).
   - Restore loads the saved layout for the current mode and re-creates widgets at their saved positions/sizes. If none is saved, defaults are applied and users can arrange, then Save Layout.
 - Widgets:
   - Chat Widget (unified): renders canonical history; shows streaming rows; nests tool calls/results; markdown rendering.
-  - Realtime Controls Widget: mic toggle, connection state (listening/thinking/speaking), device indicators.
+  - Voice Widget: mic toggle, connection state (listening/thinking/speaking), device indicators.
   - Conversations Widget: optional; mirrors the left sidebar list. Dock/undock via the anchor button in the sidebar: when undocked, the fixed sidebar hides and the Conversations widget can be positioned/resized by the user.
   - Artifact Widgets: created programmatically when tools return artifacts; persisted and linked to parent message/artifact id.
 - Not needed: palette/spawner or external drag-in (no GridStack.setupDragIn). Artifacts are added programmatically by the app based on tool results. Nice-to-have: allow re-import of artifacts from a FileMaker window back into GridStack via a scripted action.
@@ -186,7 +186,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Header hamburger menu (top-right) groups controls: buttons for Voice/Text/Debug Toasts (active/inactive), Save Layout, Restore Default Layout, and Float On/Off toggle.
   - Conversations docking controlled by an anchor button in the sidebar and mirrored on the Conversations widget; undocking hides the sidebar and shows the widget; docking restores the sidebar and removes the widget.
   - setUISettings exposed to FileMaker to flip toggles programmatically; setUISettings({ convos: true }) undocks; setUISettings({ convos: false }) docks.
-  - Save Layout saves the current mode’s layout (docked or undocked): serializes current grid positions/sizes with widget types, current float setting, and the Conversations docked state (and its position if undocked), and calls Grid_SaveLayout.
+  - Save Layout saves the current mode’s layout (docked or undocked): serializes current grid positions/sizes with widget types, current float setting, and the Conversations docked state (dockedConvo boolean), and calls Grid_SaveLayout.
 
 15. Next steps
 - Initialization and per-machine config

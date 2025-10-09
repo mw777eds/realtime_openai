@@ -1294,16 +1294,8 @@ function saveCurrentLayout() {
       widget: n.el?.dataset?.widget || null,
       x: n.x, y: n.y, w: n.w, h: n.h
     }));
-    // Include conversations docked state and its position if undocked
-    let convos = { docked: isConvosDocked, node: null };
-    if (!isConvosDocked && convosWidgetEl) {
-      const node = (grid.engine?.nodes || []).find(n => n.el === convosWidgetEl);
-      if (node) {
-        convos.node = { x: node.x, y: node.y, w: node.w, h: node.h };
-      }
-    }
     const key = isConvosDocked ? 'docked' : 'undocked';
-    const payload = { key, layout: nodes, convos, float: !!floatEnabled };
+    const payload = { key, layout: nodes, dockedConvo: !!isConvosDocked, float: !!floatEnabled };
     if (window.FileMaker) {
       window.FileMaker.PerformScript('Grid_SaveLayout', JSON.stringify(payload));
     } else {
@@ -1381,9 +1373,9 @@ function applyLayout(payload) {
   }
 
   // Ensure conversations docked state matches payload
-  if (payload.convos?.docked === false && isConvosDocked) {
+  if (payload.dockedConvo === false && isConvosDocked) {
     undockConvos();
-  } else if (payload.convos?.docked !== false && !isConvosDocked) {
+  } else if (payload.dockedConvo !== false && !isConvosDocked) {
     dockConvos();
   }
 
@@ -1398,7 +1390,7 @@ function applyLayout(payload) {
   // Rebuild widgets from layout data
   payload.layout.forEach(n => {
     switch (n.widget) {
-      case 'realtime':
+      case 'voice':
         addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
         break;
       case 'toasts':
@@ -1407,7 +1399,7 @@ function applyLayout(payload) {
       case 'text':
         addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
         break;
-      case 'conversations':
+      case 'convo':
         if (!isConvosDocked) {
           addConversationsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
         }
@@ -1520,7 +1512,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="realtime-widget">
-          <div class="gs-handle">Realtime</div>
+          <div class="gs-handle">Voice</div>
           <div class="rt-body">
             <canvas id="waveform"></canvas>
             <div id="clickOverlay"></div>
@@ -1528,7 +1520,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         </div>`;
     realtimeWidgetEl = el;
-    el.dataset.widget = 'realtime';
+    el.dataset.widget = 'voice';
     // Hook up canvas and click handlers inside the widget
     initializeCanvas();
     const clickOverlay = document.getElementById('clickOverlay');
@@ -1593,7 +1585,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="conversation-list" style="flex:1 1 auto; overflow:auto; padding:8px;"></div>
       </div>`;
     convosWidgetEl = el;
-    el.dataset.widget = 'conversations';
+    el.dataset.widget = 'convo';
     // prevent drag from inner content
     const listEl = contentEl.querySelector('.conversation-list');
     const btnEl = contentEl.querySelector('.new-convo-btn');
