@@ -23,6 +23,9 @@ html, body, #app {
   justify-content: space-between;
   padding: 0 12px;
   box-sizing: border-box;
+  position: sticky;
+  top: 0;
+  z-index: 7000;
 }
 
 .app-title {
@@ -61,11 +64,12 @@ html, body, #app {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  pointer-events: auto;
 }
 .menu-toggle .bar {
   display: block;
   width: 22px;
-  height: 2px;
+  height: 3px;
   background: #fff;
   margin: 3px 0;
   border-radius: 1px;

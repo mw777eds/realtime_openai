@@ -1,6 +1,6 @@
 # Bug 02 — Hamburger menu not visible in header (top-right)
 
-Status: In Progress
+Status: Testing
 Owner: Frontend
 Created: 2025-10-09
 
@@ -90,6 +90,14 @@ Fix plan (to apply in code)
   - index.html header must include:
     - <button id="menu-toggle" class="menu-toggle" ...><span class="bar"></span><span class="bar"></span><span class="bar"></span></button>
     - <div id="menu-panel" class="menu-panel" hidden>…</div>
+
+Implementation changes (attempt 1)
+- CSS: Raised header above all content and ensured it remains pinned.
+  - .app-header now uses position: sticky; top: 0; z-index: 7000.
+- CSS: Hardened hamburger visibility/clickability.
+  - .menu-toggle explicitly set to pointer-events: auto.
+  - Increased bar thickness to 3px for better visibility.
+- CSS: Reconfirmed overlay/handle z-index relationships so nothing covers the header.
 
 Verification steps
 - Add a temporary outline to confirm visibility and stacking:
