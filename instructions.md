@@ -189,6 +189,11 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Save Layout saves the current mode’s layout (docked or undocked): serializes current grid positions/sizes with widget types, current float setting, and the Conversations docked state (and its position if undocked), and calls Grid_SaveLayout.
 
 15. Next steps
+- Initialization and per-machine config
+  - Add a bootstrap init path where FileMaker passes a persistent machineId and initial settings to the WebView. The app should:
+    - Load per-machine configuration and per-mode layouts using machineId; if none exist, fall back to defaults.
+    - Do not auto-start Realtime on page load. Only start Realtime (initializeWebRTC) when the Realtime widget is enabled/first brought on screen or explicitly requested.
+    - Respect initial settings for which widgets are shown (voice/text/toasts) and float mode; apply via a single bootstrap call.
 - Text Chat widget:
   - Implement unified chat UI that renders from the canonical log and supports streaming and tool nesting.
   - Support typing while Realtime is active; append to canonical and forward into Realtime (input_text/input_image).
@@ -197,11 +202,16 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Build adapters:
     - Realtime: preload canonical via conversation.item.create; map response/function_call events to canonical.
     - Chat Completions: transform canonical → messages[] with token budgeting and optional summarization.
+  - History handoff rules:
+    - On Realtime start: preload the model state from the canonical log (per sessionId).
+    - While Realtime runs: the Text widget mirrors the stream; any typed text/images are appended to canonical and injected into Realtime.
+    - On Realtime stop: the next Text submission uses the updated canonical log (no gaps).
 - Artifacts and tools:
   - Implement Tools_Invoke and map tool_call/tool_result into canonical.
   - Spawn artifact widgets programmatically from tool results and persist layout.
 - Persistence:
-  - Wire Grid_SaveLayout/Grid_LoadLayout to save/restore grid layout per session.
+  - Wire Grid_SaveLayout/Grid_LoadLayout to save/restore per-machine layouts (machineId) per session and per mode (docked/undocked).
+  - Persist user settings (voice/text/toasts/float) per machineId so bootstrap can restore them.
 - Concurrency and synchronization:
   - Ensure typed messages/images during Realtime are appended to canonical and sent over the data channel immediately.
   - On Realtime stop, next text request uses updated canonical context.
@@ -210,4 +220,24 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Add devicePixelRatio scaling for the canvas for crisp rendering.
   - Error handling toasts + modal already scaffolded; integrate HandleAPIError.
 - Validation:
-  - Add simple end-to-end checks for mode switch, artifact spawn, and layout restore.
+  - Add simple end-to-end checks for mode switch, artifact spawn, and per-machine layout restore.
+
+16. Initialization flow (per-machine)
+- FileMaker calls a bootstrap function (e.g., window.bootstrapApp) with:
+  - machineId: persistent identifier for the host machine.
+  - sessionId: logical chat session identifier.
+  - settings: { voice, text, toasts, float, mode: "docked"|"undocked" }.
+- App behavior:
+  - Load per-machine saved layout for settings.mode if available; else load defaults.
+  - Apply settings to show/hide widgets; do not initializeWebRTC until Realtime is enabled.
+  - If Realtime is enabled at bootstrap, initializeWebRTC only after mounting the Realtime widget.
+  - Load canonical history for sessionId and render in Text widget; Realtime preload occurs when Realtime is started.
+
+17. Impact on FileMaker scripts (see script.txt)
+- Add App_Init(sessionId; machineId) to return:
+  - Initial settings (voice/text/toasts/float, mode).
+  - Saved layout for mode and machineId (or default).
+  - Canonical chat history for sessionId.
+- Update Grid_SaveLayout/Grid_LoadLayout to store/retrieve layouts by (machineId, sessionId, key=mode).
+- Add Settings_SavePreferences(sessionId; machineId; JSON) to persist toggle states per machine.
+- Maintain canonical history rules across Realtime/Text as above.

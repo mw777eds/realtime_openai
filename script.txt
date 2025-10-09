@@ -9,16 +9,25 @@ Overview
 
 Suggested schema (example)
 - Table: GridLayouts
-  - SessionId (Text)
-  - Key (Text) // "docked" | "undocked"
-  - Payload (Text) // JSON string as saved
-  - Float (Number) // 0/1
+  - MachineId (Text)   // persistent device id
+  - SessionId (Text)   // logical chat session id
+  - Key (Text)         // "docked" | "undocked"
+  - Payload (Text)     // JSON string as saved
+  - Float (Number)     // 0/1
   - UpdatedAt (Timestamp)
-- Relationship: GridLayouts by SessionId + Key (Unique)
+- Relationship: GridLayouts by MachineId + SessionId + Key (Unique)
+
+- Table: AppPreferences (optional)
+  - MachineId (Text)
+  - SessionId (Text)
+  - Settings (Text) // JSON: { voice, text, toasts, float, mode }
+  - UpdatedAt (Timestamp)
 
 JSON payload from Web
 {
-  "key": "docked" | "undocked",
+  "machineId": "ABCDEF-123...",               // persistent device id
+  "sessionId": "session-xyz",                 // current logical session id
+  "key": "docked" | "undocked",               // layout mode
   "layout": [
     { "widget": "realtime", "x": 0, "y": 0, "w": 4, "h": 4 },
     { "widget": "toasts", "x": 8, "y": 0, "w": 4, "h": 6 },
@@ -176,6 +185,69 @@ Pseudo-steps:
    End If
 3) Exit Script [ Result: $payload ]
 
+Updated persistence: per-machine (new/extended scripts)
+
+Script: App_Init [ sessionId ; machineId ]
+Purpose: Return initialization bundle for the WebView.
+
+Parameters (JSON prefered):
+- { "sessionId": "...", "machineId": "..." }
+
+Returns (JSON):
+{
+  "machineId": "...",
+  "sessionId": "...",
+  "settings": { "voice": false, "text": true, "toasts": true, "float": true, "mode": "docked" },
+  "layout": { ...payload from Grid_LoadLayout_V2... } | "",
+  "history": [ ...canonical messages... ]              // optional, may be empty array if none
+}
+
+Pseudo-steps:
+1) Parse params → $sessionId, $machineId.
+2) Load preferences from AppPreferences by MachineId + SessionId (fallback: by MachineId, then defaults).
+3) Determine mode = settings.mode ("docked"|"undocked"), default "docked".
+4) Call Grid_LoadLayout_V2 with (sessionId, machineId, mode) to get layout payload (or empty).
+5) Call Chat_GetHistory(sessionId) to get canonical history (optional).
+6) Build JSON result { machineId, sessionId, settings, layout, history }.
+7) Exit Script [ Result: $json ]
+
+Script: Settings_SavePreferences [ sessionId ; machineId ; settingsJSON ]
+Purpose: Persist UI toggles per machine and session.
+
+Parameters:
+- { "sessionId": "...", "machineId": "...", "settings": { "voice":..., "text":..., "toasts":..., "float":..., "mode":"docked|undocked" } }
+
+Pseudo-steps:
+1) Parse params → $sessionId, $machineId, $settings.
+2) Find AppPreferences by MachineId + SessionId.
+3) Upsert record; set Settings = $settings; UpdatedAt = now.
+4) Exit Script [ Result: "OK" ]
+
+Script: Grid_SaveLayout_V2 [ sessionId ; machineId ; payloadJSON ]
+Purpose: Save layout keyed by machine and session.
+
+Parameters: payload as described in “JSON payload from Web”.
+
+Pseudo-steps differences vs V1:
+- Parse $machineId := JSONGetElement($json; "machineId")
+- Parse/resolve $sessionId := JSONGetElement($json; "sessionId") or $$SessionId
+- Parse/resolve $key := JSONGetElement($json; "key") default "docked"
+- Find GridLayouts by MachineId + SessionId + Key
+- Upsert Payload, Float, UpdatedAt
+
+Script: Grid_LoadLayout_V2 [ sessionId ; machineId ; key ]
+Purpose: Return saved layout for machineId + sessionId + key.
+
+Parameters (JSON or plain):
+- { "sessionId":"...", "machineId":"...", "key":"docked" } or plain key + rely on $$ vars.
+
+Pseudo-steps:
+1) Resolve $key (default "docked"), $sessionId, $machineId.
+2) Find GridLayouts by MachineId + SessionId + Key.
+3) If none, return "".
+4) Return Payload.
+
 Notes
-- If you need per-user persistence, include AccountName in the key.
-- If you want autosave, trigger Grid_SaveLayout from Web on dragstop/resizestop/remove.
+- If you need per-user persistence, include AccountName in the key or store AccountName alongside MachineId for multi-user shared machines.
+- For autosave UX, trigger Grid_SaveLayout_V2 from the Web app on dragstop/resizestop/remove and when toggling docked/undocked.
+- Realtime start: do not call initializeWebRTC on page load; start it when the Realtime widget is enabled (or via explicit FileMaker call after bootstrap).
