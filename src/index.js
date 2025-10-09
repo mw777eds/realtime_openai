@@ -15,6 +15,7 @@ let grid = null;
 let realtimeWidgetEl = null;
 let toastsWidgetEl = null;
 let textWidgetEl = null;
+let waveformResizeObserver = null;
 
 
 /* 
@@ -731,15 +732,30 @@ function cleanupWebRTC() {
  */
 function initializeCanvas() {
   canvas = document.getElementById('waveform');
+  if (!canvas) return;
   ctx = canvas.getContext('2d');
 
-  function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+  const rtBody = canvas.closest('.rt-body') || canvas.parentElement;
+
+  function resizeToContainer() {
+    if (!rtBody) return;
+    const rect = rtBody.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
   }
 
-  resizeCanvas();
-  window.addEventListener('resize', resizeCanvas);
+  // Disconnect previous observer if any
+  if (waveformResizeObserver) {
+    try { waveformResizeObserver.disconnect(); } catch (_) {}
+  }
+
+  resizeToContainer();
+  waveformResizeObserver = new ResizeObserver(resizeToContainer);
+  waveformResizeObserver.observe(rtBody);
 }
 
 /* 
@@ -1123,7 +1139,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function addRealtimeWidget() {
     if (realtimeWidgetEl) return;
-    const el = grid.addWidget({ x: 0, y: 0, w: 2, h: 2 });
+    const el = grid.addWidget({ x: 0, y: 0, w: 4, h: 4 });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="realtime-widget">
@@ -1148,6 +1164,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!realtimeWidgetEl) return;
     grid.removeWidget(realtimeWidgetEl);
     realtimeWidgetEl = null;
+    if (waveformResizeObserver) {
+      try { waveformResizeObserver.disconnect(); } catch (_) {}
+      waveformResizeObserver = null;
+    }
   }
 
   function addToastsWidget() {
