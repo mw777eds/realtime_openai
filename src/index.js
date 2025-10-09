@@ -23,6 +23,9 @@ let waveformResizeObserver = null;
 /* Persisted per-mode settings cached in the web app */
 let persistedSettings = { docked: null, undocked: null };
 
+/* In-memory chat buffer to retain messages while Text widget is hidden */
+const chatBuffer = [];
+
 function getCurrentMode() {
   return isConvosDocked ? 'docked' : 'undocked';
 }
@@ -945,12 +948,27 @@ function attachConversationSearch(inputEl, listEl) {
  */
 
 /**
- * Append a chat message to the Text widget, if mounted.
- * @param {'user'|'assistant'|'system'} role
- * @param {string} text
- * @param {object} [opts]
+ * Record a chat message into the in-memory buffer.
+ * Keeps recent messages so the Text widget can render history on mount.
  */
-function appendChatMessage(role, text, opts = {}) {
+function recordChatMessage(role, text, opts = {}) {
+  if (!text) return;
+  chatBuffer.push({
+    role,
+    text,
+    ts: Date.now(),
+    source: opts.source || null
+  });
+  // Prevent unbounded growth during long sessions
+  if (chatBuffer.length > 1000) {
+    chatBuffer.splice(0, chatBuffer.length - 1000);
+  }
+}
+
+/**
+ * Render a single chat message to the Text widget UI (if mounted).
+ */
+function renderChatMessage(role, text) {
   const list = document.getElementById('chat-messages');
   if (!list || !text) return;
 
@@ -966,6 +984,18 @@ function appendChatMessage(role, text, opts = {}) {
 
   // autoscroll
   list.scrollTop = list.scrollHeight;
+}
+
+/**
+ * Append a chat message: always store in buffer, and render if widget mounted.
+ * @param {'user'|'assistant'|'system'} role
+ * @param {string} text
+ * @param {object} [opts]
+ */
+function appendChatMessage(role, text, opts = {}) {
+  if (!text) return;
+  recordChatMessage(role, text, opts);
+  renderChatMessage(role, text);
 }
 
 /**
@@ -1831,6 +1861,11 @@ document.addEventListener("DOMContentLoaded", () => {
         // do not clear input text automatically; user may want to keep it
         e.target.value = '';
       });
+    }
+
+    // Render any buffered chat history into the Text widget on mount
+    if (Array.isArray(chatBuffer) && chatBuffer.length > 0) {
+      chatBuffer.forEach(m => renderChatMessage(m.role, m.text));
     }
   }
 
