@@ -141,9 +141,9 @@ html, body, #app {
 .icon-btn.header-icon svg {
   width: 18px;
   height: 18px;
-  color: #fff; /* stroke uses currentColor */
+  color: #fff; /* icons inherit this as currentColor */
   stroke: currentColor;
-  fill: none;
+  fill: currentColor;
 }
 .icon-btn.header-icon:hover {
   opacity: 0.85;
