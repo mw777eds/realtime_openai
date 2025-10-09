@@ -1302,10 +1302,15 @@ function saveCurrentLayout() {
         convos.node = { x: node.x, y: node.y, w: node.w, h: node.h };
       }
     }
-    const payload = { layout: nodes, convos, float: !!floatEnabled };
+    const key = isConvosDocked ? 'docked' : 'undocked';
+    const payload = { key, layout: nodes, convos, float: !!floatEnabled };
     if (window.FileMaker) {
       window.FileMaker.PerformScript('Grid_SaveLayout', JSON.stringify(payload));
     } else {
+      // Local fallback for development
+      try {
+        localStorage.setItem(`layout:${key}`, JSON.stringify(payload));
+      } catch (_) {}
       console.log('Layout JSON:', payload);
     }
     return true;
@@ -1341,6 +1346,95 @@ function restoreDefaultLayout() {
   } catch (e) {
     console.error('Failed to restore default layout', e);
     return false;
+  }
+}
+
+/* 
+ * Load and apply saved layout for current mode (localStorage fallback until FM is wired)
+ */
+function loadLayoutForCurrentMode() {
+  const key = isConvosDocked ? 'docked' : 'undocked';
+  try {
+    // Try FileMaker first (asynchronously via script) — to be wired later.
+    // Fallback to localStorage for dev.
+    const raw = localStorage.getItem(`layout:${key}`);
+    if (!raw) return false;
+    const payload = JSON.parse(raw);
+    applyLayout(payload);
+    return true;
+  } catch (e) {
+    console.warn('No saved layout found for', key);
+    return false;
+  }
+}
+
+/*
+ * Apply a saved layout payload: rebuild widgets at saved positions/sizes
+ */
+function applyLayout(payload) {
+  if (!grid || !payload || !Array.isArray(payload.layout)) return;
+
+  // Respect float setting
+  if (typeof payload.float === 'boolean' && typeof grid.float === 'function') {
+    floatEnabled = payload.float;
+    grid.float(floatEnabled);
+  }
+
+  // Ensure conversations docked state matches payload
+  if (payload.convos?.docked === false && isConvosDocked) {
+    undockConvos();
+  } else if (payload.convos?.docked !== false && !isConvosDocked) {
+    dockConvos();
+  }
+
+  // Remove all existing widgets
+  const existing = [...(grid.engine?.nodes || [])];
+  existing.forEach(n => n?.el && grid.removeWidget(n.el));
+  realtimeWidgetEl = null;
+  toastsWidgetEl = null;
+  textWidgetEl = null;
+  convosWidgetEl = null;
+
+  // Rebuild widgets from layout data
+  payload.layout.forEach(n => {
+    switch (n.widget) {
+      case 'realtime':
+        addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        break;
+      case 'toasts':
+        addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        break;
+      case 'text':
+        addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        break;
+      case 'conversations':
+        if (!isConvosDocked) {
+          addConversationsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        }
+        break;
+      default:
+        break;
+    }
+  });
+
+  // Update menu button states to reflect presence
+  const btnVoice = document.getElementById('btn-voice');
+  const btnText = document.getElementById('btn-text');
+  const btnToasts = document.getElementById('btn-toasts');
+  if (btnVoice) {
+    const on = !!realtimeWidgetEl;
+    btnVoice.classList.toggle('active', on);
+    btnVoice.setAttribute('aria-pressed', String(on));
+  }
+  if (btnText) {
+    const on = !!textWidgetEl;
+    btnText.classList.toggle('active', on);
+    btnText.setAttribute('aria-pressed', String(on));
+  }
+  if (btnToasts) {
+    const on = !!toastsWidgetEl;
+    btnToasts.classList.toggle('active', on);
+    btnToasts.setAttribute('aria-pressed', String(on));
   }
 }
 
@@ -1414,9 +1508,9 @@ document.addEventListener("DOMContentLoaded", () => {
     '#appGrid'
   );
 
-  function addRealtimeWidget() {
+  function addRealtimeWidget(pos) {
     if (realtimeWidgetEl) return;
-    const el = grid.addWidget({ x: 0, y: 0, w: 4, h: 4 });
+    const el = grid.addWidget({ x: pos?.x ?? 0, y: pos?.y ?? 0, w: pos?.w ?? 4, h: pos?.h ?? 4 });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="realtime-widget">
@@ -1448,9 +1542,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function addToastsWidget() {
+  function addToastsWidget(pos) {
     if (toastsWidgetEl) return;
-    const el = grid.addWidget({ x: 8, y: 0, w: 4, h: 6 });
+    const el = grid.addWidget({ x: pos?.x ?? 8, y: pos?.y ?? 0, w: pos?.w ?? 4, h: pos?.h ?? 6 });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="toasts-widget">
@@ -1474,17 +1568,17 @@ document.addEventListener("DOMContentLoaded", () => {
     toastsWidgetEl = null;
   }
 
-  function addConversationsWidget() {
+  function addConversationsWidget(pos) {
     if (convosWidgetEl) return;
-    const el = grid.addWidget({ x: 0, y: 0, w: 3, h: 8 });
+    const el = grid.addWidget({ x: pos?.x ?? 0, y: pos?.y ?? 0, w: pos?.w ?? 3, h: pos?.h ?? 8 });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
       <div class="conversations-widget">
         <div class="gs-handle">
           <span>Conversations</span>
           <div class="sidebar-actions">
-            <button class="icon-btn header-icon dock-convos-widget-btn" title="Dock to sidebar" aria-pressed="true"></button>
-            <button class="icon-btn header-icon new-convo-btn" title="New conversation"></button>
+            <button class="icon-btn header-icon dock-convos-widget-btn" title="Dock Conversations back to sidebar" aria-pressed="true"></button>
+            <button class="icon-btn header-icon new-convo-btn" title="Start a new conversation"></button>
           </div>
         </div>
         <div class="sidebar-search">
@@ -1538,8 +1632,10 @@ document.addEventListener("DOMContentLoaded", () => {
     isConvosDocked = true;
     if (dockBtn) {
       dockBtn.setAttribute('aria-pressed', 'false');
-      dockBtn.title = 'Undock to grid';
+      dockBtn.title = 'Undock Conversations to grid (click again to dock)';
     }
+    // Try to load saved docked layout
+    loadLayoutForCurrentMode();
   }
 
   function undockConvos() {
@@ -1552,13 +1648,15 @@ document.addEventListener("DOMContentLoaded", () => {
     isConvosDocked = false;
     if (dockBtn) {
       dockBtn.setAttribute('aria-pressed', 'true');
-      dockBtn.title = 'Dock back to sidebar';
+      dockBtn.title = 'Dock Conversations back to sidebar';
     }
+    // Try to load saved undocked layout
+    loadLayoutForCurrentMode();
   }
 
-  function addTextWidget() {
+  function addTextWidget(pos) {
     if (textWidgetEl) return;
-    const el = grid.addWidget({ x: 0, y: 12, w: 12, h: 6 });
+    const el = grid.addWidget({ x: pos?.x ?? 0, y: pos?.y ?? 12, w: pos?.w ?? 12, h: pos?.h ?? 6 });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="text-widget">
@@ -1670,8 +1768,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initial mount: conversations docked in sidebar by default
   dockConvos();
-  // Mount other widgets based on toggles
-  syncWidgets();
+  // Try to load a saved layout for the current mode; fallback to defaults
+  if (!loadLayoutForCurrentMode()) {
+    syncWidgets();
+  }
 });
 
 /* 
