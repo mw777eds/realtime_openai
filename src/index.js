@@ -15,6 +15,7 @@ let grid = null;
 let realtimeWidgetEl = null;
 let toastsWidgetEl = null;
 let textWidgetEl = null;
+let convosWidgetEl = null;
 let waveformResizeObserver = null;
 
 
@@ -1225,9 +1226,11 @@ function setUISettings(updateParamsJson) {
     const settings = typeof updateParamsJson === 'string' ? JSON.parse(updateParamsJson) : (updateParamsJson || {});
     const voice = settings.voice ?? settings.realtime ?? settings.audio;
     const text = settings.text ?? settings.chat;
+    const convos = settings.convos ?? settings.conversations ?? settings.sidebar;
     const toasts = settings.toasts ?? settings.debug_toasts ?? settings.debug;
     const voiceEl = document.getElementById('toggle-voice');
     const textEl = document.getElementById('toggle-text');
+    const convosEl = document.getElementById('toggle-convos');
     const toastsEl = document.getElementById('toggle-toasts');
     if (voiceEl != null && voice !== undefined) {
       voiceEl.checked = !!voice;
@@ -1236,6 +1239,10 @@ function setUISettings(updateParamsJson) {
     if (textEl != null && text !== undefined) {
       textEl.checked = !!text;
       textEl.dispatchEvent(new Event('change'));
+    }
+    if (convosEl != null && convos !== undefined) {
+      convosEl.checked = !!convos;
+      convosEl.dispatchEvent(new Event('change'));
     }
     if (toastsEl != null && toasts !== undefined) {
       toastsEl.checked = !!toasts;
@@ -1249,6 +1256,29 @@ function setUISettings(updateParamsJson) {
 }
 
 /* 
+ * Save current GridStack layout (x,y,w,h + widget type) to FileMaker or console.
+ */
+function saveCurrentLayout() {
+  if (!grid) return false;
+  try {
+    const nodes = (grid.engine?.nodes || []).map(n => ({
+      widget: n.el?.dataset?.widget || null,
+      x: n.x, y: n.y, w: n.w, h: n.h
+    }));
+    const payload = { layout: nodes };
+    if (window.FileMaker) {
+      window.FileMaker.PerformScript('Grid_SaveLayout', JSON.stringify(payload));
+    } else {
+      console.log('Layout JSON:', payload);
+    }
+    return true;
+  } catch (e) {
+    console.error('Failed to save layout', e);
+    return false;
+  }
+}
+
+/* 
  * Initialize the application when the DOM is fully loaded
  * 
  * Bootstraps GridStack and mounts the Realtime / Toasts / Text widgets based on toggles.
@@ -1257,6 +1287,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const voiceToggle = document.getElementById('toggle-voice');
   const textToggle = document.getElementById('toggle-text');
   const toastsToggle = document.getElementById('toggle-toasts');
+  const convosToggle = document.getElementById('toggle-convos');
+  const sidebarEl = document.querySelector('.sidebar');
 
   grid = GridStack.init(
     {
@@ -1284,6 +1316,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         </div>`;
     realtimeWidgetEl = el;
+    el.dataset.widget = 'realtime';
     // Hook up canvas and click handlers inside the widget
     initializeCanvas();
     const clickOverlay = document.getElementById('clickOverlay');
@@ -1313,6 +1346,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="toast-timeline" id="toast-timeline"></div>
         </div>`;
     toastsWidgetEl = el;
+    el.dataset.widget = 'toasts';
     // Prevent dragging from inside the timeline; only header should drag
     const timelineEl = contentEl.querySelector('.toast-timeline');
     if (timelineEl) {
@@ -1326,6 +1360,33 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!toastsWidgetEl) return;
     grid.removeWidget(toastsWidgetEl);
     toastsWidgetEl = null;
+  }
+
+  function addConversationsWidget() {
+    if (convosWidgetEl) return;
+    const el = grid.addWidget({ x: 0, y: 0, w: 3, h: 8 });
+    const contentEl = el.querySelector('.grid-stack-item-content') || el;
+    contentEl.innerHTML = `
+      <div class="conversations-widget">
+        <div class="gs-handle">Conversations</div>
+        <div class="conversation-list" style="flex:1 1 auto; overflow:auto; padding:8px;"></div>
+        <button class="new-convo-btn" style="margin:8px;">+ New</button>
+      </div>`;
+    convosWidgetEl = el;
+    el.dataset.widget = 'conversations';
+    // prevent drag from inner content
+    const listEl = contentEl.querySelector('.conversation-list');
+    const btnEl = contentEl.querySelector('.new-convo-btn');
+    ['mousedown','touchstart','pointerdown'].forEach(evt => {
+      listEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
+      btnEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
+    });
+  }
+
+  function removeConversationsWidget() {
+    if (!convosWidgetEl) return;
+    grid.removeWidget(convosWidgetEl);
+    convosWidgetEl = null;
   }
 
   function addTextWidget() {
@@ -1344,6 +1405,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         </div>`;
     textWidgetEl = el;
+    el.dataset.widget = 'text';
 
     // Wire up events
     const inputEl = contentEl.querySelector('#chat-input');
@@ -1390,11 +1452,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (voiceToggle?.checked) addRealtimeWidget(); else removeRealtimeWidget();
     if (textToggle?.checked) addTextWidget(); else removeTextWidget();
     if (toastsToggle?.checked) addToastsWidget(); else removeToastsWidget();
+    if (convosToggle?.checked) { addConversationsWidget(); sidebarEl?.classList.add('hidden'); } else { removeConversationsWidget(); sidebarEl?.classList.remove('hidden'); }
   }
 
   voiceToggle?.addEventListener('change', syncWidgets);
   textToggle?.addEventListener('change', syncWidgets);
   toastsToggle?.addEventListener('change', syncWidgets);
+  convosToggle?.addEventListener('change', syncWidgets);
+  document.getElementById('save-layout-btn')?.addEventListener('click', saveCurrentLayout);
 
   // Initial mount based on toggles
   syncWidgets();

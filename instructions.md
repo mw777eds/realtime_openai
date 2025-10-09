@@ -28,6 +28,7 @@ FileMaker AI Chat + Realtime API Unified Interface — Revised Requirements
 - Widgets:
   - Chat Widget (unified): renders canonical history; shows streaming rows; nests tool calls/results; markdown rendering.
   - Realtime Controls Widget: mic toggle, connection state (listening/thinking/speaking), device indicators.
+  - Conversations Widget: optional; mirrors the left sidebar list. When enabled, the fixed sidebar hides and the widget can be positioned/resized by the user.
   - Artifact Widgets: created programmatically when tools return artifacts; persisted and linked to parent message/artifact id.
 - Not needed: palette/spawner or external drag-in (no GridStack.setupDragIn). Artifacts are added programmatically by the app based on tool results. Nice-to-have: allow re-import of artifacts from a FileMaker window back into GridStack via a scripted action.
 - Trash bin: optional fixed drop zone (.trash-bin). On remove → call FM to delete the widget record; confirm if unsaved state exists.
@@ -177,8 +178,9 @@ Each item is append-only. Realtime is the authority while active; all modes read
 - Toasts widget:
   - Separated debug toasts into their own optional widget with a dedicated #toast-timeline container.
 - Toggles and programmatic control:
-  - Voice/Text/Toasts toggles add/remove widgets dynamically.
+  - Voice/Text/Toasts/Convos toggles add/remove widgets dynamically.
   - setUISettings exposed to FileMaker to flip toggles programmatically.
+  - Save Layout button serializes current grid positions/sizes with widget types and calls Grid_SaveLayout.
 
 15. Next steps
 - Text Chat widget:

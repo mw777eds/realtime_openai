@@ -36,6 +36,17 @@ html, body, #app {
   user-select: none;
 }
 
+.save-btn {
+  margin-left: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #111827;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
 .app-main {
   display: flex;
   height: calc(100% - 48px);
@@ -47,6 +58,9 @@ html, body, #app {
   background: #fafafa;
   display: flex;
   flex-direction: column;
+}
+.sidebar.hidden {
+  display: none;
 }
 
 .sidebar-header {
