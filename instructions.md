@@ -25,9 +25,9 @@ FileMaker AI Chat + Realtime API Unified Interface — Revised Requirements
   - float: true.
   - draggable: { handle: '.gs-handle', scroll: true }, resizable: { handles: 'e, se, s, sw, w' }.
 - Persistence:
-  - Maintain two saved layouts per session: one for Docked (sidebar visible) and one for Undocked (Conversations as a widget).
-  - Save Layout stores the current mode’s grid nodes (x,y,w,h + widget type), the float setting, and Conversations docked state via dockedConvo boolean (no separate node stored).
-  - Restore loads the saved layout for the current mode and re-creates widgets at their saved positions/sizes. If none is saved, defaults are applied and users can arrange, then Save Layout.
+  - Maintain two saved layouts per machine and mode: Docked (sidebar visible) and Undocked (Conversations as a widget). Saved under machineId (and optionally sessionId if you prefer per-chat layouts).
+  - Save Layout sends an envelope: { key, machineId, sessionId, settings { version, columns, cellHeight?, float, voice, text, toasts|debug, layout: [...] } } where layout is an array of nodes like { x, y, w, h, widget: "voice"|"text"|"toasts"|"convo" }.
+  - Restore loads the envelope for the current mode and applies settings (float and toggles) and settings.layout to rebuild widgets. If none is saved, defaults are applied and users can arrange, then Save Layout.
 - Widgets:
   - Chat Widget (unified): renders canonical history; shows streaming rows; nests tool calls/results; markdown rendering.
   - Voice Widget: mic toggle, connection state (listening/thinking/speaking), device indicators.
@@ -186,7 +186,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Header hamburger menu (top-right) groups controls: buttons for Voice/Text/Debug Toasts (active/inactive), Save Layout, Restore Default Layout, and Float On/Off toggle.
   - Conversations docking controlled by an anchor button in the sidebar and mirrored on the Conversations widget; undocking hides the sidebar and shows the widget; docking restores the sidebar and removes the widget.
   - setUISettings exposed to FileMaker to flip toggles programmatically; setUISettings({ convos: true }) undocks; setUISettings({ convos: false }) docks.
-  - Save Layout saves the current mode’s layout (docked or undocked): serializes current grid positions/sizes with widget types, current float setting, and the Conversations docked state (dockedConvo boolean), and calls Grid_SaveLayout.
+  - Save Layout saves the current mode using the envelope shape above (key/machineId/sessionId/settings{version,columns,cellHeight?,float,voice,text,toasts|debug,layout[...]}) and calls Grid_SaveLayout; Restore applies the saved envelope.
 
 15. Next steps
 - Initialization and per-machine config

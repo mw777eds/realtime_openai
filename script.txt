@@ -1,11 +1,11 @@
 FileMaker Scripts Mockups — Save/Load Grid Layout (per-mode)
 
 Overview
-- We persist two layouts per session: one when Conversations is Docked (sidebar visible) and one when Undocked (Conversations as a widget).
+- We persist two layouts per machine and mode: one when Conversations is Docked (sidebar visible) and one when Undocked (Conversations as a widget), keyed by machineId (and optionally sessionId if you want per-chat layouts).
 - Web app calls:
-  - Grid_SaveLayout(sessionId; JSON): saves current mode’s layout with key "docked" or "undocked".
-  - Grid_LoadLayout(sessionId; key): returns saved JSON for the given key (or empty if none).
-  - Optionally: Grid_RestoreDefaultLayout(sessionId; key): returns a default layout JSON for the given key.
+  - Grid_SaveLayout(sessionId; JSON): saves current mode’s layout envelope with key "docked" or "undocked" plus machineId and settings.
+  - Grid_LoadLayout(sessionId; key): returns the saved layout envelope for the given key (or empty if none).
+  - Optionally: Grid_RestoreDefaultLayout(sessionId; key): returns a default layout envelope for the given key.
 
 Suggested schema (example)
 - Table: GridLayouts
@@ -25,16 +25,24 @@ Suggested schema (example)
 
 JSON payload from Web
 {
+  "key": "docked",
   "machineId": "ABCDEF-123...",               // persistent device id
   "sessionId": "session-xyz",                 // current logical session id
-  "key": "docked" | "undocked",               // layout mode
-  "layout": [
-    { "widget": "realtime", "x": 0, "y": 0, "w": 4, "h": 4 },
-    { "widget": "toasts", "x": 8, "y": 0, "w": 4, "h": 6 },
-    { "widget": "text", "x": 0, "y": 12, "w": 12, "h": 6 }
-  ],
-  "convos": { "docked": true, "node": null },
-  "float": true
+  "settings": {
+    "version": 1,
+    "columns": 12,
+    "cellHeight": 8,                          // optional, px per row
+    "float": true,
+    "voice": true,
+    "text": true,
+    "toasts": true,                           // or "debug": true (front-end maps debug->toasts)
+    "layout": [
+      { "widget": "voice",  "x": 0, "y": 0,  "w": 2,  "h": 2 },
+      { "widget": "text",   "x": 2, "y": 0,  "w": 10, "h": 5 },
+      { "widget": "toasts", "x": 0, "y": 2,  "w": 2,  "h": 3 }
+      // If undocked, include: { "widget": "convo", "x": ..., "y": ..., "w": ..., "h": ... }
+    ]
+  }
 }
 
 Script: Grid_SaveLayout [ sessionId ; payloadJSON ]
@@ -133,7 +141,7 @@ Pseudo-steps:
          [ "float" ; 1 ; JSONNumber ] ;
          [ "convos.docked" ; 1 ; JSONNumber ] ;
          [ "convos.node" ; "" ; JSONNull ] ;
-         [ "layout[0].widget" ; "realtime" ; JSONString ] ;
+         [ "layout[0].widget" ; "voice" ; JSONString ] ;
          [ "layout[0].x" ; 0 ; JSONNumber ] ;
          [ "layout[0].y" ; 0 ; JSONNumber ] ;
          [ "layout[0].w" ; 4 ; JSONNumber ] ;
@@ -160,12 +168,12 @@ Pseudo-steps:
          [ "convos.node.y" ; 0 ; JSONNumber ] ;
          [ "convos.node.w" ; 3 ; JSONNumber ] ;
          [ "convos.node.h" ; 8 ; JSONNumber ] ;
-         [ "layout[0].widget" ; "conversations" ; JSONString ] ;
+         [ "layout[0].widget" ; "convo" ; JSONString ] ;
          [ "layout[0].x" ; 0 ; JSONNumber ] ;
          [ "layout[0].y" ; 0 ; JSONNumber ] ;
          [ "layout[0].w" ; 3 ; JSONNumber ] ;
          [ "layout[0].h" ; 8 ; JSONNumber ] ;
-         [ "layout[1].widget" ; "realtime" ; JSONString ] ;
+         [ "layout[1].widget" ; "voice" ; JSONString ] ;
          [ "layout[1].x" ; 3 ; JSONNumber ] ;
          [ "layout[1].y" ; 0 ; JSONNumber ] ;
          [ "layout[1].w" ; 5 ; JSONNumber ] ;
@@ -185,7 +193,7 @@ Pseudo-steps:
    End If
 3) Exit Script [ Result: $payload ]
 
-Updated persistence: per-machine (new/extended scripts)
+Updated persistence: per-machine (same script names)
 
 Script: App_Init [ sessionId ; machineId ]
 Purpose: Return initialization bundle for the WebView.
@@ -223,7 +231,7 @@ Pseudo-steps:
 3) Upsert record; set Settings = $settings; UpdatedAt = now.
 4) Exit Script [ Result: "OK" ]
 
-Script: Grid_SaveLayout_V2 [ sessionId ; machineId ; payloadJSON ]
+Script: Grid_SaveLayout [ sessionId ; machineId ; payloadJSON ]
 Purpose: Save layout keyed by machine and session.
 
 Parameters: payload as described in “JSON payload from Web”.
@@ -235,7 +243,7 @@ Pseudo-steps differences vs V1:
 - Find GridLayouts by MachineId + SessionId + Key
 - Upsert Payload, Float, UpdatedAt
 
-Script: Grid_LoadLayout_V2 [ sessionId ; machineId ; key ]
+Script: Grid_LoadLayout [ sessionId ; machineId ; key ]
 Purpose: Return saved layout for machineId + sessionId + key.
 
 Parameters (JSON or plain):
