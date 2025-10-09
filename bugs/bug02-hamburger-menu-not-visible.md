@@ -1,6 +1,6 @@
 # Bug 02 — Hamburger menu not visible in header (top-right)
 
-Status: Open
+Status: In Progress
 Owner: Frontend
 Created: 2025-10-09
 
@@ -69,6 +69,34 @@ Proposed fix path (ordered)
    - Add `pointer-events: auto` to `.menu-toggle`.
 4) Verify no conflicting `.bar` rules;
    - If conflicts exist, scope to `.app-header .menu-toggle .bar`.
+
+Fix plan (to apply in code)
+- Ensure header is above all grid/overlay content
+  - CSS:
+    - .app-header { position: sticky; top: 0; z-index: 6000; }
+- Ensure hamburger bars are always visible and clickable
+  - CSS:
+    - .menu-toggle { pointer-events: auto; }
+    - .app-header .menu-toggle .bar { width: 22px; height: 3px; background: #fff; margin: 3px 0; display: block; border-radius: 1px; }
+- Guard against overlap from realtime overlays and grid handles
+  - CSS (confirm these z-index relations):
+    - .realtime-widget .gs-handle { z-index: 2500; }
+    - .realtime-widget #iconOverlay { z-index: 1000; pointer-events: none; }
+    - .grid-stack-item .gs-resize-handle { z-index: 5000; }
+- Verify layout space for header
+  - CSS:
+    - .app-main { height: calc(100% - 48px); } (already present; re-verify)
+- HTML sanity checks
+  - index.html header must include:
+    - <button id="menu-toggle" class="menu-toggle" ...><span class="bar"></span><span class="bar"></span><span class="bar"></span></button>
+    - <div id="menu-panel" class="menu-panel" hidden>…</div>
+
+Verification steps
+- Add a temporary outline to confirm visibility and stacking:
+  - #menu-toggle { outline: 1px solid red; }
+- In DevTools, run: document.elementFromPoint(window.innerWidth-10, 10) → should return the button or a child span.bar.
+- Click the button → aria-expanded toggles and menu-panel.hidden flips accordingly.
+- Test both in a regular browser and the FileMaker Web Viewer.
 
 Acceptance criteria
 - Hamburger icon is visible on the header’s right side in both browser and FileMaker Web Viewer.
