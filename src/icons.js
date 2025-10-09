@@ -57,6 +57,10 @@ function createSVGIcon(type) {
  */
 function showIcon(type) {
   const overlay = document.getElementById('iconOverlay');
+  if (!overlay) {
+    // Realtime widget may be disabled/not mounted
+    return;
+  }
   /* Clear existing content */
   overlay.innerHTML = '';
   

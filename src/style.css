@@ -1,10 +1,162 @@
-#waveform {
+/* App layout */
+html, body, #app {
+  height: 100%;
+}
+
+#waveform,
+.realtime-widget #waveform {
   width: 100%;
   height: 100%;
   position: absolute;
   top: 0;
   left: 0;
   cursor: pointer;
+}
+
+/* Header / Sidebar / Workspace */
+.app-header {
+  height: 48px;
+  background-color: #006690;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.app-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.app-controls label {
+  margin-right: 12px;
+  font-size: 14px;
+  user-select: none;
+}
+
+.app-main {
+  display: flex;
+  height: calc(100% - 48px);
+}
+
+.sidebar {
+  width: 260px;
+  border-right: 1px solid #e5e7eb;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.conversation-list {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 8px;
+}
+
+.new-convo-btn {
+  margin: 8px;
+}
+
+.workspace {
+  flex: 1 1 auto;
+  position: relative;
+  overflow: auto;
+  padding: 8px;
+  box-sizing: border-box;
+  background: #f5f7fb;
+}
+
+.grid-stack {
+  min-height: 100%;
+  background: #f7f8fa;
+}
+
+/* Realtime widget */
+.realtime-widget {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.realtime-widget .gs-handle {
+  cursor: move;
+  background: #006690;
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 14px;
+  line-height: 1;
+  position: relative;
+  z-index: 2500;
+}
+
+.realtime-widget .rt-body {
+  position: relative;
+  flex: 1 1 auto;
+}
+
+.realtime-widget #waveform {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.realtime-widget #clickOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: transparent;
+  z-index: 2000;
+  cursor: pointer;
+}
+
+.realtime-widget #iconOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* Toasts widget */
+.toasts-widget {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.toasts-widget .gs-handle {
+  cursor: move;
+  background: #006690;
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.toasts-widget .toast-timeline {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 8px;
 }
 
 :root {
@@ -25,7 +177,7 @@ body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  cursor: pointer;
+  cursor: default;
 }
 
 p{
@@ -53,30 +205,9 @@ h1 {
   padding:11px 11px 11px 0px;
 }
 
-#clickOverlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: transparent;
-  z-index: 2000;
-  cursor: pointer;
-}
+/* clickOverlay styles are now scoped within .realtime-widget */
 
-#iconOverlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(255, 255, 255, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  pointer-events: none;
-}
+/* iconOverlay styles are now scoped within .realtime-widget */
 
 .icon {
   width: 50%;
@@ -131,13 +262,10 @@ button {
 
 /* Toast notification styles */
 .toast-timeline {
-  position: fixed;
-  top: 20px;
-  left: 0;
-  right: 0;
-  z-index: 4000;
-  pointer-events: none;
-  padding: 0 20px;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  padding: 8px;
 }
 
 .toast-row {

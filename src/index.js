@@ -1,4 +1,6 @@
 import { showIcon } from './icons.js';
+import { GridStack } from 'gridstack';
+import 'gridstack/dist/gridstack.min.css';
 
 /* 
  * Canvas-related variables for the audio waveform visualization
@@ -9,6 +11,10 @@ import { showIcon } from './icons.js';
 let canvas;
 let ctx;
 let animationId;
+let grid = null;
+let realtimeWidgetEl = null;
+let toastsWidgetEl = null;
+let textWidgetEl = null;
 
 
 /* 
@@ -28,6 +34,7 @@ window.createModelResponse = createModelResponse;
 window.updateSession = updateSession;
 window.showToast = showToast;
 window.sendContainerImageToRealtime = sendContainerImageToRealtime;
+window.setUISettings = setUISettings;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
 const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
@@ -798,12 +805,8 @@ function startWaveform() {
  * Function to create toast timeline container if it doesn't exist
  */
 function createToastTimeline() {
-  if (!document.getElementById('toast-timeline')) {
-    const timeline = document.createElement('div');
-    timeline.id = 'toast-timeline';
-    timeline.className = 'toast-timeline';
-    document.body.appendChild(timeline);
-  }
+  // Toasts widget owns #toast-timeline; no-op if absent
+  return;
 }
 
 /* 
@@ -1065,19 +1068,137 @@ async function toggleAudioTransmission() {
 }
 
 /* 
+ * UI settings control from FileMaker or URL
+ * Pass JSON like: {"voice":true, "text":false, "toasts":true}
+ */
+function setUISettings(updateParamsJson) {
+  try {
+    const settings = typeof updateParamsJson === 'string' ? JSON.parse(updateParamsJson) : (updateParamsJson || {});
+    const voice = settings.voice ?? settings.realtime ?? settings.audio;
+    const text = settings.text ?? settings.chat;
+    const toasts = settings.toasts ?? settings.debug_toasts ?? settings.debug;
+    const voiceEl = document.getElementById('toggle-voice');
+    const textEl = document.getElementById('toggle-text');
+    const toastsEl = document.getElementById('toggle-toasts');
+    if (voiceEl != null && voice !== undefined) {
+      voiceEl.checked = !!voice;
+      voiceEl.dispatchEvent(new Event('change'));
+    }
+    if (textEl != null && text !== undefined) {
+      textEl.checked = !!text;
+      textEl.dispatchEvent(new Event('change'));
+    }
+    if (toastsEl != null && toasts !== undefined) {
+      toastsEl.checked = !!toasts;
+      toastsEl.dispatchEvent(new Event('change'));
+    }
+    return true;
+  } catch (e) {
+    console.error('Invalid settings payload for setUISettings', e);
+    return false;
+  }
+}
+
+/* 
  * Initialize the application when the DOM is fully loaded
  * 
- * Sets up the canvas, adds event listeners, and shows the initial ear icon.
+ * Bootstraps GridStack and mounts the Realtime / Toasts / Text widgets based on toggles.
  */
 document.addEventListener("DOMContentLoaded", () => {
-  /* Initialize canvas */
-  initializeCanvas();
+  const voiceToggle = document.getElementById('toggle-voice');
+  const textToggle = document.getElementById('toggle-text');
+  const toastsToggle = document.getElementById('toggle-toasts');
 
-  /* Add click handler to the click overlay */
-  document.getElementById('clickOverlay').addEventListener('click', toggleAudioTransmission);
+  grid = GridStack.init(
+    {
+      column: 12,
+      float: true,
+      margin: 6,
+      draggable: { handle: '.gs-handle' },
+      resizable: { handles: 'e,se,s,sw,w' }
+    },
+    '#appGrid'
+  );
 
-  /* Show ear icon by default */
-  showIcon('ear');
+  function addRealtimeWidget() {
+    if (realtimeWidgetEl) return;
+    realtimeWidgetEl = grid.addWidget({
+      x: 0, y: 0, w: 8, h: 12,
+      content: `
+        <div class="realtime-widget">
+          <div class="gs-handle">Realtime</div>
+          <div class="rt-body">
+            <canvas id="waveform"></canvas>
+            <div id="clickOverlay"></div>
+            <div id="iconOverlay"></div>
+          </div>
+        </div>`
+    });
+    // Hook up canvas and click handlers inside the widget
+    initializeCanvas();
+    const clickOverlay = document.getElementById('clickOverlay');
+    if (clickOverlay) {
+      clickOverlay.addEventListener('click', toggleAudioTransmission);
+    }
+    showIcon('ear');
+  }
+
+  function removeRealtimeWidget() {
+    if (!realtimeWidgetEl) return;
+    grid.removeWidget(realtimeWidgetEl);
+    realtimeWidgetEl = null;
+  }
+
+  function addToastsWidget() {
+    if (toastsWidgetEl) return;
+    toastsWidgetEl = grid.addWidget({
+      x: 8, y: 0, w: 4, h: 6,
+      content: `
+        <div class="toasts-widget">
+          <div class="gs-handle">Activity</div>
+          <div class="toast-timeline" id="toast-timeline"></div>
+        </div>`
+    });
+  }
+
+  function removeToastsWidget() {
+    if (!toastsWidgetEl) return;
+    grid.removeWidget(toastsWidgetEl);
+    toastsWidgetEl = null;
+  }
+
+  function addTextWidget() {
+    if (textWidgetEl) return;
+    textWidgetEl = grid.addWidget({
+      x: 0, y: 12, w: 12, h: 6,
+      content: `
+        <div class="text-widget">
+          <div class="gs-handle">Text Chat</div>
+          <div class="text-body" style="padding:8px;color:#333;">
+            Text chat UI will appear here. This is a placeholder.
+          </div>
+        </div>`
+    });
+  }
+
+  function removeTextWidget() {
+    if (!textWidgetEl) return;
+    grid.removeWidget(textWidgetEl);
+    textWidgetEl = null;
+  }
+
+  function syncWidgets() {
+    if (voiceToggle?.checked) addRealtimeWidget(); else removeRealtimeWidget();
+    if (textToggle?.checked) addTextWidget(); else removeTextWidget();
+    if (toastsToggle?.checked) addToastsWidget(); else removeToastsWidget();
+  }
+
+  voiceToggle?.addEventListener('change', syncWidgets);
+  textToggle?.addEventListener('change', syncWidgets);
+  toastsToggle?.addEventListener('change', syncWidgets);
+
+  // Initial mount based on toggles
+  syncWidgets();
 });
 
 /* 

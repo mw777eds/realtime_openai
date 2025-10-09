@@ -17,6 +17,9 @@
   },
   "type": "module",
   "browserslist": "> 0.5%, last 2 versions, not dead",
+  "dependencies": {
+    "gridstack": "^10.4.1"
+  },
   "devDependencies": {
     "eslint": "^8.16.0",
     "eslint-config-prettier": "^8.5.0",

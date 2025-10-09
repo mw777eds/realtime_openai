@@ -8,9 +8,26 @@
     <title>JSDev</title>
   </head>
   <body>
-    <canvas id="waveform"></canvas>
-    <div id="clickOverlay"></div>
-    <div id="iconOverlay"></div>
+    <div id="app">
+      <header class="app-header">
+        <div class="app-title">Empowered Agents</div>
+        <div class="app-controls">
+          <label><input type="checkbox" id="toggle-voice" checked /> Voice</label>
+          <label><input type="checkbox" id="toggle-text" /> Text</label>
+          <label><input type="checkbox" id="toggle-toasts" checked /> Debug Toasts</label>
+        </div>
+      </header>
+      <div class="app-main">
+        <aside class="sidebar">
+          <div class="sidebar-header">Conversations</div>
+          <div id="conversation-list" class="conversation-list"></div>
+          <button id="new-conversation-btn" class="new-convo-btn">+ New</button>
+        </aside>
+        <section class="workspace">
+          <div class="grid-stack" id="appGrid"></div>
+        </section>
+      </div>
+    </div>
     <script type="module">
       import "./src/index.js";
     </script>
