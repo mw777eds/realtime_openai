@@ -1123,7 +1123,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function addRealtimeWidget() {
     if (realtimeWidgetEl) return;
-    const el = grid.addWidget({ x: 0, y: 0, w: 8, h: 12 });
+    const el = grid.addWidget({ x: 0, y: 0, w: 2, h: 2 });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="realtime-widget">
@@ -1140,20 +1140,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const clickOverlay = document.getElementById('clickOverlay');
     if (clickOverlay) {
       clickOverlay.addEventListener('click', toggleAudioTransmission);
-      // Prevent GridStack drag from starting anywhere except the header handle
-      ['mousedown','touchstart','pointerdown'].forEach(evt => {
-        clickOverlay.addEventListener(evt, (e) => e.stopPropagation(), true);
-      });
-    }
-    const rtBody = contentEl.querySelector('.rt-body');
-    if (rtBody) {
-      ['mousedown','touchstart','pointerdown'].forEach(evt => {
-        rtBody.addEventListener(evt, (e) => {
-          if (!e.target.closest('.gs-handle')) {
-            e.stopPropagation();
-          }
-        }, true);
-      });
     }
     showIcon('ear');
   }
