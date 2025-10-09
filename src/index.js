@@ -35,6 +35,7 @@ window.createModelResponse = createModelResponse;
 window.updateSession = updateSession;
 window.showToast = showToast;
 window.sendContainerImageToRealtime = sendContainerImageToRealtime;
+window.sendTextToRealtime = sendTextToRealtime;
 window.setUISettings = setUISettings;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
@@ -825,6 +826,138 @@ function createToastTimeline() {
   return;
 }
 
+/*
+ * Text chat helpers
+ */
+
+/**
+ * Append a chat message to the Text widget, if mounted.
+ * @param {'user'|'assistant'|'system'} role
+ * @param {string} text
+ * @param {object} [opts]
+ */
+function appendChatMessage(role, text, opts = {}) {
+  const list = document.getElementById('chat-messages');
+  if (!list || !text) return;
+
+  const row = document.createElement('div');
+  row.className = `chat-message ${role}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+
+  row.appendChild(bubble);
+  list.appendChild(row);
+
+  // autoscroll
+  list.scrollTop = list.scrollHeight;
+}
+
+/**
+ * Send typed text into Realtime if connected; otherwise, hand off to FileMaker (placeholder).
+ * @param {string} text
+ * @param {boolean} requestResponse
+ * @param {string[]|string} modalitiesOverride
+ * @returns {boolean}
+ */
+function sendTextToRealtime(text, requestResponse = true, modalitiesOverride = null) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return false;
+
+  if (dc && dc.readyState === 'open') {
+    const conversationEvent = {
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: trimmed }]
+      }
+    };
+    dc.send(JSON.stringify(conversationEvent));
+
+    if (requestResponse) {
+      const normalizedModalitiesOverride = normalizeModalitiesList(modalitiesOverride) || modalitiesOverride;
+      const modalities = getResponseModalities(normalizedModalitiesOverride);
+      const responseCreateEvent = {
+        type: 'response.create',
+        response: { modalities }
+      };
+      dc.send(JSON.stringify(responseCreateEvent));
+    }
+
+    // mirror in UI
+    appendChatMessage('user', trimmed, { source: 'typed' });
+    return true;
+  }
+
+  // Fallback: try FileMaker text mode (if available)
+  if (window.FileMaker) {
+    try {
+      window.FileMaker.PerformScript('Chat_SendMessage', JSON.stringify({ role: 'user', message: trimmed }));
+      appendChatMessage('user', trimmed, { source: 'typed' });
+      return true;
+    } catch (e) {
+      console.warn('Chat_SendMessage script not available', e);
+    }
+  }
+
+  showToast('Realtime not connected and text mode not available.', 'tool-error', 'left', null, 5);
+  return false;
+}
+
+/**
+ * Handle Send button / Enter key
+ */
+function handleChatSend() {
+  const input = document.getElementById('chat-input');
+  if (!input) return;
+  const value = input.value.trim();
+  if (!value) return;
+
+  sendTextToRealtime(value, true);
+  input.value = '';
+  // keep focus for rapid typing
+  input.focus();
+}
+
+/**
+ * Read file as DataURL
+ * @param {File} file
+ * @returns {Promise<string>}
+ */
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Handle image file(s) selected from the text widget
+ * @param {FileList} files
+ * @param {string} promptFromInput
+ */
+async function handleChatImageUpload(files, promptFromInput = '') {
+  if (!files || files.length === 0) return;
+  try {
+    const file = files[0];
+    const dataUrl = await readFileAsDataUrl(file);
+    const mimeType = file.type || undefined;
+
+    // Mirror in UI
+    appendChatMessage('user', promptFromInput ? `${promptFromInput} [image shared]` : '[image shared]', { source: 'typed' });
+
+    // Send to Realtime
+    sendContainerImageToRealtime({ dataUrl, mimeType, prompt: promptFromInput }, true);
+  } catch (e) {
+    console.error('Failed to read image for upload', e);
+    showToast('Failed to attach image.', 'tool-error', 'left', null, 5);
+  }
+}
+
 /* 
  * Function to show a toast notification
  * 
@@ -1202,11 +1335,49 @@ document.addEventListener("DOMContentLoaded", () => {
     contentEl.innerHTML = `
         <div class="text-widget">
           <div class="gs-handle">Text Chat</div>
-          <div class="text-body" style="padding:8px;color:#333;">
-            Text chat UI will appear here. This is a placeholder.
+          <div class="chat-messages" id="chat-messages"></div>
+          <div class="chat-input">
+            <input type="file" id="chat-image-input" accept="image/*" style="display:none" />
+            <button class="chat-btn" id="chat-image-btn" title="Attach image">📎</button>
+            <textarea id="chat-input" rows="1" placeholder="Type a message..."></textarea>
+            <button class="chat-btn primary" id="chat-send-btn">Send</button>
           </div>
         </div>`;
     textWidgetEl = el;
+
+    // Wire up events
+    const inputEl = contentEl.querySelector('#chat-input');
+    const sendBtn = contentEl.querySelector('#chat-send-btn');
+    const imageBtn = contentEl.querySelector('#chat-image-btn');
+    const imageInput = contentEl.querySelector('#chat-image-input');
+    const messagesEl = contentEl.querySelector('#chat-messages');
+
+    if (sendBtn) sendBtn.addEventListener('click', handleChatSend);
+    if (inputEl) {
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          handleChatSend();
+        }
+      });
+      // prevent grid drag from content
+      ['mousedown','touchstart','pointerdown'].forEach(evt => {
+        inputEl.addEventListener(evt, (e) => e.stopPropagation(), true);
+      });
+    }
+    if (messagesEl) {
+      ['mousedown','touchstart','pointerdown'].forEach(evt => {
+        messagesEl.addEventListener(evt, (e) => e.stopPropagation(), true);
+      });
+    }
+    if (imageBtn && imageInput) {
+      imageBtn.addEventListener('click', () => imageInput.click());
+      imageInput.addEventListener('change', (e) => {
+        handleChatImageUpload(e.target.files, inputEl ? inputEl.value.trim() : '');
+        // do not clear input text automatically; user may want to keep it
+        e.target.value = '';
+      });
+    }
   }
 
   function removeTextWidget() {
@@ -1374,11 +1545,15 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         // Only try to access output if it exists and has elements
         if (realtimeEvent.response.output && realtimeEvent.response.output.length > 0) {
           console.log("Model response:", realtimeEvent.response.output[0]);
-          if (window.FileMaker && realtimeEvent.response.output[0].content?.[0]?.transcript) {
+          const transcript = realtimeEvent.response.output[0].content?.[0]?.transcript;
+          if (window.FileMaker && transcript) {
             window.FileMaker.PerformScript("LogMessage", JSON.stringify({
               role: "assistant",
-              message: realtimeEvent.response.output[0].content[0].transcript
+              message: transcript
             }));
+          }
+          if (transcript) {
+            appendChatMessage('assistant', transcript, { source: 'realtime' });
           }
         } else {
           console.log("Model response: No output available");
@@ -1396,6 +1571,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
               message: transcript
             }));
           }
+          appendChatMessage('user', transcript, { source: 'realtime' });
         }
       }
 
