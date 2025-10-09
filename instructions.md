@@ -28,6 +28,7 @@ FileMaker AI Chat + Realtime API Unified Interface — Revised Requirements
   - Maintain two saved layouts per machine and mode: Docked (sidebar visible) and Undocked (Conversations as a widget). Saved under machineId (and optionally sessionId if you prefer per-chat layouts).
   - Save Layout sends an envelope: { key, machineId, sessionId, settings { version, columns, cellHeight?, float, voice, text, toasts|debug, layout: [...] } } where layout is an array of nodes like { x, y, w, h, widget: "voice"|"text"|"toasts"|"convo" }.
   - Restore loads the envelope for the current mode and applies settings (float and toggles) and settings.layout to rebuild widgets. If none is saved, defaults are applied and users can arrange, then Save Layout.
+  - Front-end caching: on load, fetch both “docked” and “undocked” settings once and cache them in-memory; docking/undocking applies the cached settings immediately without a round-trip. Save Layout updates both FileMaker and the in-memory cache for the current mode.
 - Widgets:
   - Chat Widget (unified): renders canonical history; shows streaming rows; nests tool calls/results; markdown rendering.
   - Voice Widget: mic toggle, connection state (listening/thinking/speaking), device indicators.

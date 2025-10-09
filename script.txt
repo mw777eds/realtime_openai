@@ -4,7 +4,7 @@ Overview
 - We persist two layouts per machine and mode: one when Conversations is Docked (sidebar visible) and one when Undocked (Conversations as a widget), keyed by machineId (and optionally sessionId if you want per-chat layouts).
 - Web app calls:
   - Grid_SaveLayout(sessionId; JSON): saves current mode’s layout envelope with key "docked" or "undocked" plus machineId and settings.
-  - Grid_LoadLayout(sessionId; key): returns the saved layout envelope for the given key (or empty if none).
+  - Grid_LoadLayout(sessionId; machineId; key): returns the saved layout envelope for the given key (or empty if none).
   - Optionally: Grid_RestoreDefaultLayout(sessionId; key): returns a default layout envelope for the given key.
 
 Suggested schema (example)
@@ -46,11 +46,10 @@ JSON payload from Web
 }
 
 Script: Grid_SaveLayout [ sessionId ; payloadJSON ]
-Purpose: Save current mode’s layout for a session.
+Purpose: Save current mode’s layout for a session and machine.
 
 Parameters:
-- ScriptParameter expected as JSON string when called directly from Web.
-- If you prefer 2 parameters, wrap the pair into a JSON container: { "sessionId": "...", "payload": { ... } }.
+- ScriptParameter expected as JSON string: { key, machineId, sessionId, settings{ version, columns, cellHeight?, float, voice, text, toasts|debug, layout[] } }
 
 Pseudo-steps:
 1) Set Variable [ $raw = Get ( ScriptParameter ) ]
@@ -66,33 +65,41 @@ Pseudo-steps:
         Get ( UUID )
       )
    ]
-5) Set Variable [ $key = JSONGetElement ( $json ; "key" ) ]
-6) If [ IsEmpty ( $key ) ]
+5) Set Variable [ $machineId =
+      Case(
+        not IsEmpty ( JSONGetElement ( $json ; "machineId" ) ) ; JSONGetElement ( $json ; "machineId" ) ;
+        $$MachineId
+      )
+   ]
+6) Set Variable [ $key = JSONGetElement ( $json ; "key" ) ]
+7) If [ IsEmpty ( $key ) ]
      Set Variable [ $key = "docked" ]
    End If
-7) Set Variable [ $float = JSONGetElement ( $json ; "float" ) ]
-8) Go to Layout [ “GridLayouts” (GridLayouts) ]
-9) Enter Find Mode [ Pause: Off ]
-10) Set Field [ GridLayouts::SessionId ; $sessionId ]
-11) Set Field [ GridLayouts::Key ; $key ]
-12) Perform Find
-13) If [ Get ( FoundCount ) = 0 ]
+8) Set Variable [ $float = JSONGetElement ( $json ; "settings.float" ) ]
+9) Go to Layout [ “GridLayouts” (GridLayouts) ]
+10) Enter Find Mode [ Pause: Off ]
+11) Set Field [ GridLayouts::MachineId ; $machineId ]
+12) Set Field [ GridLayouts::SessionId ; $sessionId ]
+13) Set Field [ GridLayouts::Key ; $key ]
+14) Perform Find
+15) If [ Get ( FoundCount ) = 0 ]
       New Record/Request
+      Set Field [ GridLayouts::MachineId ; $machineId ]
       Set Field [ GridLayouts::SessionId ; $sessionId ]
       Set Field [ GridLayouts::Key ; $key ]
     End If
-14) Set Field [ GridLayouts::Payload ; $json ]
-15) Set Field [ GridLayouts::Float ; Case ( $float ; 1 ; 0 ) ]
-16) Set Field [ GridLayouts::UpdatedAt ; Get ( CurrentTimestamp ) ]
-17) Commit Records/Requests [ No dialog ]
-18) Exit Script [ Result: "OK" ]
+16) Set Field [ GridLayouts::Payload ; $json ]
+17) Set Field [ GridLayouts::Float ; Case ( $float ; 1 ; 0 ) ]
+18) Set Field [ GridLayouts::UpdatedAt ; Get ( CurrentTimestamp ) ]
+19) Commit Records/Requests [ No dialog ]
+20) Exit Script [ Result: "OK" ]
 
-Script: Grid_LoadLayout [ sessionId ; key ]
-Purpose: Return the saved layout JSON for a given session + key to the Web Viewer.
+Script: Grid_LoadLayout [ sessionId ; machineId ; key ]
+Purpose: Return the saved layout envelope for a given machineId + sessionId + key to the Web Viewer.
 
 Parameters (as JSON or plain):
-- If using JSON param: { "sessionId": "...", "key": "docked" }
-- If using plain param: pass just the key and rely on $$SessionId.
+- JSON param: { "sessionId": "...", "machineId": "...", "key": "docked" }
+- Plain param (not recommended): pass just the key; rely on $$SessionId/$$MachineId.
 
 Pseudo-steps:
 1) Set Variable [ $raw = Get ( ScriptParameter ) ]
@@ -114,19 +121,28 @@ Pseudo-steps:
         Get ( AccountName )
       )
    ]
-5) Go to Layout [ “GridLayouts” (GridLayouts) ]
-6) Enter Find Mode [ Pause: Off ]
-7) Set Field [ GridLayouts::SessionId ; $sessionId ]
-8) Set Field [ GridLayouts::Key ; $key ]
-9) Perform Find
-10) If [ Get ( FoundCount ) = 0 ]
+5) Set Variable [ $machineId =
+      Case(
+        PatternCount ( $raw ; "{" ) ;
+          JSONGetElement ( $raw ; "machineId" ) ;
+        not PatternCount ( $raw ; "{" ) and not IsEmpty ( $$MachineId ) ;
+          $$MachineId
+      )
+   ]
+6) Go to Layout [ “GridLayouts” (GridLayouts) ]
+7) Enter Find Mode [ Pause: Off ]
+8) Set Field [ GridLayouts::MachineId ; $machineId ]
+9) Set Field [ GridLayouts::SessionId ; $sessionId ]
+10) Set Field [ GridLayouts::Key ; $key ]
+11) Perform Find
+12) If [ Get ( FoundCount ) = 0 ]
       Exit Script [ Result: "" ] // none saved
     End If
-11) Set Variable [ $payload = GridLayouts::Payload ]
-12) Exit Script [ Result: $payload ]
+13) Set Variable [ $payload = GridLayouts::Payload ]
+14) Exit Script [ Result: $payload ]
 
 Script: Grid_RestoreDefaultLayout [ sessionId ; key ]
-Purpose: Return a default layout JSON for given mode; Web applies it as a reset.
+Purpose: Return a default layout envelope for given mode; Web applies it as a reset.
 
 Parameters:
 - Similar to Grid_LoadLayout; determine $key and $sessionId the same way.
@@ -138,56 +154,61 @@ Pseudo-steps:
      Set Variable [ $payload = 
        JSONSetElement ( "{}" ;
          [ "key" ; "docked" ; JSONString ] ;
-         [ "float" ; 1 ; JSONNumber ] ;
-         [ "convos.docked" ; 1 ; JSONNumber ] ;
-         [ "convos.node" ; "" ; JSONNull ] ;
-         [ "layout[0].widget" ; "voice" ; JSONString ] ;
-         [ "layout[0].x" ; 0 ; JSONNumber ] ;
-         [ "layout[0].y" ; 0 ; JSONNumber ] ;
-         [ "layout[0].w" ; 4 ; JSONNumber ] ;
-         [ "layout[0].h" ; 4 ; JSONNumber ] ;
-         [ "layout[1].widget" ; "toasts" ; JSONString ] ;
-         [ "layout[1].x" ; 8 ; JSONNumber ] ;
-         [ "layout[1].y" ; 0 ; JSONNumber ] ;
-         [ "layout[1].w" ; 4 ; JSONNumber ] ;
-         [ "layout[1].h" ; 6 ; JSONNumber ] ;
-         [ "layout[2].widget" ; "text" ; JSONString ] ;
-         [ "layout[2].x" ; 0 ; JSONNumber ] ;
-         [ "layout[2].y" ; 12 ; JSONNumber ] ;
-         [ "layout[2].w" ; 12 ; JSONNumber ] ;
-         [ "layout[2].h" ; 6 ; JSONNumber ]
+         [ "settings.version" ; 1 ; JSONNumber ] ;
+         [ "settings.columns" ; 12 ; JSONNumber ] ;
+         [ "settings.cellHeight" ; 8 ; JSONNumber ] ;
+         [ "settings.float" ; 1 ; JSONNumber ] ;
+         [ "settings.voice" ; 1 ; JSONNumber ] ;
+         [ "settings.text" ; 0 ; JSONNumber ] ;
+         [ "settings.toasts" ; 1 ; JSONNumber ] ;
+         [ "settings.layout[0].widget" ; "voice" ; JSONString ] ;
+         [ "settings.layout[0].x" ; 0 ; JSONNumber ] ;
+         [ "settings.layout[0].y" ; 0 ; JSONNumber ] ;
+         [ "settings.layout[0].w" ; 4 ; JSONNumber ] ;
+         [ "settings.layout[0].h" ; 4 ; JSONNumber ] ;
+         [ "settings.layout[1].widget" ; "toasts" ; JSONString ] ;
+         [ "settings.layout[1].x" ; 8 ; JSONNumber ] ;
+         [ "settings.layout[1].y" ; 0 ; JSONNumber ] ;
+         [ "settings.layout[1].w" ; 4 ; JSONNumber ] ;
+         [ "settings.layout[1].h" ; 6 ; JSONNumber ] ;
+         [ "settings.layout[2].widget" ; "text" ; JSONString ] ;
+         [ "settings.layout[2].x" ; 0 ; JSONNumber ] ;
+         [ "settings.layout[2].y" ; 12 ; JSONNumber ] ;
+         [ "settings.layout[2].w" ; 12 ; JSONNumber ] ;
+         [ "settings.layout[2].h" ; 6 ; JSONNumber ]
        )
      ]
    Else
      Set Variable [ $payload = 
        JSONSetElement ( "{}" ;
          [ "key" ; "undocked" ; JSONString ] ;
-         [ "float" ; 1 ; JSONNumber ] ;
-         [ "convos.docked" ; 0 ; JSONNumber ] ;
-         [ "convos.node.x" ; 0 ; JSONNumber ] ;
-         [ "convos.node.y" ; 0 ; JSONNumber ] ;
-         [ "convos.node.w" ; 3 ; JSONNumber ] ;
-         [ "convos.node.h" ; 8 ; JSONNumber ] ;
-         [ "layout[0].widget" ; "convo" ; JSONString ] ;
-         [ "layout[0].x" ; 0 ; JSONNumber ] ;
-         [ "layout[0].y" ; 0 ; JSONNumber ] ;
-         [ "layout[0].w" ; 3 ; JSONNumber ] ;
-         [ "layout[0].h" ; 8 ; JSONNumber ] ;
-         [ "layout[1].widget" ; "voice" ; JSONString ] ;
-         [ "layout[1].x" ; 3 ; JSONNumber ] ;
-         [ "layout[1].y" ; 0 ; JSONNumber ] ;
-         [ "layout[1].w" ; 5 ; JSONNumber ] ;
-         [ "layout[1].h" ; 4 ; JSONNumber ] ;
-         [ "layout[2].widget" ; "toasts" ; JSONString ] ;
-         [ "layout[2].x" ; 8 ; JSONNumber ] ;
-         [ "layout[2].y" ; 0 ; JSONNumber ] ;
-         [ "layout[2].w" ; 4 ; JSONNumber ] ;
-         [ "layout[2].h" ; 6 ; JSONNumber ] ;
-         [ "layout[3].widget" ; "text" ; JSONString ] ;
-         [ "layout[3].x" ; 0 ; JSONNumber ] ;
-         [ "layout[3].y" ; 12 ; JSONNumber ] ;
-         [ "layout[3].w" ; 12 ; JSONNumber ] ;
-         [ "layout[3].h" ; 6 ; JSONNumber ]
+         [ "settings.version" ; 1 ; JSONNumber ] ;
+         [ "settings.columns" ; 12 ; JSONNumber ] ;
+         [ "settings.cellHeight" ; 8 ; JSONNumber ] ;
+         [ "settings.float" ; 1 ; JSONNumber ] ;
+         [ "settings.voice" ; 1 ; JSONNumber ] ;
+         [ "settings.text" ; 0 ; JSONNumber ] ;
+         [ "settings.toasts" ; 1 ; JSONNumber ] ;
+         [ "settings.layout[0].widget" ; "convo" ; JSONString ] ;
+         [ "settings.layout[0].x" ; 0 ; JSONNumber ] ;
+         [ "settings.layout[0].y" ; 0 ; JSONNumber ] ;
+         [ "settings.layout[0].w" ; 3 ; JSONNumber ] ;
+         [ "settings.layout[0].h" ; 8 ; JSONNumber ] ;
+         [ "settings.layout[1].widget" ; "voice" ; JSONString ] ;
+         [ "settings.layout[1].x" ; 3 ; JSONNumber ] ;
+         [ "settings.layout[1].y" ; 0 ; JSONNumber ] ;
+         [ "settings.layout[1].w" ; 5 ; JSONNumber ] ;
+         [ "settings.layout[1].h" ; 4 ; JSONNumber ] ;
+         [ "settings.layout[2].widget" ; "toasts" ; JSONString ] ;
+         [ "settings.layout[2].x" ; 8 ; JSONNumber ] ;
+         [ "settings.layout[2].y" ; 0 ; JSONNumber ] ;
+         [ "settings.layout[2].w" ; 4 ; JSONNumber ] ;
+         [ "settings.layout[2].h" ; 6 ; JSONNumber ] ;
+         [ "settings.layout[3].widget" ; "text" ; JSONString ] ;
+         [ "settings.layout[3].x" ; 0 ; JSONNumber ] ;
+         [ "settings.layout[3].y" ; 12 ; JSONNumber ] ;
+         [ "settings.layout[3].w" ; 12 ; JSONNumber ] ;
+         [ "settings.layout[3].h" ; 6 ; JSONNumber ]
        )
      ]
    End If
@@ -206,7 +227,7 @@ Returns (JSON):
   "machineId": "...",
   "sessionId": "...",
   "settings": { "voice": false, "text": true, "toasts": true, "float": true, "mode": "docked" },
-  "layout": { ...payload from Grid_LoadLayout_V2... } | "",
+  "layout": { ...payload from Grid_LoadLayout... } | "",
   "history": [ ...canonical messages... ]              // optional, may be empty array if none
 }
 
@@ -257,5 +278,5 @@ Pseudo-steps:
 
 Notes
 - If you need per-user persistence, include AccountName in the key or store AccountName alongside MachineId for multi-user shared machines.
-- For autosave UX, trigger Grid_SaveLayout_V2 from the Web app on dragstop/resizestop/remove and when toggling docked/undocked.
+- For autosave UX, trigger Grid_SaveLayout from the Web app on dragstop/resizestop/remove and when toggling docked/undocked.
 - Realtime start: do not call initializeWebRTC on page load; start it when the Realtime widget is enabled (or via explicit FileMaker call after bootstrap).

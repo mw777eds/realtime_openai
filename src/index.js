@@ -20,6 +20,100 @@ let isConvosDocked = true;
 let floatEnabled = true;
 let waveformResizeObserver = null;
 
+/* Persisted per-mode settings cached in the web app */
+let persistedSettings = { docked: null, undocked: null };
+
+function getCurrentMode() {
+  return isConvosDocked ? 'docked' : 'undocked';
+}
+
+function loadPersistedSettings() {
+  try {
+    const rawDocked = localStorage.getItem('settings:docked');
+    const rawUndocked = localStorage.getItem('settings:undocked');
+    if (rawDocked) {
+      const env = JSON.parse(rawDocked);
+      if (env && env.settings && Array.isArray(env.settings.layout)) {
+        persistedSettings.docked = env.settings;
+      }
+    }
+    if (rawUndocked) {
+      const env = JSON.parse(rawUndocked);
+      if (env && env.settings && Array.isArray(env.settings.layout)) {
+        persistedSettings.undocked = env.settings;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load persisted settings from localStorage', e);
+  }
+}
+
+/* Rebuild grid from a layout array (+ float), respecting current dock state for convo */
+function rebuildFromLayout(layout = [], float = floatEnabled) {
+  if (!grid) return;
+
+  if (typeof float === 'boolean' && typeof grid.float === 'function') {
+    floatEnabled = float;
+    grid.float(floatEnabled);
+  }
+
+  // Remove all existing widgets
+  const existing = [...(grid.engine?.nodes || [])];
+  existing.forEach(n => n?.el && grid.removeWidget(n.el));
+  realtimeWidgetEl = null;
+  toastsWidgetEl = null;
+  textWidgetEl = null;
+  convosWidgetEl = null;
+
+  // Add widgets back based on layout
+  layout.forEach(n => {
+    switch (n.widget) {
+      case 'voice':
+        addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        break;
+      case 'toasts':
+        addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        break;
+      case 'text':
+        addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        break;
+      case 'convo':
+        if (!isConvosDocked) {
+          addConversationsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        }
+        break;
+      default:
+        break;
+    }
+  });
+}
+
+/* Apply settings for a given mode (docked/undocked): set toggles, float, and rebuild layout */
+function applySettingsForMode(mode) {
+  const settings = persistedSettings[mode];
+  if (!settings || !Array.isArray(settings.layout)) return false;
+
+  // Update menu button states
+  const btnVoice = document.getElementById('btn-voice');
+  const btnText = document.getElementById('btn-text');
+  const btnToasts = document.getElementById('btn-toasts');
+  if (btnVoice) {
+    btnVoice.classList.toggle('active', !!settings.voice);
+    btnVoice.setAttribute('aria-pressed', String(!!settings.voice));
+  }
+  if (btnText) {
+    btnText.classList.toggle('active', !!settings.text);
+    btnText.setAttribute('aria-pressed', String(!!settings.text));
+  }
+  if (btnToasts) {
+    btnToasts.classList.toggle('active', !!settings.toasts);
+    btnToasts.setAttribute('aria-pressed', String(!!settings.toasts));
+  }
+
+  rebuildFromLayout(settings.layout, settings.float);
+  return true;
+}
+
 
 /* 
  * Expose functions to FileMaker
@@ -1295,16 +1389,43 @@ function saveCurrentLayout() {
       x: n.x, y: n.y, w: n.w, h: n.h
     }));
     const key = isConvosDocked ? 'docked' : 'undocked';
-    const payload = { key, layout: nodes, float: !!floatEnabled };
+
+    // Snapshot current toggles by widget presence
+    const settingsSnapshot = {
+      version: 1,
+      columns: grid.engine?.column || grid.opts?.column || 12,
+      // Note: cellHeight not currently dynamic; include if you expose it
+      float: !!floatEnabled,
+      voice: !!realtimeWidgetEl,
+      text: !!textWidgetEl,
+      toasts: !!toastsWidgetEl,
+      layout: nodes
+    };
+
+    // Cache in-memory and localStorage for this mode
+    persistedSettings[key] = settingsSnapshot;
+    try {
+      localStorage.setItem(`settings:${key}`, JSON.stringify({
+        key,
+        machineId: window.__machineId || "",
+        sessionId: window.__sessionId || "",
+        settings: settingsSnapshot
+      }));
+    } catch (_) {}
+
+    // Send to FileMaker
+    const envelope = {
+      key,
+      machineId: window.__machineId || "",
+      sessionId: window.__sessionId || "",
+      settings: settingsSnapshot
+    };
     if (window.FileMaker) {
-      window.FileMaker.PerformScript('Grid_SaveLayout', JSON.stringify(payload));
+      window.FileMaker.PerformScript('Grid_SaveLayout', JSON.stringify(envelope));
     } else {
-      // Local fallback for development
-      try {
-        localStorage.setItem(`layout:${key}`, JSON.stringify(payload));
-      } catch (_) {}
-      console.log('Layout JSON:', payload);
+      console.log('Layout envelope:', envelope);
     }
+
     return true;
   } catch (e) {
     console.error('Failed to save layout', e);
@@ -1347,15 +1468,22 @@ function restoreDefaultLayout() {
 function loadLayoutForCurrentMode() {
   const key = isConvosDocked ? 'docked' : 'undocked';
   try {
-    // Try FileMaker first (asynchronously via script) — to be wired later.
-    // Fallback to localStorage for dev.
-    const raw = localStorage.getItem(`layout:${key}`);
-    if (!raw) return false;
-    const payload = JSON.parse(raw);
-    applyLayout(payload);
-    return true;
+    // Use cached settings if available; else attempt localStorage
+    if (!persistedSettings[key]) {
+      const raw = localStorage.getItem(`settings:${key}`);
+      if (raw) {
+        const env = JSON.parse(raw);
+        if (env && env.settings && Array.isArray(env.settings.layout)) {
+          persistedSettings[key] = env.settings;
+        }
+      }
+    }
+    if (persistedSettings[key]) {
+      return applySettingsForMode(key);
+    }
+    return false;
   } catch (e) {
-    console.warn('No saved layout found for', key);
+    console.warn('No saved settings found for', key, e);
     return false;
   }
 }
@@ -1627,8 +1755,11 @@ document.addEventListener("DOMContentLoaded", () => {
       dockBtn.setAttribute('aria-pressed', 'false');
       dockBtn.title = 'Undock Conversations to grid (click again to dock)';
     }
-    // Try to load saved docked layout
-    loadLayoutForCurrentMode();
+    // Apply cached docked settings if present
+    if (!applySettingsForMode('docked')) {
+      // fallback to legacy loader
+      loadLayoutForCurrentMode();
+    }
   }
 
   function undockConvos() {
@@ -1643,8 +1774,11 @@ document.addEventListener("DOMContentLoaded", () => {
       dockBtn.setAttribute('aria-pressed', 'true');
       dockBtn.title = 'Dock Conversations back to sidebar';
     }
-    // Try to load saved undocked layout
-    loadLayoutForCurrentMode();
+    // Apply cached undocked settings if present
+    if (!applySettingsForMode('undocked')) {
+      // fallback to legacy loader
+      loadLayoutForCurrentMode();
+    }
   }
 
   function addTextWidget(pos) {
@@ -1760,10 +1894,13 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initial mount: conversations docked in sidebar by default
+  loadPersistedSettings();
   dockConvos();
-  // Try to load a saved layout for the current mode; fallback to defaults
-  if (!loadLayoutForCurrentMode()) {
-    syncWidgets();
+  // Try to apply cached settings for current mode; fallback to defaults
+  if (!applySettingsForMode('docked')) {
+    if (!loadLayoutForCurrentMode()) {
+      syncWidgets();
+    }
   }
 });
 
