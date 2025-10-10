@@ -1,0 +1,94 @@
+FileMaker ⇄ Web Viewer Bootstrap Flow (ASCII)
+
+A) FileMaker-push (recommended)
+The FileMaker script App_Init prepares state and then calls a JS function with the result.
+
++-----------------------+                         +---------------------+
+| FileMaker Layout      |                         | Web Viewer (JS/DOM) |
+| (Web Viewer object)   |                         | index.html + JS     |
++-----------+-----------+                         +----------+----------+
+            |                                                  |
+            | 1) Web Viewer renders index.html, JS loads       |
+            |    (DOMContentLoaded fires)                      |
+            |                                                  v
+            |                                    JS registers window.bootstrapApp
+            |                                    (no network calls yet)
+            |                                                  ^
+            |                                                  |
+            | 2) FM runs App_Init (triggered on layout load or |
+            |    Web Viewer ready)                             |
+            v                                                  |
++---------------------------+                                  |
+| Script: App_Init          |                                  |
+| Params: { sessionId? }    |                                  |
++------------+--------------+                                  |
+             |                                                  |
+             | 3) Determine mode = settings.mode or "docked"    |
+             |    - Resolve user via Get(AccountName)/Get(Username)
+             |    - Resolve sessionId (param → settings.lastSessionId
+             |      → new UUID); persist lastSessionId if needed
+             | 4) Load layout (key = mode) with precedence:
+             |      session (SessionId+Key) → user (UserId+Key) → defaults
+             | 5) Load chat history for sessionId
+             | 6) Build JSON { sessionId, settings, layout, history }
+             | 7) Perform JavaScript in Web Viewer:
+             |    window.bootstrapApp(<JSON>) ------------------------+
+             v                                                         |
++-----------------------+                                              |
+| Web Viewer (JS)       |                                              |
++-----------+-----------+                                              |
+            | 8) bootstrapApp applies:                                 |
+            |    - Set window.__sessionId                              |
+            |    - Apply settings.mode (docked/undocked), toggles      |
+            |    - Cache settings per mode                             |
+            |    - Apply layout (rebuild grid, mount widgets)          |
+            |    - Render history into Text widget (or buffer until    |
+            |      Text mounts)                                        |
+            |                                                          |
+            | 9) User interacts; subsequent saves/flushes call back    |
+            |    into FM (Grid_SaveLayout, Chat_SaveHistory, etc.)     |
+            v                                                          v
+         [UI ready]                                             [FM scripts persist]
+
+
+B) Web-initiated handshake (alternative)
+JS asks FileMaker for init, then FM calls back into JS with the bundle.
+
++---------------------+                                +---------------------------+
+| Web Viewer (JS)     |                                | FileMaker Script: App_Init|
++----------+----------+                                +------------+--------------+
+           | 1) On DOMContentLoaded:                         |
+           |    window.FileMaker.PerformScript(              |
+           |      "App_Init", JSONString({ sessionId? }) )   |
+           |                                                 |
+           |                                            2) App_Init resolves user,
+           |                                               sessionId, loads mode,
+           |                                               layout, history, builds
+           |                                               JSON result
+           |                                            3) Perform JavaScript in Web
+           |                                               Viewer:
+           |    <----------- window.bootstrapApp(<JSON>) ----+
+           v
+4) bootstrapApp applies state (same as A.8)
+
+
+Where your steps (3–7) occur (inside App_Init)
+3) Determine mode = settings.mode ("docked"|"undocked"), default "docked".
+4) Load layout for that mode with precedence: session → user → defaults.
+5) Load chat history for sessionId.
+6) Build JSON result { sessionId, settings, layout, history }.
+7) Exit Script by invoking Perform JavaScript in Web Viewer: window.bootstrapApp(<JSON>).
+
+
+Example JSON bundle (returned to JS)
+{
+  "sessionId": "session-abc123",
+  "settings": { "voice": true, "text": true, "toasts": true, "float": true, "mode": "docked", "lastSessionId": "session-abc123" },
+  "layout": { "key":"docked", "settings": { "version":1, "columns":12, "cellHeight":8, "float":true, "voice":true, "text":true, "toasts":true, "layout":[ ... ] } } | "",
+  "history": [ /* canonical items, possibly empty */ ]
+}
+
+Notes
+- UserId is derived in FileMaker via Get(Username)/Get(AccountName); no need to pass from JS.
+- Realtime should not auto-start on load; only start when the Voice widget is enabled/mounted or FM explicitly requests it.
+- If sessionId param is empty, App_Init should use settings.lastSessionId for that user; if none, create a new one and persist it.
