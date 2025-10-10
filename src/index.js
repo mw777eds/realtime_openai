@@ -137,6 +137,8 @@ window.showToast = showToast;
 window.sendContainerImageToRealtime = sendContainerImageToRealtime;
 window.sendTextToRealtime = sendTextToRealtime;
 window.setUISettings = setUISettings;
+window.getChatHistoryText = chatHistoryToText;
+window.logChatHistory = logChatHistory;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
 const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
@@ -996,6 +998,35 @@ function appendChatMessage(role, text, opts = {}) {
   if (!text) return;
   recordChatMessage(role, text, opts);
   renderChatMessage(role, text);
+}
+
+/**
+ * Convert the in-memory chat history buffer to a plain text transcript.
+ * Format: "[HH:MM:SS] role: message" per line.
+ * Returns "(no chat history yet)" if empty.
+ */
+function chatHistoryToText() {
+  if (!Array.isArray(chatBuffer) || chatBuffer.length === 0) {
+    return "(no chat history yet)";
+  }
+  return chatBuffer.map(m => {
+    const d = m && typeof m.ts === 'number' ? new Date(m.ts) : null;
+    const time = d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString() : '';
+    const role = m?.role || 'unknown';
+    const text = m?.text || '';
+    return time ? `[${time}] ${role}: ${text}` : `${role}: ${text}`;
+  }).join('\n');
+}
+
+/**
+ * Log the current chat history as plain text to the console.
+ * Returns the same text string for convenience.
+ */
+function logChatHistory() {
+  const text = chatHistoryToText();
+  // Use a single console.log to keep it easy to copy
+  console.log(text);
+  return text;
 }
 
 /**
