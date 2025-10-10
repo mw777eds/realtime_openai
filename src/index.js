@@ -36,13 +36,13 @@ function loadPersistedSettings() {
     const rawUndocked = localStorage.getItem('settings:undocked');
     if (rawDocked) {
       const env = JSON.parse(rawDocked);
-      if (env && env.settings && Array.isArray(env.settings.layout)) {
+      if (env && env.settings && Array.isArray(env.settings.layout) && !persistedSettings.docked) {
         persistedSettings.docked = env.settings;
       }
     }
     if (rawUndocked) {
       const env = JSON.parse(rawUndocked);
-      if (env && env.settings && Array.isArray(env.settings.layout)) {
+      if (env && env.settings && Array.isArray(env.settings.layout) && !persistedSettings.undocked) {
         persistedSettings.undocked = env.settings;
       }
     }
@@ -95,6 +95,14 @@ function rebuildFromLayout(layout = [], float = floatEnabled) {
 function applySettingsForMode(mode) {
   const settings = persistedSettings[mode];
   if (!settings || !Array.isArray(settings.layout)) return false;
+
+  // Apply grid sizing options before rebuilding
+  if (typeof settings.columns === 'number' && grid && typeof grid.column === 'function') {
+    grid.column(settings.columns);
+  }
+  if (typeof settings.cellHeight === 'number' && grid && typeof grid.cellHeight === 'function') {
+    grid.cellHeight(settings.cellHeight);
+  }
 
   // Update menu button states
   const btnVoice = document.getElementById('btn-voice');
@@ -1056,8 +1064,6 @@ function logChatBufferRaw(pretty = true) {
  * Seeds in-memory caches and defers layout application to initial mount.
  */
 function bootstrapApp(payload) {
-  console.log('bootstrapApp called');
-  console.log('payload', JSON.parse(payload));
   try {
     const raw = typeof payload === 'string' ? JSON.parse(payload) : (payload || {});
     const data = (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'success'))
