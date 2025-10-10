@@ -273,11 +273,14 @@ Parameters (JSON prefered):
 
 Returns (JSON):
 {
-  "machineId": "...",
-  "sessionId": "...",
-  "settings": { "voice": false, "text": true, "toasts": true, "float": true, "mode": "docked" },
-  "layout": { ...payload from Grid_LoadLayout... } | "",
-  "history": [ ...canonical messages... ]              // optional, may be empty array if none
+  "success": true,
+  "result": {
+    "machineId": "...",
+    "sessionId": "...",
+    "settings": { "voice": false, "text": true, "toasts": true, "float": true, "mode": "docked" },
+    "layout": { ...payload from Grid_LoadLayout... } | "",
+    "history": [ ...canonical messages... ]              // optional, may be empty array if none
+  }
 }
 
 Pseudo-steps:
@@ -287,7 +290,7 @@ Pseudo-steps:
 4) Call Grid_LoadLayout with (scope:"session", sessionId, key:mode). If empty, call Grid_LoadLayout with (scope:"machine", machineId, key:mode).
 5) Call Chat_GetHistory(sessionId) to get canonical history (optional).
 6) Build JSON result { machineId, sessionId, settings, layout, history }.
-7) Exit Script [ Result: $json ]
+7) Exit Script [ Result: JSONSetElement ( JSONSetElement ( "{}" ; [ "success" ; 1 ; JSONBoolean ] ) ; [ "result" ; $json ; JSONObject ] ) ]
 
 Script: Settings_SavePreferences [ sessionId ; machineId ; settingsJSON ]
 Purpose: Persist UI toggles per machine and session.

@@ -1057,7 +1057,14 @@ function logChatBufferRaw(pretty = true) {
  */
 function bootstrapApp(payload) {
   try {
-    const data = typeof payload === 'string' ? JSON.parse(payload) : (payload || {});
+    const raw = typeof payload === 'string' ? JSON.parse(payload) : (payload || {});
+    const data = (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'success'))
+      ? (raw.success ? (raw.result || {}) : null)
+      : raw;
+    if (!data) {
+      console.error('bootstrapApp failed: App_Init returned success=false or invalid payload');
+      return false;
+    }
     const mode = data.key || data.mode || 'docked';
 
     // Seed chat history buffer first
