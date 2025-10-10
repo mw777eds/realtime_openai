@@ -1433,32 +1433,78 @@ function bootstrapApp(payload) {
     }
     const mode = data.key || data.mode || 'docked';
 
-    // Seed history: canonical sessionHistory and simple chatBuffer (for back-compat)
+    // Seed history: preserve tool_call/tool_result; buffer only message items for legacy UI
     if (Array.isArray(data.history)) {
-      sessionHistory.splice(
-        0,
-        sessionHistory.length,
-        ...data.history.map(m => ({
+      const incoming = [];
+      const bufferMsgs = [];
+      for (const m of data.history) {
+        const ts = (m && typeof m.ts === 'number') ? m.ts : Date.now();
+
+        // Canonical tool_call
+        if (m && m.type === 'tool_call') {
+          incoming.push({
+            id: createId('tc'),
+            ts,
+            role: 'tool',
+            type: 'tool_call',
+            content: null,
+            metadata: {
+              responseId: m.responseId || null,
+              call_id: m.call_id || m.id || null,
+              tool: {
+                name: m.name || m?.tool?.name || 'unknown',
+                arguments: (m?.args ?? m?.arguments ?? m?.tool?.arguments) ?? null
+              }
+            }
+          });
+          continue;
+        }
+
+        // Canonical tool_result
+        if (m && m.type === 'tool_result') {
+          incoming.push({
+            id: createId('tr'),
+            ts,
+            role: 'tool',
+            type: 'tool_result',
+            content: (m.output ?? m.content) ?? null,
+            metadata: {
+              call_id: m.call_id || null,
+              status: m.status || null
+            }
+          });
+          continue;
+        }
+
+        // Message-like entries
+        const role = m?.role || 'system';
+        const text = typeof m?.content === 'string'
+          ? m.content
+          : (typeof m?.text === 'string' ? m.text : '');
+
+        incoming.push({
           id: createId('m'),
-          ts: (m && typeof m.ts === 'number') ? m.ts : Date.now(),
-          role: (m && m.role) ? m.role : 'system',
+          ts,
+          role,
           type: 'message',
-          content: (m && typeof m.text === 'string') ? m.text : '',
-          metadata: { source: (m && m.source) ? m.source : null }
-        }))
-      );
+          content: text,
+          metadata: { source: m?.metadata?.source ?? m?.source ?? null }
+        });
+
+        if (text) {
+          bufferMsgs.push({
+            role,
+            text,
+            ts,
+            source: m?.metadata?.source ?? m?.source ?? null
+          });
+        }
+      }
+
+      sessionHistory.splice(0, sessionHistory.length, ...incoming);
       trimHistory();
 
-      chatBuffer.splice(
-        0,
-        chatBuffer.length,
-        ...data.history.map(m => ({
-          role: m && m.role ? m.role : 'system',
-          text: m && typeof m.text === 'string' ? m.text : '',
-          ts: m && typeof m.ts === 'number' ? m.ts : Date.now(),
-          source: m && m.source ? m.source : null
-        }))
-      );
+      chatBuffer.splice(0, chatBuffer.length, ...bufferMsgs);
 
       // If Text widget is already mounted, render immediately
       renderChatFromHistory();
