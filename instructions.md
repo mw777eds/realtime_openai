@@ -188,7 +188,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
 - Layout modes:
   - Two independent, user-configurable layouts are supported: Docked (sidebar visible) and Undocked (Conversations as a widget). Save Layout persists the current mode; switching modes attempts to load and apply the saved layout for that mode.
 - Toggles and programmatic control:
-  - Header hamburger menu (top-right) groups controls: buttons for Voice/Text/Debug Toasts (active/inactive), Save Layout, Restore Default Layout, and Float On/Off toggle.
+  - Header hamburger menu (top-right) groups controls: buttons for Voice/Text/Debug Toasts/Show Tool Calls (active/inactive), Save Layout, Restore Default Layout, and Float On/Off toggle.
   - Conversations docking controlled by an anchor button in the sidebar and mirrored on the Conversations widget; undocking hides the sidebar and shows the widget; docking restores the sidebar and removes the widget.
   - setUISettings exposed to FileMaker to flip toggles programmatically; setUISettings({ convos: true }) undocks; setUISettings({ convos: false }) docks.
   - Save Layout (menu) saves the current mode as a machine template using the envelope shape above with scope:"machine" and calls Grid_SaveLayout; Restore applies the saved machine envelope.
