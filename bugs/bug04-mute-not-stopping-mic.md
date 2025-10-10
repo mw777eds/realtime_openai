@@ -23,5 +23,7 @@
    - Expected: Assistant resumes listening/responding.
 
 ## Status
-- Implemented replaceTrack(null) and reacquire-on-resume.
-- Needs verification on target platform (FileMaker Web Viewer on macOS).
+- Fixed and verified on macOS FileMaker Web Viewer.
+- Resolution: Detach RTCRtpSender on mute via audioSender.replaceTrack(null), stop/disable local mic track, and reacquire/reattach on unmute; also release mic on cleanupWebRTC.
+- Commit: 71be0ef — fix: detach audio sender on mute and restore on unmute.
+- Result: Server VAD no longer triggers while muted; waveform stops; unmute restores mic and listening as expected.
