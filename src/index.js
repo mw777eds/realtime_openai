@@ -468,7 +468,7 @@ function sendToolResponse(toolResponse) {
         output: JSON.stringify(toolResponse.output)
       }
     };
-    
+
     console.log("Preparing to send response:", response);
     console.log("Response stringified:", JSON.stringify(response));
 
@@ -856,7 +856,7 @@ function initializeCanvas() {
 
   // Disconnect previous observer if any
   if (waveformResizeObserver) {
-    try { waveformResizeObserver.disconnect(); } catch (_) {}
+    try { waveformResizeObserver.disconnect(); } catch (_) { }
   }
 
   resizeToContainer();
@@ -1056,6 +1056,8 @@ function logChatBufferRaw(pretty = true) {
  * Seeds in-memory caches and defers layout application to initial mount.
  */
 function bootstrapApp(payload) {
+  console.log('bootstrapApp called');
+  console.log('payload', JSON.parse(payload));
   try {
     const raw = typeof payload === 'string' ? JSON.parse(payload) : (payload || {});
     const data = (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'success'))
@@ -1231,23 +1233,23 @@ async function handleChatImageUpload(files, promptFromInput = '') {
  */
 function showToast(message, type, side, jsonData = null, durationSeconds = 5) {
   createToastTimeline();
-  
+
   const timeline = document.getElementById('toast-timeline');
   if (!timeline) {
     return;
   }
-  
+
   // Create a row for this toast
   const toastRow = document.createElement('div');
   toastRow.className = `toast-row ${side}`;
-  
+
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
   toast.textContent = message;
-  
+
   // Store the auto-dismiss timeout ID so we can cancel it if needed
   let autoDismissTimeout;
-  
+
   // Add click handler based on whether JSON data is provided
   // Check for non-empty string or valid object
   if (jsonData && (typeof jsonData === 'object' || (typeof jsonData === 'string' && jsonData.trim() !== ''))) {
@@ -1256,11 +1258,11 @@ function showToast(message, type, side, jsonData = null, durationSeconds = 5) {
     if (typeof jsonData !== 'string') {
       jsonString = JSON.stringify(jsonData);
     }
-    
+
     toast.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      
+
       if (window.FileMaker) {
         try {
           window.FileMaker.PerformScript("ShowJSON", jsonString);
@@ -1281,11 +1283,11 @@ function showToast(message, type, side, jsonData = null, durationSeconds = 5) {
       dismissToast(toastRow);
     });
   }
-  
+
   // Add toast to row, then row to timeline
   toastRow.appendChild(toast);
   timeline.appendChild(toastRow);
-  
+
   // Auto-dismiss after specified duration
   autoDismissTimeout = setTimeout(() => {
     dismissToast(toastRow);
@@ -1557,7 +1559,7 @@ function saveCurrentLayout() {
         key,
         settings: settingsSnapshot
       }));
-    } catch (_) {}
+    } catch (_) { }
 
     // Send to FileMaker (user-scoped default; FileMaker derives user via Get( Username ))
     const envelope = {
@@ -1803,7 +1805,7 @@ document.addEventListener("DOMContentLoaded", () => {
     grid.removeWidget(realtimeWidgetEl);
     realtimeWidgetEl = null;
     if (waveformResizeObserver) {
-      try { waveformResizeObserver.disconnect(); } catch (_) {}
+      try { waveformResizeObserver.disconnect(); } catch (_) { }
       waveformResizeObserver = null;
     }
   }
@@ -1822,7 +1824,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Prevent dragging from inside the timeline; only header should drag
     const timelineEl = contentEl.querySelector('.toast-timeline');
     if (timelineEl) {
-      ['mousedown','touchstart','pointerdown'].forEach(evt => {
+      ['mousedown', 'touchstart', 'pointerdown'].forEach(evt => {
         timelineEl.addEventListener(evt, (e) => e.stopPropagation(), true);
       });
     }
@@ -1859,7 +1861,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnEl = contentEl.querySelector('.new-convo-btn');
     const searchEl = contentEl.querySelector('.conversation-search-input');
     const dockBtn = contentEl.querySelector('.dock-convos-widget-btn');
-    ['mousedown','touchstart','pointerdown'].forEach(evt => {
+    ['mousedown', 'touchstart', 'pointerdown'].forEach(evt => {
       listEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
       btnEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
       searchEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
@@ -1960,12 +1962,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
       // prevent grid drag from content
-      ['mousedown','touchstart','pointerdown'].forEach(evt => {
+      ['mousedown', 'touchstart', 'pointerdown'].forEach(evt => {
         inputEl.addEventListener(evt, (e) => e.stopPropagation(), true);
       });
     }
     if (messagesEl) {
-      ['mousedown','touchstart','pointerdown'].forEach(evt => {
+      ['mousedown', 'touchstart', 'pointerdown'].forEach(evt => {
         messagesEl.addEventListener(evt, (e) => e.stopPropagation(), true);
       });
     }
@@ -2135,20 +2137,20 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         window.activeResponseId = null;
       }
 
-        if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.some(item => item.type === "function_call")) {
-          const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
-          console.log("Model tool calls:", toolCalls);
+      if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.some(item => item.type === "function_call")) {
+        const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
+        console.log("Model tool calls:", toolCalls);
 
-          if (toolCalls.some(call => call.name === containerImageToolName)) {
-            showToast("Assistant requested an image from FileMaker", "tool-call", "right", JSON.stringify({ toolCalls }), 8);
-          }
+        if (toolCalls.some(call => call.name === containerImageToolName)) {
+          showToast("Assistant requested an image from FileMaker", "tool-call", "right", JSON.stringify({ toolCalls }), 8);
+        }
 
-          if (window.FileMaker) {
-            showIcon('thought');
+        if (window.FileMaker) {
+          showIcon('thought');
 
-            // Clear any pending timeouts
-            if (window.earIconTimeout) {
-              clearTimeout(window.earIconTimeout);
+          // Clear any pending timeouts
+          if (window.earIconTimeout) {
+            clearTimeout(window.earIconTimeout);
             delete window.earIconTimeout;
           }
 
