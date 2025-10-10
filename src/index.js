@@ -141,6 +141,7 @@ window.getChatHistoryText = chatHistoryToText;
 window.logChatHistory = logChatHistory;
 window.getChatBuffer = getChatBuffer;
 window.logChatBufferRaw = logChatBufferRaw;
+window.bootstrapApp = bootstrapApp;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
 const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
@@ -1047,6 +1048,65 @@ function logChatBufferRaw(pretty = true) {
   const out = pretty ? JSON.stringify(getChatBuffer(), null, 2) : JSON.stringify(getChatBuffer());
   console.log(out);
   return out;
+}
+
+/**
+ * Bootstrap the app from FileMaker with session, settings, and history.
+ * Accepts an object or a JSON string.
+ * Seeds in-memory caches and defers layout application to initial mount.
+ */
+function bootstrapApp(payload) {
+  try {
+    const data = typeof payload === 'string' ? JSON.parse(payload) : (payload || {});
+    const mode = data.key || data.mode || 'docked';
+
+    // Seed chat history buffer first
+    if (Array.isArray(data.history)) {
+      chatBuffer.splice(
+        0,
+        chatBuffer.length,
+        ...data.history.map(m => ({
+          role: m && m.role ? m.role : 'system',
+          text: m && typeof m.text === 'string' ? m.text : '',
+          ts: m && typeof m.ts === 'number' ? m.ts : Date.now(),
+          source: m && m.source ? m.source : null
+        }))
+      );
+      // If Text widget is already mounted, render immediately
+      const list = document.getElementById('chat-messages');
+      if (list) {
+        list.innerHTML = '';
+        chatBuffer.forEach(m => renderChatMessage(m.role, m.text));
+      }
+    }
+
+    // Cache per-mode settings (normalize debug -> toasts)
+    const s = data.settings || {};
+    const toasts = (s.toasts !== undefined) ? !!s.toasts : !!s.debug;
+    if (Array.isArray(s.layout)) {
+      persistedSettings[mode] = {
+        version: s.version || 1,
+        columns: s.columns || 12,
+        cellHeight: s.cellHeight,
+        float: !!s.float,
+        voice: !!s.voice,
+        text: !!s.text,
+        toasts,
+        layout: s.layout
+      };
+    }
+
+    // Persist desired mode and session id for later application
+    window.__bootstrapMode = mode;
+    if (data.sessionId) {
+      window.__sessionId = data.sessionId;
+    }
+
+    return true;
+  } catch (e) {
+    console.error('bootstrapApp failed', e);
+    return false;
+  }
 }
 
 /**
@@ -1976,11 +2036,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isConvosDocked) undockConvos(); else dockConvos();
   });
 
-  // Initial mount: conversations docked in sidebar by default
+  // Initial mount: honor bootstrap mode if provided; default to docked
   loadPersistedSettings();
-  dockConvos();
-  // Try to apply cached settings for current mode; fallback to defaults
-  if (!applySettingsForMode('docked')) {
+  const bootMode = window.__bootstrapMode || 'docked';
+  if (bootMode === 'docked') {
+    dockConvos();
+  } else {
+    undockConvos();
+  }
+  // Try to apply cached settings for selected mode; fallback to defaults
+  if (!applySettingsForMode(bootMode)) {
     if (!loadLayoutForCurrentMode()) {
       syncWidgets();
     }
