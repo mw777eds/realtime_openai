@@ -397,20 +397,20 @@ function prepareSessionConfiguration(instructions, toolsStr, toolChoice, session
     voice: "verse"
   };
 
-  const sessionConfig = deepMerge(defaultSessionConfig, additionalConfig);
+  const finalSessionConfig = deepMerge(defaultSessionConfig, additionalConfig);
 
-  if (!Array.isArray(sessionConfig.modalities) || sessionConfig.modalities.length === 0) {
-    sessionConfig.modalities = [...DEFAULT_MODALITIES];
+  if (!Array.isArray(finalSessionConfig.modalities) || finalSessionConfig.modalities.length === 0) {
+    finalSessionConfig.modalities = [...DEFAULT_MODALITIES];
   }
 
-  sessionConfig.tools = Array.isArray(sessionConfig.tools) ? sessionConfig.tools : [];
+  finalSessionConfig.tools = Array.isArray(finalSessionConfig.tools) ? finalSessionConfig.tools : [];
 
   const defaultModalities = Array.isArray(defaultModalitiesOverride) && defaultModalitiesOverride.length > 0
     ? defaultModalitiesOverride
-    : sessionConfig.modalities;
+    : finalSessionConfig.modalities;
 
   return {
-    sessionConfig,
+    sessionConfig: finalSessionConfig,
     defaultModalities,
     containerToolName: imageTool.name
   };
@@ -2391,12 +2391,12 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
   try {
     const preparedConfig = prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfig);
-    const sessionConfig = preparedConfig.sessionConfig;
+    const resolvedSessionConfig = preparedConfig.sessionConfig;
     defaultResponseModalities = Array.isArray(preparedConfig.defaultModalities) && preparedConfig.defaultModalities.length > 0
       ? [...preparedConfig.defaultModalities]
       : [...DEFAULT_MODALITIES];
     containerImageToolName = preparedConfig.containerToolName || DEFAULT_CONTAINER_IMAGE_TOOL.name;
-    currentSessionConfig = sessionConfig;
+    currentSessionConfig = resolvedSessionConfig;
 
     pc = new RTCPeerConnection();
 
@@ -2427,7 +2427,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     dc.addEventListener("open", () => {
       const sessionUpdateEvent = {
         type: "session.update",
-        session: sessionConfig
+        session: resolvedSessionConfig
       };
       dc.send(JSON.stringify(sessionUpdateEvent));
 
