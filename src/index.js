@@ -820,20 +820,37 @@ function updateSession(updateParamsJson) {
  * Enables both the microphone input and AI audio output tracks.
  * Called when the user unmutes or starts a new conversation.
  */
-function startAudioTransmission() {
-
-  /* Unmute microphone input */
-  if (audioTrack) {
-    audioTrack.enabled = true;
-  } else {
-    console.error("Microphone track not available");
+async function startAudioTransmission() {
+  // Ensure microphone is sending
+  try {
+    if (!pc) {
+      console.error("Peer connection not available");
+    }
+    // If we don't have a sender yet, try to find or create one
+    if (!audioSender && pc && typeof pc.getSenders === 'function') {
+      audioSender = pc.getSenders().find(s => s.track && s.track.kind === 'audio') || null;
+    }
+    // If sender has no track or we don't have a current track, reacquire mic and attach
+    if (!audioTrack || (audioSender && !audioSender.track)) {
+      const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioTrack = ms.getTracks()[0];
+      if (audioSender && typeof audioSender.replaceTrack === 'function') {
+        await audioSender.replaceTrack(audioTrack);
+      } else if (pc) {
+        audioSender = pc.addTrack(audioTrack);
+      }
+    } else {
+      // Re-enable the existing track
+      audioTrack.enabled = true;
+    }
+  } catch (e) {
+    console.error("Failed to enable microphone", e);
   }
 
-  /* Unmute AI output */
+  // Unmute AI output
   if (audioEl && audioEl.srcObject) {
     const audioTracks = audioEl.srcObject.getAudioTracks();
     audioTracks.forEach(track => track.enabled = true);
-    // console.log("Unmuted AI output");
   } else {
     console.error("AI audio output not available");
   }
@@ -923,25 +940,30 @@ function stopLLMGeneration() {
  * @returns {Promise} - Resolves when audio transmission is stopped
  */
 async function stopAudioTransmission() {
-  return new Promise((resolve) => {
-    /* Mute microphone input */
+  try {
+    // Detach mic from sender so no audio is sent to the peer
+    if (audioSender && typeof audioSender.replaceTrack === 'function') {
+      await audioSender.replaceTrack(null);
+    }
+    // Disable and stop the local mic track to fully release input
     if (audioTrack) {
+      try { audioTrack.stop(); } catch (_) {}
       audioTrack.enabled = false;
-      // console.log("Muted microphone input");
     }
 
-    /* Mute AI output */
+    // Mute AI output (speaker)
     if (audioEl && audioEl.srcObject) {
       const audioTracks = audioEl.srcObject.getAudioTracks();
       audioTracks.forEach(track => track.enabled = false);
-      // console.log("Muted AI output");
     }
 
-    /* Stop waveform animation */
+    // Stop waveform animation
     stopWaveform();
-
-    resolve();
-  });
+    return true;
+  } catch (e) {
+    console.warn('stopAudioTransmission error', e);
+    return false;
+  }
 }
 
 /* 
@@ -966,6 +988,13 @@ function cleanupWebRTC() {
     pc.close();
     pc = null;
   }
+
+  // Stop and release microphone resources
+  if (audioTrack) {
+    try { audioTrack.stop(); } catch (_) {}
+    audioTrack = null;
+  }
+  audioSender = null;
 }
 
 /* 
@@ -1819,6 +1848,7 @@ let pc = null;
 let dc = null;
 let isPaused = false;
 let audioTrack = null;
+let audioSender = null;
 let audioEl = null;
 let audioContext = null;
 let audioAnalyser = null;
@@ -1915,7 +1945,7 @@ async function toggleAudioTransmission() {
         //window.FileMaker.PerformScript("SendToOpenAI", "");
       }
     } else {
-      startAudioTransmission();
+      await startAudioTransmission();
       showIcon('ear');
     }
   }
@@ -2585,7 +2615,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
     const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
     audioTrack = ms.getTracks()[0];
-    pc.addTrack(audioTrack);
+    audioSender = pc.addTrack(audioTrack);
 
     dc = pc.createDataChannel("oai-events");
     dc.addEventListener("open", () => {
