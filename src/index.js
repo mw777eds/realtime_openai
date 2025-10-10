@@ -139,6 +139,8 @@ window.sendTextToRealtime = sendTextToRealtime;
 window.setUISettings = setUISettings;
 window.getChatHistoryText = chatHistoryToText;
 window.logChatHistory = logChatHistory;
+window.getChatBuffer = getChatBuffer;
+window.logChatBufferRaw = logChatBufferRaw;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
 const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
@@ -1027,6 +1029,24 @@ function logChatHistory() {
   // Use a single console.log to keep it easy to copy
   console.log(text);
   return text;
+}
+
+/**
+ * Return a shallow copy of the in-memory chat buffer.
+ */
+function getChatBuffer() {
+  return Array.isArray(chatBuffer) ? chatBuffer.slice() : [];
+}
+
+/**
+ * Console.log the raw chat buffer as JSON (pretty by default).
+ * @param {boolean} pretty
+ * @returns {string} The JSON string that was logged.
+ */
+function logChatBufferRaw(pretty = true) {
+  const out = pretty ? JSON.stringify(getChatBuffer(), null, 2) : JSON.stringify(getChatBuffer());
+  console.log(out);
+  return out;
 }
 
 /**
