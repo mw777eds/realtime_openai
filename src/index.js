@@ -271,6 +271,8 @@ window.logChatBufferRaw = logChatBufferRaw;
 window.bootstrapApp = bootstrapApp;
 window.applyRealtimeInit = applyRealtimeInit;
 window.ensureRealtimeReady = ensureRealtimeReady;
+window.copyMinifiedHistory = copyMinifiedHistory;
+window.buildBootstrapTestPayload = buildBootstrapTestPayload;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
 const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
@@ -1188,6 +1190,115 @@ function logChatBufferRaw(pretty = true) {
 }
 
 /**
+ * Compute a snapshot of current grid settings without persisting.
+ */
+function computeCurrentSettingsSnapshot() {
+  if (!grid) return null;
+  const nodes = (grid.engine?.nodes || []).map(n => ({
+    widget: n.el?.dataset?.widget || null,
+    x: n.x, y: n.y, w: n.w, h: n.h
+  }));
+  return {
+    version: 1,
+    columns: grid.engine?.column || grid.opts?.column || 12,
+    float: !!floatEnabled,
+    voice: !!realtimeWidgetEl,
+    text: !!textWidgetEl,
+    toasts: !!toastsWidgetEl,
+    layout: nodes
+  };
+}
+
+/**
+ * Build a minified history array (messages + tool calls/results) from sessionHistory.
+ */
+function buildMinifiedHistoryFromSession() {
+  const out = [];
+  for (const item of sessionHistory) {
+    if (!item) continue;
+    if (item.type === 'message') {
+      out.push({
+        role: item.role,
+        source: item.metadata?.api ?? item.metadata?.source ?? null,
+        text: item.content ?? '',
+        ts: item.ts
+      });
+    } else if (item.type === 'tool_call') {
+      out.push({
+        type: 'tool_call',
+        name: item.metadata?.tool?.name || 'unknown',
+        args: item.metadata?.tool?.arguments ?? null,
+        call_id: item.metadata?.call_id ?? null,
+        ts: item.ts
+      });
+    } else if (item.type === 'tool_result') {
+      out.push({
+        type: 'tool_result',
+        call_id: item.metadata?.call_id ?? null,
+        output: item.content ?? null,
+        status: item.metadata?.status ?? undefined,
+        ts: item.ts
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Build a minimal bootstrap payload using current mode, settings, and minified history.
+ */
+function buildBootstrapTestPayload() {
+  const mode = getCurrentMode();
+  const settings = persistedSettings[mode] || computeCurrentSettingsSnapshot() || {
+    version: 1,
+    columns: 12,
+    float: true,
+    voice: !!realtimeWidgetEl,
+    text: !!textWidgetEl,
+    toasts: !!toastsWidgetEl,
+    layout: []
+  };
+  return {
+    history: buildMinifiedHistoryFromSession(),
+    key: mode,
+    sessionId: window.__sessionId || '',
+    settings
+  };
+}
+
+/**
+ * Copy minified payload to clipboard and log compact JSON to console.
+ */
+function copyMinifiedHistory() {
+  const payload = buildBootstrapTestPayload();
+  const text = JSON.stringify(payload);
+  // Try modern clipboard API first
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => showToast('Copied test payload to clipboard', 'agent', 'right', null, 4))
+      .catch(() => {
+        // Fallback
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); showToast('Copied test payload to clipboard', 'agent', 'right', null, 4); } catch (_) {}
+        document.body.removeChild(ta);
+      });
+  } else {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); showToast('Copied test payload to clipboard', 'agent', 'right', null, 4); } catch (_) {}
+    document.body.removeChild(ta);
+  }
+  console.log(text);
+  return text;
+}
+
+/**
  * Build minimal Realtime preload events from canonical history (no response.create).
  */
 function buildHistoryEvents(items) {
@@ -2018,6 +2129,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnText = document.getElementById('btn-text');
   const btnToasts = document.getElementById('btn-toasts');
   const btnToolCalls = document.getElementById('btn-tool-calls');
+  const btnCopyMinified = document.getElementById('btn-copy-minified');
   const btnToggleFloat = document.getElementById('btn-toggle-float');
   const btnSaveLayout = document.getElementById('btn-save-layout');
   const btnRestoreLayout = document.getElementById('btn-restore-layout');
@@ -2332,6 +2444,12 @@ document.addEventListener("DOMContentLoaded", () => {
     btnToolCalls.setAttribute('aria-pressed', String(on));
     showToolPills = on;
     renderChatFromHistory();
+  });
+
+  // Copy Test Payload button
+  btnCopyMinified?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    copyMinifiedHistory();
   });
 
   // Float toggle
