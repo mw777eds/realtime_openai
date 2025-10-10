@@ -332,7 +332,7 @@ function deepMerge(target = {}, source = {}) {
   return output;
 }
 
-function prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfigStr) {
+function prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfig) {
   let tools = [];
 
   const parsedTools = parseJsonSafely(toolsStr, 'tools');
@@ -340,7 +340,7 @@ function prepareSessionConfiguration(instructions, toolsStr, toolChoice, session
     tools = parsedTools;
   }
 
-  const additionalConfig = parseJsonSafely(sessionConfigStr, 'session configuration') || {};
+  const additionalConfig = parseJsonSafely(sessionConfig, 'session configuration') || {};
 
   let disableContainerImageTool = false;
   if (typeof additionalConfig.disableDefaultContainerImageTool !== 'undefined') {
@@ -2263,12 +2263,12 @@ document.addEventListener("DOMContentLoaded", () => {
  * @param {string} toolChoice - Tool selection strategy
  * @returns {RTCPeerConnection} - The established peer connection
  */
-async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice, sessionConfigStr) {
+async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, toolChoice, sessionConfig) {
   /* Initialize activeResponseId tracking */
   window.activeResponseId = null;
 
   try {
-    const preparedConfig = prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfigStr);
+    const preparedConfig = prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfig);
     const sessionConfig = preparedConfig.sessionConfig;
     defaultResponseModalities = Array.isArray(preparedConfig.defaultModalities) && preparedConfig.defaultModalities.length > 0
       ? [...preparedConfig.defaultModalities]
