@@ -625,6 +625,22 @@ button {
   border-color: #e5e7eb;
 }
 
+/* Tool call/result pill rows in chat */
+.tool-pill-row {
+  display: flex;
+  justify-content: center;
+  margin: 6px 0;
+}
+.tool-pill {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+  cursor: pointer;
+}
+
 .chat-input {
   display: flex;
   align-items: flex-end;

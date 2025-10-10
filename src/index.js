@@ -25,6 +25,125 @@ let persistedSettings = { docked: null, undocked: null };
 
 /* In-memory chat buffer to retain messages while Text widget is hidden */
 const chatBuffer = [];
+const HISTORY_MAX_ITEMS = 400;
+const sessionHistory = [];
+let showToolPills = false;
+
+function createId(prefix = 'msg') {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function trimHistory() {
+  if (sessionHistory.length > HISTORY_MAX_ITEMS) {
+    sessionHistory.splice(0, sessionHistory.length - HISTORY_MAX_ITEMS);
+  }
+}
+
+function appendCanonicalMessage(role, text, metadata = {}) {
+  if (!text) return;
+  sessionHistory.push({
+    id: createId('m'),
+    ts: Date.now(),
+    role,
+    type: 'message',
+    content: text,
+    metadata
+  });
+  trimHistory();
+}
+
+function appendToolCall(name, args, call_id, responseId) {
+  sessionHistory.push({
+    id: createId('tc'),
+    ts: Date.now(),
+    role: 'tool',
+    type: 'tool_call',
+    content: null,
+    metadata: {
+      responseId: responseId || null,
+      call_id: call_id || null,
+      tool: { name: name || 'unknown', arguments: args ?? null }
+    }
+  });
+  trimHistory();
+}
+
+function appendToolResult(call_id, output, status = 'success', error = null) {
+  sessionHistory.push({
+    id: createId('tr'),
+    ts: Date.now(),
+    role: 'tool',
+    type: 'tool_result',
+    content: output ?? null,
+    metadata: {
+      call_id: call_id || null,
+      status,
+      error
+    }
+  });
+  trimHistory();
+}
+
+function renderToolPill(label, data) {
+  const row = document.createElement('div');
+  row.className = 'tool-pill-row';
+  const pill = document.createElement('button');
+  pill.type = 'button';
+  pill.className = 'tool-pill';
+  pill.textContent = label;
+  pill.addEventListener('click', () => {
+    if (window.FileMaker) {
+      try { window.FileMaker.PerformScript('ShowJSON', JSON.stringify(data)); return; } catch (_) {}
+    }
+    showJsonModal(data);
+  });
+  row.appendChild(pill);
+  const list = document.getElementById('chat-messages');
+  if (list) {
+    list.appendChild(row);
+    list.scrollTop = list.scrollHeight;
+  }
+}
+
+function renderChatFromHistory() {
+  const list = document.getElementById('chat-messages');
+  if (!list) return;
+  list.innerHTML = '';
+  for (const item of sessionHistory) {
+    if (item.type === 'message') {
+      renderChatMessage(item.role, item.content);
+    } else if ((item.type === 'tool_call' || item.type === 'tool_result') && showToolPills) {
+      const label = item.type === 'tool_call'
+        ? `Tool call: ${item?.metadata?.tool?.name || 'unknown'}`
+        : `Tool result: ${item?.metadata?.tool?.name || ''}`.trim();
+      renderToolPill(label, item);
+    }
+  }
+}
+
+function showJsonModal(data) {
+  const existing = document.querySelector('.json-modal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.className = 'json-modal';
+  modal.innerHTML = `
+    <div class="json-modal-content">
+      <div class="json-modal-header">
+        <div class="json-modal-title">Details</div>
+        <button class="json-modal-close" aria-label="Close">×</button>
+      </div>
+      <pre class="json-content"></pre>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('.json-content').textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  modal.querySelector('.json-modal-close').addEventListener('click', hideJsonModal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) hideJsonModal(); });
+}
+
+function hideJsonModal() {
+  const modal = document.querySelector('.json-modal');
+  if (modal) modal.remove();
+}
 
 function getCurrentMode() {
   return isConvosDocked ? 'docked' : 'undocked';
@@ -482,6 +601,13 @@ function sendToolResponse(toolResponse) {
 
     dc.send(JSON.stringify(response));
     console.log("Sent tool response");
+    // Append tool_result to canonical history
+    try {
+      appendToolResult(toolResponse.call_id, toolResponse.output, 'success');
+      if (showToolPills) {
+        renderChatFromHistory();
+      }
+    } catch (_) {}
   } else {
     console.error("Data channel not ready for tool response. State:", dc ? dc.readyState : "no dc");
   }
@@ -1008,6 +1134,7 @@ function renderChatMessage(role, text) {
 function appendChatMessage(role, text, opts = {}) {
   if (!text) return;
   recordChatMessage(role, text, opts);
+  appendCanonicalMessage(role, text, { api: opts.source || null });
   renderChatMessage(role, text);
 }
 
@@ -1075,8 +1202,22 @@ function bootstrapApp(payload) {
     }
     const mode = data.key || data.mode || 'docked';
 
-    // Seed chat history buffer first
+    // Seed history: canonical sessionHistory and simple chatBuffer (for back-compat)
     if (Array.isArray(data.history)) {
+      sessionHistory.splice(
+        0,
+        sessionHistory.length,
+        ...data.history.map(m => ({
+          id: createId('m'),
+          ts: (m && typeof m.ts === 'number') ? m.ts : Date.now(),
+          role: (m && m.role) ? m.role : 'system',
+          type: 'message',
+          content: (m && typeof m.text === 'string') ? m.text : '',
+          metadata: { source: (m && m.source) ? m.source : null }
+        }))
+      );
+      trimHistory();
+
       chatBuffer.splice(
         0,
         chatBuffer.length,
@@ -1087,12 +1228,9 @@ function bootstrapApp(payload) {
           source: m && m.source ? m.source : null
         }))
       );
+
       // If Text widget is already mounted, render immediately
-      const list = document.getElementById('chat-messages');
-      if (list) {
-        list.innerHTML = '';
-        chatBuffer.forEach(m => renderChatMessage(m.role, m.text));
-      }
+      renderChatFromHistory();
     }
 
     // Cache per-mode settings (normalize debug -> toasts)
@@ -1759,6 +1897,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnVoice = document.getElementById('btn-voice');
   const btnText = document.getElementById('btn-text');
   const btnToasts = document.getElementById('btn-toasts');
+  const btnToolCalls = document.getElementById('btn-tool-calls');
   const btnToggleFloat = document.getElementById('btn-toggle-float');
   const btnSaveLayout = document.getElementById('btn-save-layout');
   const btnRestoreLayout = document.getElementById('btn-restore-layout');
@@ -2006,8 +2145,10 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    // Render any buffered chat history into the Text widget on mount
-    if (Array.isArray(chatBuffer) && chatBuffer.length > 0) {
+    // Render chat from canonical history on mount; fallback to buffered text if empty
+    if (Array.isArray(sessionHistory) && sessionHistory.length > 0) {
+      renderChatFromHistory();
+    } else if (Array.isArray(chatBuffer) && chatBuffer.length > 0) {
       chatBuffer.forEach(m => renderChatMessage(m.role, m.text));
     }
   }
@@ -2060,6 +2201,15 @@ document.addEventListener("DOMContentLoaded", () => {
     btnToasts.classList.toggle('active');
     btnToasts.setAttribute('aria-pressed', String(btnToasts.classList.contains('active')));
     syncWidgets();
+  });
+  // Show Tool Calls toggle
+  btnToolCalls?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    btnToolCalls.classList.toggle('active');
+    const on = btnToolCalls.classList.contains('active');
+    btnToolCalls.setAttribute('aria-pressed', String(on));
+    showToolPills = on;
+    renderChatFromHistory();
   });
 
   // Float toggle
@@ -2196,6 +2346,28 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           // Call FileMaker script once
           window.FileMaker.PerformScript("CallTools", JSON.stringify({ 'toolCalls': toolCalls }));
         }
+
+        // Append tool_call items to canonical history
+        try {
+          for (const call of toolCalls) {
+            const name = call?.name || call?.tool_name || 'unknown';
+            let args = null;
+            if (call && call.arguments !== undefined) {
+              if (typeof call.arguments === 'string') {
+                try { args = JSON.parse(call.arguments); } catch (_) { args = call.arguments; }
+              } else {
+                args = call.arguments;
+              }
+            }
+            const responseId = realtimeEvent.response?.id || null;
+            const call_id = call?.call_id || call?.id || null;
+            appendToolCall(name, args, call_id, responseId);
+          }
+          // If Text widget is mounted and tool pills are enabled, re-render to show pills
+          if (showToolPills) {
+            renderChatFromHistory();
+          }
+        } catch (_) {}
       }
 
       // Only handle response.done if it's not a function call

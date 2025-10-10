@@ -145,6 +145,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Scrollable, persistent; renders from canonical history.
   - Role indicator, timestamp, markdown rendering.
   - Tool calls: expandable with tool name, arguments JSON, result, status/duration/error.
+  - Menu toggle: Show Tool Calls toggles display of tool call/result pills; clicking a pill opens details.
   - Streaming display with sentence consolidation.
 - Status/controls:
   - Clear state badges: connected/listening/thinking/speaking/muted.
@@ -249,7 +250,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
 
 18. Session state, persistence and flush policy
 - In-memory is authoritative during an active session:
-  - sessionHistory: append-only canonical JSON array for the current sessionId (user, assistant, tool_call, tool_result, artifacts).
+  - sessionHistory: append-only canonical JSON array for the current sessionId (user, assistant, tool_call, tool_result, artifacts). Bounded size in memory (sliding window, e.g., HISTORY_MAX_ITEMS=400) so oldest entries are dropped for UI/context building; FileMaker remains the source of truth.
   - sessionLayouts: per-mode settings for the current sessionId: { docked: {version, columns, cellHeight?, float, voice, text, toasts, layout[]}, undocked: {…} }.
   - These are kept in memory within the Web Viewer, with optional localStorage fallback for crash recovery during development.
 - Two scopes of persisted layouts:
