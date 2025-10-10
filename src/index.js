@@ -72,17 +72,17 @@ function rebuildFromLayout(layout = [], float = floatEnabled) {
   layout.forEach(n => {
     switch (n.widget) {
       case 'voice':
-        addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        window.__addRealtimeWidget && window.__addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
         break;
       case 'toasts':
-        addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        window.__addToastsWidget && window.__addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
         break;
       case 'text':
-        addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        window.__addTextWidget && window.__addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
         break;
       case 'convo':
         if (!isConvosDocked) {
-          addConversationsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+          window.__addConversationsWidget && window.__addConversationsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
         }
         break;
       default:
@@ -1117,6 +1117,26 @@ function bootstrapApp(payload) {
       window.__sessionId = data.sessionId;
     }
 
+    // If grid is already initialized, immediately align dock state and apply layout/toggles
+    if (grid) {
+      try {
+        if (mode === 'docked') {
+          if (!isConvosDocked && window.__dockConvos) window.__dockConvos();
+        } else {
+          if (isConvosDocked && window.__undockConvos) window.__undockConvos();
+        }
+        const applied = applySettingsForMode(mode);
+        if (!applied) {
+          const loaded = loadLayoutForCurrentMode();
+          if (!loaded && typeof window.__syncWidgets === 'function') {
+            window.__syncWidgets();
+          }
+        }
+      } catch (e) {
+        console.warn('Immediate apply after bootstrap failed; will rely on initial mount', e);
+      }
+    }
+
     return true;
   } catch (e) {
     console.error('bootstrapApp failed', e);
@@ -1667,17 +1687,17 @@ function applyLayout(payload) {
   payload.layout.forEach(n => {
     switch (n.widget) {
       case 'voice':
-        addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        window.__addRealtimeWidget && window.__addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
         break;
       case 'toasts':
-        addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        window.__addToastsWidget && window.__addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
         break;
       case 'text':
-        addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        window.__addTextWidget && window.__addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
         break;
       case 'convo':
         if (!isConvosDocked) {
-          addConversationsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+          window.__addConversationsWidget && window.__addConversationsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
         }
         break;
       default:
@@ -1997,7 +2017,7 @@ document.addEventListener("DOMContentLoaded", () => {
     grid.removeWidget(textWidgetEl);
     textWidgetEl = null;
   }
-
+  
   function syncWidgets() {
     const voiceOn = document.getElementById('btn-voice')?.classList.contains('active');
     const textOn = document.getElementById('btn-text')?.classList.contains('active');
@@ -2009,6 +2029,19 @@ document.addEventListener("DOMContentLoaded", () => {
     // Conversations docking is controlled by the anchor buttons
   }
 
+  // Expose grid/widget helpers for global calls
+  window.__addRealtimeWidget = addRealtimeWidget;
+  window.__removeRealtimeWidget = removeRealtimeWidget;
+  window.__addToastsWidget = addToastsWidget;
+  window.__removeToastsWidget = removeToastsWidget;
+  window.__addConversationsWidget = addConversationsWidget;
+  window.__removeConversationsWidget = removeConversationsWidget;
+  window.__addTextWidget = addTextWidget;
+  window.__removeTextWidget = removeTextWidget;
+  window.__dockConvos = dockConvos;
+  window.__undockConvos = undockConvos;
+  window.__syncWidgets = syncWidgets;
+  
   // Toggle buttons
   btnVoice?.addEventListener('click', (e) => {
     e.stopPropagation();
