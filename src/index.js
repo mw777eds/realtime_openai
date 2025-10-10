@@ -269,6 +269,8 @@ window.logChatHistory = logChatHistory;
 window.getChatBuffer = getChatBuffer;
 window.logChatBufferRaw = logChatBufferRaw;
 window.bootstrapApp = bootstrapApp;
+window.applyRealtimeInit = applyRealtimeInit;
+window.ensureRealtimeReady = ensureRealtimeReady;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
 const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
@@ -1186,6 +1188,124 @@ function logChatBufferRaw(pretty = true) {
 }
 
 /**
+ * Build minimal Realtime preload events from canonical history (no response.create).
+ */
+function buildHistoryEvents(items) {
+  const evs = [];
+  for (const m of items || []) {
+    if (!m) continue;
+    if (m.type === 'message') {
+      const role = m.role === 'assistant' ? 'assistant' : (m.role === 'user' ? 'user' : null);
+      if (!role || !m.content) continue;
+      evs.push({
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role,
+          content: [{ type: role === 'user' ? 'input_text' : 'output_text', text: m.content }]
+        }
+      });
+    } else if (m.type === 'tool_result' && m.metadata?.call_id != null) {
+      evs.push({
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id: m.metadata.call_id,
+          output: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? null)
+        }
+      });
+    }
+    // tool_call is a request; we don't preload it, only results matter for state.
+  }
+  return evs;
+}
+
+/**
+ * Send canonical history into the Realtime session after channel opens.
+ * Does not trigger a response (no response.create sent here).
+ */
+async function preloadHistoryIntoRealtime(items) {
+  if (!dc || dc.readyState !== 'open') return false;
+  const sid = window.__sessionId || 'unknown';
+  if (window.__historyPreloadedFor === sid) return true;
+  const evs = buildHistoryEvents(items);
+  for (const ev of evs) {
+    dc.send(JSON.stringify(ev));
+    await new Promise(r => setTimeout(r, 5));
+  }
+  window.__historyPreloadedFor = sid;
+  return true;
+}
+
+/**
+ * Ask FileMaker for an ephemeral token/model when Voice widget mounts.
+ * FileMaker should call back: window.applyRealtimeInit({ success, result:{ ... } })
+ */
+let __rtState = 'idle';
+function ensureRealtimeReady() {
+  if (__rtState === 'requesting' || __rtState === 'connecting' || __rtState === 'ready') return;
+  __rtState = 'requesting';
+  if (window.FileMaker?.PerformScript) {
+    try {
+      window.FileMaker.PerformScript('Realtime_Init', JSON.stringify({ sessionId: window.__sessionId || "" }));
+    } catch (e) {
+      console.warn('Failed to call Realtime_Init', e);
+      __rtState = 'idle';
+    }
+  } else {
+    console.log('FileMaker not available; call applyRealtimeInit(...) manually.');
+    __rtState = 'idle';
+  }
+}
+
+/**
+ * FM callback to start Realtime with provided params, then preload history.
+ */
+function applyRealtimeInit(payload) {
+  try {
+    const raw = typeof payload === 'string' ? JSON.parse(payload) : (payload || {});
+    const data = (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'success'))
+      ? (raw.success ? (raw.result || {}) : null)
+      : raw;
+
+    if (!data) {
+      console.error('applyRealtimeInit: invalid payload or success=false', raw);
+      __rtState = 'idle';
+      return false;
+    }
+
+    const {
+      ephemeralKey, token, model,
+      instructions = 'You are a helpful AI assistant.',
+      tools = '[]', toolChoice = 'auto',
+      sessionConfig = '{}'
+    } = data;
+
+    const key = ephemeralKey || token;
+    if (!key || !model) {
+      console.error('applyRealtimeInit: missing ephemeralKey/token or model');
+      __rtState = 'idle';
+      return false;
+    }
+
+    __rtState = 'connecting';
+    initializeWebRTC(
+      key,
+      model,
+      instructions,
+      typeof tools === 'string' ? tools : JSON.stringify(tools),
+      toolChoice,
+      typeof sessionConfig === 'string' ? sessionConfig : JSON.stringify(sessionConfig)
+    );
+    return true;
+  } catch (e) {
+    console.error('applyRealtimeInit failed', e);
+    __rtState = 'idle';
+    return false;
+  }
+}
+
+/**
  * Bootstrap the app from FileMaker with session, settings, and history.
  * Accepts an object or a JSON string.
  * Seeds in-memory caches and defers layout application to initial mount.
@@ -1963,6 +2083,8 @@ document.addEventListener("DOMContentLoaded", () => {
       clickOverlay.addEventListener('click', toggleAudioTransmission);
     }
     showIcon('ear');
+    // Ask FM for ephemeral token/model; then boot Realtime and preload history
+    ensureRealtimeReady();
   }
 
   function removeRealtimeWidget() {
@@ -2308,6 +2430,12 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         session: sessionConfig
       };
       dc.send(JSON.stringify(sessionUpdateEvent));
+
+      // Preload canonical history without triggering a response
+      if (Array.isArray(sessionHistory) && sessionHistory.length > 0) {
+        preloadHistoryIntoRealtime(sessionHistory).catch(() => {});
+      }
+
       startAudioTransmission();
     });
 
