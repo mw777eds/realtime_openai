@@ -1653,18 +1653,26 @@ function bootstrapApp(payload) {
     // Cache per-mode settings (normalize debug -> toasts)
     const s = data.settings || {};
     const toasts = (s.toasts !== undefined) ? !!s.toasts : !!s.debug;
-    if (Array.isArray(s.layout)) {
-      persistedSettings[mode] = {
-        version: s.version || 1,
-        columns: s.columns || 12,
-        cellHeight: s.cellHeight,
-        float: !!s.float,
-        voice: !!s.voice,
-        text: !!s.text,
-        toasts,
-        showToolCalls: (typeof s.showToolCalls === 'boolean') ? !!s.showToolCalls : undefined,
-        layout: s.layout
-      };
+    if (s.layout && typeof s.layout === 'object' && !Array.isArray(s.layout)) {
+      ['docked', 'undocked'].forEach((k) => {
+        const arr = s.layout[k];
+        if (Array.isArray(arr)) {
+          persistedSettings[k] = {
+            version: s.version || 1,
+            columns: s.columns || 12,
+            cellHeight: s.cellHeight,
+            float: !!s.float,
+            voice: !!s.voice,
+            text: !!s.text,
+            toasts,
+            showToolCalls: (typeof s.showToolCalls === 'boolean') ? !!s.showToolCalls : undefined,
+            layout: arr
+          };
+          try {
+            localStorage.setItem(`settings:${k}`, JSON.stringify({ key: k, settings: persistedSettings[k] }));
+          } catch (_) {}
+        }
+      });
     }
 
     // Persist desired mode, session id, and machine id for later application
@@ -2298,30 +2306,36 @@ function applyLayout(payload) {
 // Helpers to apply settings/layouts from FileMaker and persist preferences
 function applySettingsEnvelope(envelope) {
   const env = typeof envelope === 'string' ? parseJsonSafely(envelope, 'settings envelope') : (envelope || {});
-  if (!env || !env.settings || !Array.isArray(env.settings.layout)) return false;
-  const mode = env.key || getCurrentMode();
+  if (!env || !env.settings) return false;
+
+  const L = env.settings.layout;
+  if (!L || typeof L !== 'object' || Array.isArray(L)) return false;
 
   const toasts = (env.settings.toasts !== undefined) ? !!env.settings.toasts : !!env.settings.debug;
 
-  persistedSettings[mode] = {
-    version: env.settings.version || 1,
-    columns: env.settings.columns || 12,
-    cellHeight: env.settings.cellHeight,
-    float: !!env.settings.float,
-    voice: !!env.settings.voice,
-    text: !!env.settings.text,
-    toasts,
-    showToolCalls: (typeof env.settings.showToolCalls === 'boolean') ? !!env.settings.showToolCalls : persistedSettings[mode]?.showToolCalls,
-    layout: env.settings.layout
-  };
+  ['docked', 'undocked'].forEach((k) => {
+    const arr = L[k];
+    if (Array.isArray(arr)) {
+      persistedSettings[k] = {
+        version: env.settings.version || 1,
+        columns: env.settings.columns || 12,
+        cellHeight: env.settings.cellHeight,
+        float: !!env.settings.float,
+        voice: !!env.settings.voice,
+        text: !!env.settings.text,
+        toasts,
+        showToolCalls: (typeof env.settings.showToolCalls === 'boolean') ? !!env.settings.showToolCalls : persistedSettings[k]?.showToolCalls,
+        layout: arr
+      };
+      try {
+        localStorage.setItem(`settings:${k}`, JSON.stringify({ key: k, settings: persistedSettings[k] }));
+      } catch (_) {}
+    }
+  });
 
-  try {
-    localStorage.setItem(`settings:${mode}`, JSON.stringify({ key: mode, settings: persistedSettings[mode] }));
-  } catch (_) {}
-
-  // Apply immediately if the envelope matches current mode
-  if ((mode === 'docked' && isConvosDocked) || (mode === 'undocked' && !isConvosDocked)) {
-    applySettingsForMode(mode);
+  const current = getCurrentMode();
+  if (persistedSettings[current]) {
+    applySettingsForMode(current);
   }
   return true;
 }
