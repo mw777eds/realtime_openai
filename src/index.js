@@ -1332,11 +1332,23 @@ function copyMinifiedHistory() {
 
 /**
  * Build minimal Realtime preload events from canonical history (no response.create).
+ * Tool calls/results are injected as plain assistant text to avoid priming live tool state.
  */
 function buildHistoryEvents(items) {
   const evs = [];
+
+  const safeStr = (v, max = 800) => {
+    try {
+      const s = typeof v === 'string' ? v : JSON.stringify(v);
+      return s.length > max ? s.slice(0, max) + '…' : s;
+    } catch (_) {
+      try { return String(v); } catch (__){ return ''; }
+    }
+  };
+
   for (const m of items || []) {
     if (!m) continue;
+
     if (m.type === 'message') {
       const role = m.role === 'assistant' ? 'assistant' : (m.role === 'user' ? 'user' : null);
       if (!role || !m.content) continue;
@@ -1348,17 +1360,44 @@ function buildHistoryEvents(items) {
           content: [{ type: role === 'user' ? 'input_text' : 'output_text', text: m.content }]
         }
       });
-    } else if (m.type === 'tool_result' && m.metadata?.call_id != null) {
+      continue;
+    }
+
+    if (m.type === 'tool_call') {
+      const name = m?.metadata?.tool?.name || 'unknown';
+      const args = m?.metadata?.tool?.arguments ?? null;
+      const argsStr = safeStr(args);
       evs.push({
         type: 'conversation.item.create',
         item: {
-          type: 'function_call_output',
-          call_id: m.metadata.call_id,
-          output: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? null)
+          type: 'message',
+          role: 'assistant',
+          content: [{
+            type: 'output_text',
+            text: `Previously: assistant requested tool "${name}" with arguments ${argsStr}`
+          }]
         }
       });
+      continue;
     }
-    // tool_call is a request; we don't preload it, only results matter for state.
+
+    if (m.type === 'tool_result') {
+      const callId = m?.metadata?.call_id || 'n/a';
+      const status = m?.metadata?.status ?? 'success';
+      const outStr = safeStr(m?.content);
+      evs.push({
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role: 'assistant',
+          content: [{
+            type: 'output_text',
+            text: `Previously: tool_result for call_id=${callId} (status=${status}) → ${outStr}`
+          }]
+        }
+      });
+      continue;
+    }
   }
   return evs;
 }
