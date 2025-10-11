@@ -49,6 +49,11 @@ function appendCanonicalMessage(role, text, metadata = {}) {
     content: text,
     metadata
   });
+  // Ensure Conversations widget appears when undocked even if omitted from layout
+  if (!isConvosDocked && !convosWidgetEl) {
+    const saved = getSavedWidgetRect('convo', getCurrentMode());
+    window.__addConversationsWidget && window.__addConversationsWidget(saved || { x: 0, y: 0, w: 3, h: 8 });
+  }
   trimHistory();
 }
 
@@ -2282,6 +2287,12 @@ function applyLayout(payload) {
     }
   });
 
+  // Ensure Conversations widget appears when undocked even if omitted
+  if (!isConvosDocked && !convosWidgetEl) {
+    const saved = getSavedWidgetRect('convo', getCurrentMode());
+    window.__addConversationsWidget && window.__addConversationsWidget(saved || { x: 0, y: 0, w: 3, h: 8 });
+  }
+
   // Update menu button states to reflect presence
   const btnVoice = document.getElementById('btn-voice');
   const btnText = document.getElementById('btn-text');
@@ -2555,7 +2566,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function addConversationsWidget(pos) {
     if (convosWidgetEl) return;
-    const el = grid.addWidget({ x: pos?.x ?? 0, y: pos?.y ?? 0, w: pos?.w ?? 3, h: pos?.h ?? 8 });
+    const mode = getCurrentMode();
+    const saved = !pos ? getSavedWidgetRect('convo', mode) : null;
+    const p = pos || saved || { x: 0, y: 0, w: 3, h: 8 };
+    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
       <div class="conversations-widget">
@@ -2573,6 +2587,8 @@ document.addEventListener("DOMContentLoaded", () => {
       </div>`;
     convosWidgetEl = el;
     el.dataset.widget = 'convo';
+    // Cache position for this mode
+    updateSavedWidgetRect('convo', p, mode);
     // prevent drag from inner content
     const listEl = contentEl.querySelector('.conversation-list');
     const btnEl = contentEl.querySelector('.new-convo-btn');
@@ -2602,6 +2618,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function removeConversationsWidget() {
     if (!convosWidgetEl) return;
+    const mode = getCurrentMode();
+    const node = convosWidgetEl.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === convosWidgetEl);
+    if (node) {
+      updateSavedWidgetRect('convo', { x: node.x, y: node.y, w: node.w, h: node.h }, mode);
+    }
     grid.removeWidget(convosWidgetEl);
     convosWidgetEl = null;
   }
