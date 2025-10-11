@@ -273,6 +273,9 @@ window.applyRealtimeInit = applyRealtimeInit;
 window.ensureRealtimeReady = ensureRealtimeReady;
 window.copyMinifiedHistory = copyMinifiedHistory;
 window.buildBootstrapTestPayload = buildBootstrapTestPayload;
+window.applyLoadedLayout = applyLoadedLayout;
+window.applySettingsEnvelope = applySettingsEnvelope;
+window.savePreferences = savePreferences;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
 const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
@@ -1555,10 +1558,13 @@ function bootstrapApp(payload) {
       };
     }
 
-    // Persist desired mode and session id for later application
+    // Persist desired mode, session id, and machine id for later application
     window.__bootstrapMode = mode;
     if (data.sessionId) {
       window.__sessionId = data.sessionId;
+    }
+    if (data.machineId) {
+      window.__machineId = data.machineId;
     }
 
     // If grid is already initialized, immediately align dock state and apply layout/toggles
@@ -2034,8 +2040,10 @@ function saveCurrentLayout() {
 
     // Send to FileMaker (user-scoped default; FileMaker derives user via Get( Username ))
     const envelope = {
-      scope: "user",
+      scope: "machine",
       key,
+      machineId: window.__machineId || null,
+      sessionId: window.__sessionId || null,
       settings: settingsSnapshot
     };
     if (window.FileMaker) {
@@ -2056,22 +2064,22 @@ function saveCurrentLayout() {
  */
 function restoreDefaultLayout() {
   try {
+    const key = isConvosDocked ? 'docked' : 'undocked';
+    if (window.FileMaker?.PerformScript) {
+      const payload = { sessionId: window.__sessionId || "", key };
+      window.FileMaker.PerformScript('Grid_RestoreDefaultLayout', JSON.stringify(payload));
+      return true;
+    }
+    // Fallback: local default behavior
     dockConvos();
-    // remove all widgets
     const nodes = [...(grid.engine?.nodes || [])];
-    nodes.forEach(n => {
-      if (n?.el) {
-        grid.removeWidget(n.el);
-      }
-    });
-    // Reset to defaults: Voice on, Toasts on, Text off
+    nodes.forEach(n => { if (n?.el) grid.removeWidget(n.el); });
     const btnVoice = document.getElementById('btn-voice');
     const btnText = document.getElementById('btn-text');
     const btnToasts = document.getElementById('btn-toasts');
     if (btnVoice) { btnVoice.classList.add('active'); btnVoice.setAttribute('aria-pressed', 'true'); }
     if (btnText) { btnText.classList.remove('active'); btnText.setAttribute('aria-pressed', 'false'); }
     if (btnToasts) { btnToasts.classList.add('active'); btnToasts.setAttribute('aria-pressed', 'true'); }
-    // Re-mount widgets
     syncWidgets();
     return true;
   } catch (e) {
@@ -2086,7 +2094,18 @@ function restoreDefaultLayout() {
 function loadLayoutForCurrentMode() {
   const key = isConvosDocked ? 'docked' : 'undocked';
   try {
-    // Use cached settings if available; else attempt localStorage
+    // Ask FileMaker for saved layout for this mode; it should callback window.applyLoadedLayout(...)
+    if (window.FileMaker?.PerformScript) {
+      const payload = {
+        sessionId: window.__sessionId || "",
+        machineId: window.__machineId || "",
+        key
+      };
+      window.FileMaker.PerformScript('Grid_LoadLayout', JSON.stringify(payload));
+      return true;
+    }
+
+    // Fallback to cached/localStorage if FileMaker not available
     if (!persistedSettings[key]) {
       const raw = localStorage.getItem(`settings:${key}`);
       if (raw) {
@@ -2168,6 +2187,76 @@ function applyLayout(payload) {
     const on = !!toastsWidgetEl;
     btnToasts.classList.toggle('active', on);
     btnToasts.setAttribute('aria-pressed', String(on));
+  }
+}
+
+// Helpers to apply settings/layouts from FileMaker and persist preferences
+function applySettingsEnvelope(envelope) {
+  const env = typeof envelope === 'string' ? parseJsonSafely(envelope, 'settings envelope') : (envelope || {});
+  if (!env || !env.settings || !Array.isArray(env.settings.layout)) return false;
+  const mode = env.key || getCurrentMode();
+
+  const toasts = (env.settings.toasts !== undefined) ? !!env.settings.toasts : !!env.settings.debug;
+
+  persistedSettings[mode] = {
+    version: env.settings.version || 1,
+    columns: env.settings.columns || 12,
+    cellHeight: env.settings.cellHeight,
+    float: !!env.settings.float,
+    voice: !!env.settings.voice,
+    text: !!env.settings.text,
+    toasts,
+    layout: env.settings.layout
+  };
+
+  try {
+    localStorage.setItem(`settings:${mode}`, JSON.stringify({ key: mode, settings: persistedSettings[mode] }));
+  } catch (_) {}
+
+  // Apply immediately if the envelope matches current mode
+  if ((mode === 'docked' && isConvosDocked) || (mode === 'undocked' && !isConvosDocked)) {
+    applySettingsForMode(mode);
+  }
+  return true;
+}
+
+function applyLoadedLayout(payload) {
+  // Accept either full envelope {key, settings{...}} or direct payload {layout:[]}
+  const obj = typeof payload === 'string' ? parseJsonSafely(payload, 'loaded layout') : payload;
+  if (!obj) return false;
+
+  if (obj.settings || obj.key) {
+    return applySettingsEnvelope(obj);
+  }
+  if (Array.isArray(obj.layout)) {
+    applyLayout(obj);
+    return true;
+  }
+  return false;
+}
+
+function getCurrentToggleSettings() {
+  const btnVoice = document.getElementById('btn-voice');
+  const btnText = document.getElementById('btn-text');
+  const btnToasts = document.getElementById('btn-toasts');
+  const mode = getCurrentMode();
+  return {
+    voice: !!btnVoice?.classList.contains('active'),
+    text: !!btnText?.classList.contains('active'),
+    toasts: !!btnToasts?.classList.contains('active'),
+    float: !!floatEnabled,
+    mode
+  };
+}
+
+function savePreferences() {
+  const settings = getCurrentToggleSettings();
+  if (window.FileMaker?.PerformScript) {
+    window.FileMaker.PerformScript('Settings_SavePreferences', JSON.stringify({
+      sessionId: window.__sessionId || "",
+      machineId: window.__machineId || "",
+      settings
+    }));
   }
 }
 
@@ -2382,6 +2471,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // fallback to legacy loader
       loadLayoutForCurrentMode();
     }
+    savePreferences();
   }
 
   function undockConvos() {
@@ -2401,6 +2491,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // fallback to legacy loader
       loadLayoutForCurrentMode();
     }
+    savePreferences();
   }
 
   function addTextWidget(pos) {
@@ -2499,18 +2590,21 @@ document.addEventListener("DOMContentLoaded", () => {
     btnVoice.classList.toggle('active');
     btnVoice.setAttribute('aria-pressed', String(btnVoice.classList.contains('active')));
     syncWidgets();
+    savePreferences();
   });
   btnText?.addEventListener('click', (e) => {
     e.stopPropagation();
     btnText.classList.toggle('active');
     btnText.setAttribute('aria-pressed', String(btnText.classList.contains('active')));
     syncWidgets();
+    savePreferences();
   });
   btnToasts?.addEventListener('click', (e) => {
     e.stopPropagation();
     btnToasts.classList.toggle('active');
     btnToasts.setAttribute('aria-pressed', String(btnToasts.classList.contains('active')));
     syncWidgets();
+    savePreferences();
   });
   // Show Tool Calls toggle
   btnToolCalls?.addEventListener('click', (e) => {
@@ -2539,6 +2633,7 @@ document.addEventListener("DOMContentLoaded", () => {
       grid?.opts && (grid.opts.float = floatEnabled);
     }
     btnToggleFloat.textContent = floatEnabled ? 'Float On' : 'Float Off';
+    savePreferences();
   });
 
   // Save/Restore
