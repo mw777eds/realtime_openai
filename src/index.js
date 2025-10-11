@@ -170,6 +170,63 @@ function loadPersistedSettings() {
   }
 }
 
+/* Helpers to cache/restore individual widget positions per-mode */
+function ensureModeSettings(mode = getCurrentMode()) {
+  if (!persistedSettings[mode]) {
+    const snapshot = computeCurrentSettingsSnapshot();
+    persistedSettings[mode] = snapshot || {
+      version: 1,
+      columns: grid?.engine?.column || grid?.opts?.column || 12,
+      cellHeight: undefined,
+      float: !!floatEnabled,
+      voice: !!realtimeWidgetEl,
+      text: !!textWidgetEl,
+      toasts: !!toastsWidgetEl,
+      layout: []
+    };
+  }
+  if (!Array.isArray(persistedSettings[mode].layout)) {
+    persistedSettings[mode].layout = [];
+  }
+  return persistedSettings[mode];
+}
+
+function persistModeSettings(mode = getCurrentMode()) {
+  try {
+    localStorage.setItem(`settings:${mode}`, JSON.stringify({ key: mode, settings: persistedSettings[mode] }));
+  } catch (_) {}
+}
+
+function getSavedWidgetRect(widget, mode = getCurrentMode()) {
+  const s = persistedSettings[mode];
+  if (!s || !Array.isArray(s.layout)) return null;
+  const entry = s.layout.find(n => n && n.widget === widget);
+  if (entry && typeof entry.x === 'number') {
+    return { x: entry.x, y: entry.y, w: entry.w, h: entry.h };
+  }
+  return null;
+}
+
+function updateSavedWidgetRect(widget, rect, mode = getCurrentMode()) {
+  if (!rect || typeof rect !== 'object') return;
+  const s = ensureModeSettings(mode);
+  const layout = s.layout;
+  const idx = layout.findIndex(n => n && n.widget === widget);
+  const normalized = {
+    widget,
+    x: Number(rect.x ?? 0),
+    y: Number(rect.y ?? 0),
+    w: Number(rect.w ?? 4),
+    h: Number(rect.h ?? 4)
+  };
+  if (idx >= 0) {
+    layout[idx] = normalized;
+  } else {
+    layout.push(normalized);
+  }
+  persistModeSettings(mode);
+}
+
 /* Rebuild grid from a layout array (+ float), respecting current dock state for convo */
 function rebuildFromLayout(layout = [], float = floatEnabled) {
   if (!grid) return;
@@ -2379,7 +2436,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function addRealtimeWidget(pos) {
     if (realtimeWidgetEl) return;
-    const el = grid.addWidget({ x: pos?.x ?? 0, y: pos?.y ?? 0, w: pos?.w ?? 4, h: pos?.h ?? 4 });
+    const mode = getCurrentMode();
+    const saved = !pos ? getSavedWidgetRect('voice', mode) : null;
+    const p = pos || saved || { x: 0, y: 0, w: 4, h: 4 };
+    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="realtime-widget">
@@ -2392,6 +2452,11 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>`;
     realtimeWidgetEl = el;
     el.dataset.widget = 'voice';
+    // Cache position and presence for this mode
+    updateSavedWidgetRect('voice', p, mode);
+    ensureModeSettings(mode); 
+    persistedSettings[mode].voice = true;
+    persistModeSettings(mode);
     // Hook up canvas and click handlers inside the widget
     initializeCanvas();
     const clickOverlay = document.getElementById('clickOverlay');
@@ -2405,17 +2470,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function removeRealtimeWidget() {
     if (!realtimeWidgetEl) return;
+    const mode = getCurrentMode();
+    const node = realtimeWidgetEl.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === realtimeWidgetEl);
+    if (node) {
+      updateSavedWidgetRect('voice', { x: node.x, y: node.y, w: node.w, h: node.h }, mode);
+    }
     grid.removeWidget(realtimeWidgetEl);
     realtimeWidgetEl = null;
     if (waveformResizeObserver) {
       try { waveformResizeObserver.disconnect(); } catch (_) { }
       waveformResizeObserver = null;
     }
+    ensureModeSettings(mode);
+    persistedSettings[mode].voice = false;
+    persistModeSettings(mode);
   }
 
   function addToastsWidget(pos) {
     if (toastsWidgetEl) return;
-    const el = grid.addWidget({ x: pos?.x ?? 8, y: pos?.y ?? 0, w: pos?.w ?? 4, h: pos?.h ?? 6 });
+    const mode = getCurrentMode();
+    const saved = !pos ? getSavedWidgetRect('toasts', mode) : null;
+    const p = pos || saved || { x: 8, y: 0, w: 4, h: 6 };
+    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="toasts-widget">
@@ -2424,6 +2500,11 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>`;
     toastsWidgetEl = el;
     el.dataset.widget = 'toasts';
+    // Cache position and presence for this mode
+    updateSavedWidgetRect('toasts', p, mode);
+    ensureModeSettings(mode);
+    persistedSettings[mode].toasts = true;
+    persistModeSettings(mode);
     // Prevent dragging from inside the timeline; only header should drag
     const timelineEl = contentEl.querySelector('.toast-timeline');
     if (timelineEl) {
@@ -2435,8 +2516,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function removeToastsWidget() {
     if (!toastsWidgetEl) return;
+    const mode = getCurrentMode();
+    const node = toastsWidgetEl.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === toastsWidgetEl);
+    if (node) {
+      updateSavedWidgetRect('toasts', { x: node.x, y: node.y, w: node.w, h: node.h }, mode);
+    }
     grid.removeWidget(toastsWidgetEl);
     toastsWidgetEl = null;
+    ensureModeSettings(mode);
+    persistedSettings[mode].toasts = false;
+    persistModeSettings(mode);
   }
 
   function addConversationsWidget(pos) {
@@ -2535,7 +2624,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function addTextWidget(pos) {
     if (textWidgetEl) return;
-    const el = grid.addWidget({ x: pos?.x ?? 0, y: pos?.y ?? 12, w: pos?.w ?? 12, h: pos?.h ?? 6 });
+    const mode = getCurrentMode();
+    const saved = !pos ? getSavedWidgetRect('text', mode) : null;
+    const p = pos || saved || { x: 0, y: 12, w: 12, h: 6 };
+    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="text-widget">
@@ -2550,6 +2642,11 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>`;
     textWidgetEl = el;
     el.dataset.widget = 'text';
+    // Cache position and presence for this mode
+    updateSavedWidgetRect('text', p, mode);
+    ensureModeSettings(mode);
+    persistedSettings[mode].text = true;
+    persistModeSettings(mode);
 
     // Wire up events
     const inputEl = contentEl.querySelector('#chat-input');
@@ -2595,8 +2692,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function removeTextWidget() {
     if (!textWidgetEl) return;
+    const mode = getCurrentMode();
+    const node = textWidgetEl.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === textWidgetEl);
+    if (node) {
+      updateSavedWidgetRect('text', { x: node.x, y: node.y, w: node.w, h: node.h }, mode);
+    }
     grid.removeWidget(textWidgetEl);
     textWidgetEl = null;
+    ensureModeSettings(mode);
+    persistedSettings[mode].text = false;
+    persistModeSettings(mode);
   }
   
   function syncWidgets() {
