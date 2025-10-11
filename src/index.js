@@ -182,6 +182,7 @@ function ensureModeSettings(mode = getCurrentMode()) {
       voice: !!realtimeWidgetEl,
       text: !!textWidgetEl,
       toasts: !!toastsWidgetEl,
+      showToolCalls: !!showToolPills,
       layout: []
     };
   }
@@ -284,6 +285,7 @@ function applySettingsForMode(mode) {
   const btnVoice = document.getElementById('btn-voice');
   const btnText = document.getElementById('btn-text');
   const btnToasts = document.getElementById('btn-toasts');
+  const btnToolCalls = document.getElementById('btn-tool-calls');
   if (btnVoice) {
     btnVoice.classList.toggle('active', !!settings.voice);
     btnVoice.setAttribute('aria-pressed', String(!!settings.voice));
@@ -295,6 +297,13 @@ function applySettingsForMode(mode) {
   if (btnToasts) {
     btnToasts.classList.toggle('active', !!settings.toasts);
     btnToasts.setAttribute('aria-pressed', String(!!settings.toasts));
+  }
+  if (btnToolCalls) {
+    const on = (typeof settings.showToolCalls === 'boolean') ? !!settings.showToolCalls : !!showToolPills;
+    btnToolCalls.classList.toggle('active', on);
+    btnToolCalls.setAttribute('aria-pressed', String(on));
+    showToolPills = on;
+    renderChatFromHistory();
   }
 
   rebuildFromLayout(settings.layout, settings.float);
@@ -1294,6 +1303,7 @@ function computeCurrentSettingsSnapshot() {
     voice: !!realtimeWidgetEl,
     text: !!textWidgetEl,
     toasts: !!toastsWidgetEl,
+    showToolCalls: !!showToolPills,
     layout: nodes
   };
 }
@@ -1338,7 +1348,7 @@ function buildMinifiedHistoryFromSession() {
  */
 function buildBootstrapTestPayload() {
   const mode = getCurrentMode();
-  const settings = persistedSettings[mode] || computeCurrentSettingsSnapshot() || {
+  let settings = persistedSettings[mode] || computeCurrentSettingsSnapshot() || {
     version: 1,
     columns: 12,
     float: true,
@@ -1347,6 +1357,8 @@ function buildBootstrapTestPayload() {
     toasts: !!toastsWidgetEl,
     layout: []
   };
+  // Include showToolCalls in settings snapshot
+  settings.showToolCalls = !!showToolPills;
   return {
     history: buildMinifiedHistoryFromSession(),
     key: mode,
@@ -1650,6 +1662,7 @@ function bootstrapApp(payload) {
         voice: !!s.voice,
         text: !!s.text,
         toasts,
+        showToolCalls: (typeof s.showToolCalls === 'boolean') ? !!s.showToolCalls : undefined,
         layout: s.layout
       };
     }
@@ -2122,6 +2135,7 @@ function saveCurrentLayout() {
       voice: !!realtimeWidgetEl,
       text: !!textWidgetEl,
       toasts: !!toastsWidgetEl,
+      showToolCalls: !!showToolPills,
       layout: nodes
     };
 
@@ -2302,6 +2316,7 @@ function applySettingsEnvelope(envelope) {
     voice: !!env.settings.voice,
     text: !!env.settings.text,
     toasts,
+    showToolCalls: (typeof env.settings.showToolCalls === 'boolean') ? !!env.settings.showToolCalls : persistedSettings[mode]?.showToolCalls,
     layout: env.settings.layout
   };
 
@@ -2335,11 +2350,13 @@ function getCurrentToggleSettings() {
   const btnVoice = document.getElementById('btn-voice');
   const btnText = document.getElementById('btn-text');
   const btnToasts = document.getElementById('btn-toasts');
+  const btnToolCalls = document.getElementById('btn-tool-calls');
   const mode = getCurrentMode();
   return {
     voice: !!btnVoice?.classList.contains('active'),
     text: !!btnText?.classList.contains('active'),
     toasts: !!btnToasts?.classList.contains('active'),
+    showToolCalls: !!btnToolCalls?.classList.contains('active'),
     float: !!floatEnabled,
     mode
   };
@@ -2758,6 +2775,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnToolCalls.setAttribute('aria-pressed', String(on));
     showToolPills = on;
     renderChatFromHistory();
+    savePreferences();
   });
 
   // Copy Test Payload button
