@@ -1672,9 +1672,6 @@ function bootstrapApp(payload) {
     if (data.sessionId) {
       window.__sessionId = data.sessionId;
     }
-    if (data.machineId) {
-      window.__machineId = data.machineId;
-    }
 
     // If grid is already initialized, immediately align dock state and apply layout/toggles
     if (grid) {
@@ -2150,9 +2147,8 @@ function saveCurrentLayout() {
 
     // Send to FileMaker (user-scoped default; FileMaker derives user via Get( Username ))
     const envelope = {
-      scope: "machine",
+      scope: "user",
       key,
-      machineId: window.__machineId || null,
       sessionId: window.__sessionId || null,
       settings: settingsSnapshot
     };
@@ -2208,7 +2204,6 @@ function loadLayoutForCurrentMode() {
     if (window.FileMaker?.PerformScript) {
       const payload = {
         sessionId: window.__sessionId || "",
-        machineId: window.__machineId || "",
         key
       };
       window.FileMaker.PerformScript('Grid_LoadLayout', JSON.stringify(payload));
@@ -2367,7 +2362,6 @@ function savePreferences() {
   if (window.FileMaker?.PerformScript) {
     window.FileMaker.PerformScript('Settings_SavePreferences', JSON.stringify({
       sessionId: window.__sessionId || "",
-      machineId: window.__machineId || "",
       settings
     }));
   }

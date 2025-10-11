@@ -25,9 +25,9 @@ FileMaker AI Chat + Realtime API Unified Interface — Revised Requirements
   - float: true.
   - draggable: { handle: '.gs-handle', scroll: true }, resizable: { handles: 'e, se, s, sw, w' }.
 - Persistence:
-  - Maintain two saved layouts per machine and mode: Docked (sidebar visible) and Undocked (Conversations as a widget). Saved under machineId (and optionally sessionId if you prefer per-chat layouts).
-  - Save Layout sends an envelope with scope: { scope: "machine" | "session", key, machineId, sessionId, settings { version, columns, cellHeight?, float, voice, text, toasts|debug, layout: [...] } } where layout is an array of nodes like { x, y, w, h, widget: "voice"|"text"|"toasts"|"convo" }.
-    - When the user clicks Save Layout in the menu, scope must be "machine" (sets the default template for new sessions and Restore Default).
+  - Maintain two saved layouts per user and mode: Docked (sidebar visible) and Undocked (Conversations as a widget). Saved under AccountName (and optionally sessionId if you prefer per-chat layouts).
+  - Save Layout sends an envelope with scope: { scope: "user" | "session", key, sessionId, settings { version, columns, cellHeight?, float, voice, text, toasts|debug, layout: [...] } } where layout is an array of nodes like { x, y, w, h, widget: "voice"|"text"|"toasts"|"convo" }.
+    - When the user clicks Save Layout in the menu, scope must be "user" (sets the default template for new sessions and Restore Default).
     - Session layouts are auto-saved with scope "session" at boundaries (session switch, viewer close), and may be debounced on drag/resize if desired.
     - If scope is omitted, FileMaker may infer scope as "session" when sessionId is present, otherwise "machine".
   - Restore loads the envelope for the current mode and applies settings (float and toggles) and settings.layout to rebuild widgets. If none is saved, defaults are applied and users can arrange, then Save Layout.
@@ -195,7 +195,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Session layouts are authoritative and kept in memory; they are flushed to FileMaker with scope:"session" on session switch and Web Viewer close (optionally debounced on grid changes). Dock/undock applies the current session’s cached layout for that mode, falling back to machine template, then app defaults.
 
 15. Next steps
-- Initialization and per-machine config
+- Initialization and per-user config
   - Add a bootstrap init path where FileMaker passes a persistent machineId and initial settings to the WebView. The app should:
     - Load per-machine configuration and per-mode layouts using machineId; if none exist, fall back to defaults.
     - Do not auto-start Realtime on page load. Only start Realtime (initializeWebRTC) when the Realtime widget is enabled/first brought on screen or explicitly requested.
@@ -230,7 +230,6 @@ Each item is append-only. Realtime is the authority while active; all modes read
 
 16. Initialization flow (per-machine)
 - FileMaker calls a bootstrap function (e.g., window.bootstrapApp) with:
-  - machineId: persistent identifier for the host machine.
   - sessionId: logical chat session identifier.
   - settings: { voice, text, toasts, float, mode: "docked"|"undocked" }.
 - App behavior:
@@ -240,9 +239,9 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Load canonical history for sessionId and render in Text widget; Realtime preload occurs when Realtime is started.
 
 17. Impact on FileMaker scripts (see script.txt)
-- Add App_Init(sessionId; machineId) to return:
+- Add App_Init(sessionId) to return:
   - Initial settings (voice/text/toasts/float, mode).
-  - Saved layout for mode and machineId (or default).
+  - Saved layout for mode and user (or default).
   - Canonical chat history for sessionId.
 - Update Grid_SaveLayout/Grid_LoadLayout to store/retrieve layouts by (machineId, sessionId, key=mode).
 - Add Settings_SavePreferences(sessionId; machineId; JSON) to persist toggle states per machine.
@@ -271,7 +270,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Layout flushes (sessionId + key):
     - On session switch and on Web Viewer close (flush if layout changed).
     - Optional: debounce 1–2s autosave on dragstop/resizestop/remove for robust recovery.
-  - Machine templates (machineId + key):
+  - User templates (AccountName + key):
     - Only when the user clicks Save Layout in the menu (explicit action).
 - JavaScript API surface (Web Viewer functions):
   - bootstrapApp({ machineId, sessionId, mode, settings? }): seeds in-memory state for current session; do not start Voice until the Voice widget mounts.

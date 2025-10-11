@@ -3,16 +3,16 @@ FileMaker Scripts Mockups — Save/Load Grid Layout (per-mode)
 Overview
 - Two scopes of persisted layouts:
   - Session scope (sessionId + key): authoritative per-chat layouts for Docked/Undocked. Always updated at boundaries (session switch, viewer close) and optionally on debounced grid changes. Includes session-only widgets (e.g., artifacts).
-  - Machine scope (machineId + key): template defaults for Docked/Undocked. Updated only on explicit “Save Layout” action. Used to seed new sessions and “Restore Default Layout”.
+  - User scope (AccountName + key): template defaults for Docked/Undocked. Updated only on explicit “Save Layout” action. Used to seed new sessions and “Restore Default Layout”.
 - Precedence when applying a layout (for a given mode key):
   1) Session scope (sessionId + key), else
-  2) Machine scope (machineId + key), else
+  2) User scope (AccountName + key), else
   3) App defaults.
 - Web app calls:
   - Grid_SaveLayout(sessionId; JSON): saves a layout envelope (scope:"session" or "machine") for the current mode key ("docked"|"undocked").
-  - Grid_LoadLayout(sessionId; machineId; key): returns the saved envelope for the requested key/scope (see parameters), or empty if none.
+  - Grid_LoadLayout(sessionId; key): returns the saved envelope for the requested key/scope (see parameters), or empty if none.
   - Optionally: Grid_RestoreDefaultLayout(sessionId; key): returns a default envelope for the requested key.
-  - Scope inference (when not provided): treat as "session" if sessionId is present, otherwise "machine".
+  - Scope inference (when not provided): treat as "session" if sessionId is present, otherwise "user".
 - History persistence (separate from layout):
   - Chat_SaveHistory(sessionId; JSON): append-or-snapshot canonical history.
   - Chat_GetHistory(sessionId): returns canonical history for the chat.
@@ -23,16 +23,16 @@ Overview
 
 Suggested schema (example)
 - Table: GridLayouts
-  - MachineId (Text)   // persistent device id
+  - AccountName (Text)   // user account name
   - SessionId (Text)   // logical chat session id
   - Key (Text)         // "docked" | "undocked"
   - Payload (Text)     // JSON string as saved
   - Float (Number)     // 0/1
   - UpdatedAt (Timestamp)
-- Relationship: GridLayouts by MachineId + SessionId + Key (Unique)
+- Relationship: GridLayouts by AccountName + SessionId + Key (Unique)
 
 - Table: AppPreferences (optional)
-  - MachineId (Text)
+  - AccountName (Text)
   - SessionId (Text)
   - Settings (Text) // JSON: { voice, text, toasts, float, mode }
   - UpdatedAt (Timestamp)
@@ -41,7 +41,6 @@ JSON payload from Web (layout envelope)
 {
   "scope": "session" | "machine",
   "key": "docked" | "undocked",
-  "machineId": "ABCDEF-123...",               // persistent device id
   "sessionId": "session-xyz",                 // required when scope = "session"
   "settings": {
     "version": 1,
@@ -128,14 +127,14 @@ Pseudo-steps:
 18) Commit Records/Requests [ No dialog ]
 19) Exit Script [ Result: "OK" ]
 
-Script: Grid_LoadLayout [ sessionId ; machineId ; key ]
+Script: Grid_LoadLayout [ sessionId ; key ]
 Purpose: Return the saved layout envelope for the requested scope and key to the Web Viewer.
 
 Parameters (JSON preferred):
-- { "scope":"session"|"machine", "sessionId":"...", "machineId":"...", "key":"docked" }
+- { "scope":"session"|"user", "sessionId":"...", "key":"docked" }
 - If scope omitted:
   - If sessionId present → load session scope (SessionId + Key).
-  - Else → load machine scope (MachineId + Key).
+  - Else → load user scope (AccountName + Key).
 
 Pseudo-steps:
 1) Set Variable [ $raw = Get ( ScriptParameter ) ]
@@ -263,19 +262,18 @@ Pseudo-steps:
    End If
 3) Exit Script [ Result: $payload ]
 
-Updated persistence: per-machine (same script names)
+Updated persistence: per-user (same script names)
 
-Script: App_Init [ sessionId ; machineId ]
+Script: App_Init [ sessionId ]
 Purpose: Return initialization bundle for the WebView.
 
 Parameters (JSON prefered):
-- { "sessionId": "...", "machineId": "..." }
+- { "sessionId": "..." }
 
 Returns (JSON):
 {
   "success": true,
   "result": {
-    "machineId": "...",
     "sessionId": "...",
     "settings": { "voice": false, "text": true, "toasts": true, "float": true, "mode": "docked" },
     "layout": { ...payload from Grid_LoadLayout... } | "",
@@ -292,11 +290,11 @@ Pseudo-steps:
 6) Build JSON result { machineId, sessionId, settings, layout, history }.
 7) Exit Script [ Result: JSONSetElement ( JSONSetElement ( "{}" ; [ "success" ; 1 ; JSONBoolean ] ) ; [ "result" ; $json ; JSONObject ] ) ]
 
-Script: Settings_SavePreferences [ sessionId ; machineId ; settingsJSON ]
+Script: Settings_SavePreferences [ sessionId ; settingsJSON ]
 Purpose: Persist UI toggles per machine and session.
 
 Parameters:
-- { "sessionId": "...", "machineId": "...", "settings": { "voice":..., "text":..., "toasts":..., "float":..., "mode":"docked|undocked" } }
+- { "sessionId": "...", "settings": { "voice":..., "text":..., "toasts":..., "float":..., "mode":"docked|undocked" } }
 
 Pseudo-steps:
 1) Parse params → $sessionId, $machineId, $settings.
@@ -304,7 +302,7 @@ Pseudo-steps:
 3) Upsert record; set Settings = $settings; UpdatedAt = now.
 4) Exit Script [ Result: "OK" ]
 
-Script: Grid_SaveLayout [ sessionId ; machineId ; payloadJSON ]
+Script: Grid_SaveLayout [ sessionId ; payloadJSON ]
 Purpose: Save layout keyed by machine and session.
 
 Parameters: payload as described in “JSON payload from Web”.
@@ -316,7 +314,7 @@ Pseudo-steps differences vs V1:
 - Find GridLayouts by MachineId + SessionId + Key
 - Upsert Payload, Float, UpdatedAt
 
-Script: Grid_LoadLayout [ sessionId ; machineId ; key ]
+Script: Grid_LoadLayout [ sessionId ; key ]
 Purpose: Return saved layout for machineId + sessionId + key.
 
 Parameters (JSON or plain):
