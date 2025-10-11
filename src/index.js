@@ -367,6 +367,7 @@ const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
 let defaultResponseModalities = [...DEFAULT_MODALITIES];
 let containerImageToolName = DEFAULT_CONTAINER_IMAGE_TOOL.name;
 let currentSessionConfig = null;
+let toolsEnabled = false;
 
 function parseJsonSafely(value, label) {
   if (!value) {
@@ -465,7 +466,7 @@ function prepareSessionConfiguration(instructions, toolsStr, toolChoice, session
   const defaultSessionConfig = {
     instructions: instructions || "You are a helpful AI assistant.",
     tools,
-    tool_choice: toolChoice || "auto",
+    tool_choice: "none",
     input_audio_transcription: {
       model: "gpt-4o-mini-transcribe"
     },
@@ -615,6 +616,8 @@ function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
   };
 
   dc.send(JSON.stringify(conversationEvent));
+
+  enableToolsIfDisabled();
 
   const shouldRequestResponse = typeof payload?.requestResponse === 'boolean'
     ? payload.requestResponse
@@ -886,6 +889,14 @@ function updateSession(updateParamsJson) {
     console.error("Failed to update session:", error);
     return false;
   }
+}
+
+function enableToolsIfDisabled() {
+  if (toolsEnabled) return;
+  toolsEnabled = true;
+  try {
+    updateSession(JSON.stringify({ tool_choice: 'auto' }));
+  } catch (_) {}
 }
 
 /* 
@@ -1448,7 +1459,7 @@ function buildHistoryEvents(items) {
           role: 'assistant',
           content: [{
             type: 'output_text',
-            text: `Previously: assistant requested tool "${name}" with arguments ${argsStr}`
+            text: `Context only (do not re-execute): assistant previously requested tool "${name}" with arguments ${argsStr}`
           }]
         }
       });
@@ -1466,7 +1477,7 @@ function buildHistoryEvents(items) {
           role: 'assistant',
           content: [{
             type: 'output_text',
-            text: `Previously: tool_result for call_id=${callId} (status=${status}) → ${outStr}`
+            text: `Context only (do not re-execute): tool_result for call_id=${callId} (status=${status}) → ${outStr}`
           }]
         }
       });
@@ -1734,6 +1745,7 @@ function sendTextToRealtime(text, requestResponse = true, modalitiesOverride = n
       }
     };
     dc.send(JSON.stringify(conversationEvent));
+    enableToolsIfDisabled();
 
     if (requestResponse) {
       const normalizedModalitiesOverride = normalizeModalitiesList(modalitiesOverride) || modalitiesOverride;
@@ -3044,6 +3056,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         // Check if we have a transcript in the expected location
         const transcript = realtimeEvent.item?.content?.transcript || realtimeEvent.transcript || '';
         if (transcript) {
+          enableToolsIfDisabled();
           console.log("User message:", transcript);
           if (window.FileMaker) {
             window.FileMaker.PerformScript("LogMessage", JSON.stringify({
