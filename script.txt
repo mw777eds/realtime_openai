@@ -60,6 +60,8 @@ JSON payload from Web (layout envelope)
   }
 }
 
+******************************
+******************************
 Script: Grid_SaveLayout [ sessionId ; payloadJSON ]
 Purpose: Save current mode’s layout for a session (scope:"session") or update machine defaults (scope:"machine").
 
@@ -127,6 +129,8 @@ Pseudo-steps:
 18) Commit Records/Requests [ No dialog ]
 19) Exit Script [ Result: "OK" ]
 
+******************************
+******************************
 Script: Grid_LoadLayout [ sessionId ; key ]
 Purpose: Return the saved layout envelope for the requested scope and key to the Web Viewer.
 
@@ -189,6 +193,7 @@ Pseudo-steps:
 13) Set Variable [ $payload = GridLayouts::Payload ]
 14) Exit Script [ Result: $payload ]
 
+******************************
 Script: Grid_RestoreDefaultLayout [ sessionId ; key ]
 Purpose: Return a default layout envelope for given mode; Web applies it as a reset.
 
@@ -264,6 +269,7 @@ Pseudo-steps:
 
 Updated persistence: per-user (same script names)
 
+******************************
 Script: App_Init [ sessionId ]
 Purpose: Return initialization bundle for the WebView.
 
@@ -290,6 +296,7 @@ Pseudo-steps:
 6) Build JSON result { machineId, sessionId, settings, layout, history }.
 7) Exit Script [ Result: JSONSetElement ( JSONSetElement ( "{}" ; [ "success" ; 1 ; JSONBoolean ] ) ; [ "result" ; $json ; JSONObject ] ) ]
 
+******************************
 Script: Settings_SavePreferences [ sessionId ; settingsJSON ]
 Purpose: Persist UI toggles per machine and session.
 
