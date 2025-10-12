@@ -61,3 +61,165 @@ Pseudo-steps:
       [ "result" ; Sessions::SessionJSON ; JSONRaw ]
     ) ]
 13) Exit Script [ Result: $out ]
+
+******************************
+Script: Grid_SaveLayout [ sessionId ; payloadJSON ]
+Purpose: Save the current mode’s user default layout (per user, not per session). Accepts one mode at a time.
+
+Parameters (JSON):
+- { "key":"docked"|"undocked", "sessionId":"...", "settings": { version, columns, cellHeight?, float, voice, text, toasts|debug, showToolCalls?, layout:[ {x,y,w,h,widget}, ... ] } }
+
+Behavior:
+- Upsert per-user defaults for the provided key (AccountName + Key).
+- Store the provided settings and layout array for that key. Other key remains unchanged.
+
+Return:
+- "{\"success\":true}"
+
+******************************
+Script: Grid_LoadLayout [ sessionId ; key ]
+Purpose: Return the saved layout envelope (prefer session state if you maintain it; otherwise user defaults) for the requested key.
+
+Parameters (JSON):
+- { "sessionId":"...", "key":"docked"|"undocked" }
+
+Behavior:
+- Look up per-session state first if you maintain session layouts; else skip.
+- Fallback to per-user defaults by AccountName + Key.
+- Return an envelope shaped as:
+  {
+    "key": "docked"|"undocked",
+    "settings": {
+      "version": 1,
+      "columns": 12,
+      "cellHeight": 8,
+      "float": true,
+      "voice": true,
+      "text": true,
+      "toasts": true,
+      "showToolCalls": true,
+      "layout": {
+        "docked": [ ...optional... ],
+        "undocked": [ ...optional... ]
+      }
+    }
+  }
+- It is OK to include only the requested key inside settings.layout.
+
+Return:
+- The JSON envelope above, or "" if none.
+
+******************************
+Script: Grid_RestoreDefaultLayout [ sessionId ; key ]
+Purpose: Return a default layout envelope for the given mode key. Web will apply it as a reset.
+
+Parameters (JSON):
+- { "sessionId":"...", "key":"docked"|"undocked" }
+
+Behavior:
+- Build and return an envelope with settings.layout containing only that key’s default nodes.
+- Include default toggle values (voice/text/toasts/float) as you prefer.
+
+Return:
+- The JSON envelope.
+
+******************************
+Script: Realtime_Init [ sessionId ]
+Purpose: Generate an ephemeral OpenAI token and return WebRTC session config to the Web Viewer.
+
+Parameters (JSON):
+- { "sessionId":"..." }
+
+Behavior:
+- Resolve model, instructions, tools, and session configuration.
+- Call JavaScript in Web Viewer: window.applyRealtimeInit(JSON) with:
+  {
+    "success": true,
+    "result": {
+      "ephemeralKey": "...",
+      "model": "gpt-4o-realtime-preview",
+      "instructions": "You are a helpful AI assistant.",
+      "tools": [],
+      "toolChoice": "auto",
+      "sessionConfig": {
+        "modalities": ["text","audio"],
+        "voice": "verse"
+      }
+    }
+  }
+
+Return:
+- "{\"success\":true}" (optional; primary handoff is via JS callback)
+
+******************************
+Script: CallTools [ sessionId ; toolCallsJSON ]
+Purpose: Execute tool calls emitted by the model and return outputs to the Web Viewer.
+
+Parameters (JSON):
+- { "toolCalls":[ { "name":"...", "call_id":"...", "arguments":{...} }, ... ] }
+
+Behavior:
+- For each tool call, run the corresponding FileMaker script/workflow.
+- Use "Perform JavaScript in Web Viewer" to call:
+  - window.sendToolResponse(JSON.stringify({ call_id:"...", output:{...} }))
+  - After the last tool response, call window.createModelResponse()
+
+Return:
+- "{\"success\":true}"
+
+******************************
+Script: LogMessage [ sessionId ; messageJSON ]
+Purpose: Persist a single message line (for audit/logging or simple transcripts).
+
+Parameters (JSON):
+- { "role":"user"|"assistant", "message":"..." }
+
+Behavior:
+- Append to a log table or write into Sessions::SessionJSON.history if you prefer.
+- Optional: also echo to a UI log window.
+
+Return:
+- "{\"success\":true}"
+
+******************************
+Script: Chat_SendMessage [ sessionId ; messageJSON ]
+Purpose: Text-mode fallback when Realtime is not connected.
+
+Parameters (JSON):
+- { "role":"user", "message":"..." }
+
+Behavior:
+- Append user message to canonical history (Sessions::SessionJSON.history).
+- Call OpenAI Chat Completions; append assistant message and any tool events.
+- Optionally call "Perform JavaScript in Web Viewer" to stream or to render final assistant text.
+
+Return:
+- "{\"success\":true}"
+
+******************************
+Script: ShowJSON [ jsonString ]
+Purpose: Developer utility to show JSON in a pretty viewer.
+
+Parameters:
+- Plain JSON string
+
+Behavior:
+- Show a custom dialog / card window with the JSON formatted.
+
+Return:
+- "{\"success\":true}"
+
+******************************
+Script: HandleAPIError [ errorJSON ]
+Purpose: Centralized error handler for API failures (quota, network, etc).
+
+Parameters (JSON):
+- { "code":"...", "message":"...", "type":"..." }
+
+Behavior:
+- Log error details.
+- Show a user-friendly dialog.
+- Optionally tag the current session with the error.
+
+Return:
+- "{\"success\":true}"
