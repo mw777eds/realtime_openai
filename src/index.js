@@ -349,6 +349,8 @@ window.buildBootstrapTestPayload = buildBootstrapTestPayload;
 window.applyLoadedLayout = applyLoadedLayout;
 window.applySettingsEnvelope = applySettingsEnvelope;
 window.savePreferences = savePreferences;
+window.saveSessionState = saveSessionState;
+window.getSessionState = getSessionState;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
 const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
@@ -1304,6 +1306,45 @@ function logChatBufferRaw(pretty = true) {
   console.log(out);
   return out;
 }
+
+/**
+ * Return current session state for FileMaker: id, mode, history, per-mode layouts.
+ */
+function getSessionState() {
+  return {
+    sessionId: window.__sessionId || "",
+    mode: getCurrentMode(),
+    history: Array.isArray(sessionHistory) ? sessionHistory.slice() : [],
+    layouts: {
+      docked: persistedSettings.docked || null,
+      undocked: persistedSettings.undocked || null
+    }
+  };
+}
+
+/**
+ * Persist canonical history to FileMaker (Chat_SaveHistory).
+ * Call this on session switch or viewer close.
+ */
+function saveSessionState() {
+  if (!window.FileMaker?.PerformScript) return false;
+  try {
+    const payload = {
+      sessionId: window.__sessionId || "",
+      history: Array.isArray(sessionHistory) ? sessionHistory.slice() : []
+    };
+    window.FileMaker.PerformScript('Chat_SaveHistory', JSON.stringify(payload));
+    return true;
+  } catch (e) {
+    console.warn('Chat_SaveHistory failed', e);
+    return false;
+  }
+}
+
+/* Flush history when the viewer is being closed/navigated away */
+window.addEventListener('pagehide', () => {
+  try { if (Array.isArray(sessionHistory) && sessionHistory.length > 0) saveSessionState(); } catch (_) {}
+});
 
 /**
  * Compute a snapshot of current grid settings without persisting.
