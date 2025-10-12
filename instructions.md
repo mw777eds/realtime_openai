@@ -81,10 +81,12 @@ Each item is append-only. Realtime is the authority while active; all modes read
 }
 
 - FM scripts:
+  - Realtime_Init(agentName) → return ephemeral key + model/session config for Realtime (does not require sessionId).
+  - CallAgent(sessionId; JSON { agentName, message }) → text-mode handler that loads history via Session_GetState and continues the chat; persists updates via Session_SaveState.
   - Session_SaveState(sessionId; JSON) → upsert unified session JSON; merge provided keys (settings/history).
   - Session_GetState(sessionId) → return unified session JSON.
   - Grid_SaveLayout(sessionId; JSON) / Grid_LoadLayout(sessionId).
-  - Tools_Invoke(sessionId; JSON toolCalls[]).
+  - CallTools(sessionId; JSON toolCalls[]) → execute model tool calls and return outputs to the web viewer.
   - HandleAPIError(JSON).
 
 5. Synchronization rules
@@ -105,7 +107,9 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Ensure any partial assistant output is consolidated and saved.
   - The next text submission builds its messages[] solely from the updated canonical log.
 - Text mode:
-  - Append user messages to canonical; call Chat Completions; append assistant + any tool events; persist.
+  - Before sending, ensure the latest Realtime transcript (if any) is flushed to FileMaker (the web client calls saveSession({ history:true }) when Voice is closed).
+  - Call CallAgent with { sessionId, agentName: settings.activeAgent.text, message }. CallAgent loads history via Session_GetState, builds context, gets the assistant reply, and appends assistant/tool events.
+  - Persist updates via Session_SaveState on the FileMaker side.
 
 6. API adapters
 - Realtime adapter:
@@ -273,7 +277,8 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - User templates (AccountName + key):
     - Only when the user clicks Save Layout in the menu (explicit action).
 - JavaScript API surface (Web Viewer functions):
-  - bootstrapApp({ sessionId, mode, settings? }): seeds in-memory state for current session; do not start Voice until the Voice widget mounts.
+  - bootstrapApp({ sessionId, mode, settings?, activeAgent? }): seeds state; if activeAgent provided, sets settings.activeAgent = { voice, text }.
+  - setActiveAgent({ voice?, text? }): update active agents for voice/text; persists to session settings via Session_SaveState.
   - saveSession(options): upsert unified session JSON via Session_SaveState. options = { settings?: boolean, history?: boolean }.
   - saveSessionState(): alias for saveSession({ history: true }). Layout defaults are saved explicitly via the Save Layout menu action.
   - getSessionState(): returns { sessionId, mode, history, layouts: {docked, undocked}, dirty: {history, layout} } for FileMaker-side logic.

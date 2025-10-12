@@ -30,6 +30,17 @@ const sessionHistory = [];
 let showToolPills = false;
 let prefsReady = false;
 let applyingFromFM = false;
+// Active agent defaults (may be overridden by bootstrap or FileMaker)
+window.__activeAgent = window.__activeAgent || { voice: 'EmpoweredCore', text: 'EmpoweredCoreChat' };
+window.setActiveAgent = function updateActiveAgent(obj) {
+  if (!obj || typeof obj !== 'object') return;
+  window.__activeAgent = {
+    voice: (obj.voice !== undefined ? String(obj.voice) : (window.__activeAgent?.voice || 'EmpoweredCore')),
+    text: (obj.text !== undefined ? String(obj.text) : (window.__activeAgent?.text || 'EmpoweredCoreChat'))
+  };
+  // Persist new agent preferences into the session
+  try { saveSession({ settings: true }); } catch (_) {}
+};
 
 function createId(prefix = 'msg') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1065,6 +1076,8 @@ async function stopAudioTransmission() {
  * when the application is closed.
  */
 function cleanupWebRTC() {
+  // Defensive flush so Realtime transcripts aren’t lost
+  try { if (Array.isArray(sessionHistory) && sessionHistory.length > 0) saveSession({ history: true }); } catch (_) {}
   /* Clear active response ID when cleaning up */
   window.activeResponseId = null;
   currentSessionConfig = null;
@@ -1411,6 +1424,7 @@ function buildSessionSettingsBundle() {
 
   return {
     ...base,
+    activeAgent: window.__activeAgent || { voice: 'EmpoweredCore', text: 'EmpoweredCoreChat' },
     layout: {
       docked: dockedLayout,
       undocked: undockedLayout
@@ -1608,7 +1622,9 @@ function ensureRealtimeReady() {
   __rtState = 'requesting';
   if (window.FileMaker?.PerformScript) {
     try {
-      window.FileMaker.PerformScript('Realtime_Init', JSON.stringify({ sessionId: window.__sessionId || "" }));
+      window.FileMaker.PerformScript('Realtime_Init', JSON.stringify({
+        agentName: (window.__activeAgent && window.__activeAgent.voice) || "EmpoweredCore"
+      }));
     } catch (e) {
       console.warn('Failed to call Realtime_Init', e);
       __rtState = 'idle';
@@ -1785,7 +1801,20 @@ function bootstrapApp(payload) {
       });
     }
 
-    // Persist desired mode, session id, and machine id for later application
+    // Active agent settings (voice/text) from bootstrap
+    if (s.activeAgent && typeof s.activeAgent === 'object') {
+      window.__activeAgent = {
+        voice: s.activeAgent.voice || window.__activeAgent.voice || 'EmpoweredCore',
+        text: s.activeAgent.text || window.__activeAgent.text || 'EmpoweredCoreChat'
+      };
+    } else if (data.activeAgent && typeof data.activeAgent === 'object') {
+      window.__activeAgent = {
+        voice: data.activeAgent.voice || window.__activeAgent.voice || 'EmpoweredCore',
+        text: data.activeAgent.text || window.__activeAgent.text || 'EmpoweredCoreChat'
+      };
+    }
+
+    // Persist desired mode and session id for later application
     window.__bootstrapMode = mode;
     if (data.sessionId) {
       window.__sessionId = data.sessionId;
@@ -2623,6 +2652,9 @@ document.addEventListener("DOMContentLoaded", () => {
     ensureModeSettings(mode);
     persistedSettings[mode].voice = false;
     persistModeSettings(mode);
+    // Flush canonical history before tearing down voice, then cleanup Realtime
+    try { saveSession({ history: true }); } catch (_) {}
+    cleanupWebRTC();
   }
 
   function addToastsWidget(pos) {
