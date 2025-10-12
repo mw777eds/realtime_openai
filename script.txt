@@ -1,345 +1,59 @@
-FileMaker Scripts Mockups — Save/Load Grid Layout (per-mode)
-
-Overview
-- Two scopes of persisted layouts:
-  - Session scope (sessionId + key): authoritative per-chat layouts for Docked/Undocked. Always updated at boundaries (session switch, viewer close) and optionally on debounced grid changes. Includes session-only widgets (e.g., artifacts).
-  - User scope (AccountName + key): template defaults for Docked/Undocked. Updated only on explicit “Save Layout” action. Used to seed new sessions and “Restore Default Layout”.
-- Precedence when applying a layout (for a given mode key):
-  1) Session scope (sessionId + key), else
-  2) User scope (AccountName + key), else
-  3) App defaults.
-- Web app calls:
-  - Grid_SaveLayout(sessionId; JSON): saves a layout envelope (scope:"session" or "machine") for the current mode key ("docked"|"undocked").
-  - Grid_LoadLayout(sessionId; key): returns the saved envelope for the requested key/scope (see parameters), or empty if none.
-  - Optionally: Grid_RestoreDefaultLayout(sessionId; key): returns a default envelope for the requested key.
-  - Scope inference (when not provided): treat as "session" if sessionId is present, otherwise "user".
-- History persistence (separate from layout):
-  - Chat_SaveHistory(sessionId; JSON): append-or-snapshot canonical history.
-  - Chat_GetHistory(sessionId): returns canonical history for the chat.
-- Flush policy (recommended):
-  - History: on response.done, on transcript commit, on tool_call/tool_result, on text submit, on session switch, and on viewer close; optional 30–60s autosave if dirty.
-  - Session layout: on session switch and viewer close; optional debounced autosave on dragstop/resizestop/remove.
-  - Machine layout: only when the user clicks Save Layout.
-
-Suggested schema (example)
-- Table: GridLayouts
-  - AccountName (Text)   // user account name
-  - SessionId (Text)   // logical chat session id
-  - Key (Text)         // "docked" | "undocked"
-  - Payload (Text)     // JSON string as saved
-  - Float (Number)     // 0/1
-  - UpdatedAt (Timestamp)
-- Relationship: GridLayouts by AccountName + SessionId + Key (Unique)
-
-- Table: AppPreferences (optional)
-  - AccountName (Text)
-  - SessionId (Text)
-  - Settings (Text) // JSON: { voice, text, toasts, float, mode }
-  - UpdatedAt (Timestamp)
-
-JSON payload from Web (layout envelope)
-{
-  "scope": "session" | "machine",
-  "key": "docked" | "undocked",
-  "sessionId": "session-xyz",                 // required when scope = "session"
-  "settings": {
-    "version": 1,
-    "columns": 12,
-    "cellHeight": 8,                          // optional, px per row
-    "float": true,
-    "voice": true,
-    "text": true,
-    "toasts": true,                           // or "debug": true (front-end maps debug->toasts)
-    "layout": [
-      { "widget": "voice",  "x": 0, "y": 0,  "w": 2,  "h": 2 },
-      { "widget": "text",   "x": 2, "y": 0,  "w": 10, "h": 5 },
-      { "widget": "toasts", "x": 0, "y": 2,  "w": 2,  "h": 3 }
-      // If undocked, include: { "widget": "convo", "x": ..., "y": ..., "w": ..., "h": ... }
-      // Session scope may also include artifact widgets
-    ]
-  }
-}
-
 ******************************
-******************************
-Script: Grid_SaveLayout [ sessionId ; payloadJSON ]
-Purpose: Save current mode’s layout for a session (scope:"session") or update machine defaults (scope:"machine").
+Script: Chat_SaveHistory [ sessionId ; historyJSON ]
+Purpose: Persist the canonical conversation (“text + tools”) for a session.
 
-Parameters:
-- ScriptParameter is a JSON string with envelope:
-  { scope, key, machineId, sessionId, settings{ version, columns, cellHeight?, float, voice, text, toasts|debug, layout[] } }
+Parameters (JSON):
+- { "sessionId": "...", "history": [ {canonical items as in instructions.md §4} ] }
 
 Pseudo-steps:
 1) Set Variable [ $raw = Get ( ScriptParameter ) ]
-2) If [ IsEmpty ( $raw ) ] 
-     Show Custom Dialog [ "Missing payload" ]
-     Exit Script [ Result: "ERROR:EMPTY_PARAM" ]
-   End If
+2) If [ IsEmpty ( $raw ) ] Exit Script [ Result: "ERROR:EMPTY_PARAM" ]
 3) Set Variable [ $json = JSONFormatElements ( $raw ) ]
-4) Set Variable [ $scope = Lower ( JSONGetElement ( $json ; "scope" ) ) ]
-5) If [ IsEmpty ( $scope ) ]
-     If [ not IsEmpty ( JSONGetElement ( $json ; "sessionId" ) ) ]
-        Set Variable [ $scope = "session" ]
-     Else
-        Set Variable [ $scope = "machine" ]
-     End If
+4) Set Variable [ $sessionId = JSONGetElement ( $json ; "sessionId" ) ]
+5) If [ IsEmpty ( $sessionId ) ]
+     Set Variable [ $sessionId = $$SessionId ]
    End If
-6) Set Variable [ $key = JSONGetElement ( $json ; "key" ) ]
-6) If [ IsEmpty ( $key ) ] Set Variable [ $key = "docked" ]
-7) Set Variable [ $sessionId =
-      Case(
-        not IsEmpty ( JSONGetElement ( $json ; "sessionId" ) ) ; JSONGetElement ( $json ; "sessionId" ) ;
-        not IsEmpty ( $$SessionId ) ; $$SessionId ;
-        Get ( UUID )
-      )
-   ]
-8) Set Variable [ $machineId =
-      Case(
-        not IsEmpty ( JSONGetElement ( $json ; "machineId" ) ) ; JSONGetElement ( $json ; "machineId" ) ;
-        $$MachineId
-      )
-   ]
-9) Set Variable [ $float = JSONGetElement ( $json ; "settings.float" ) ]
-10) Go to Layout [ “GridLayouts” (GridLayouts) ]
-11) Enter Find Mode [ Pause: Off ]
-12) If [ $scope = "machine" ]
-      Set Field [ GridLayouts::MachineId ; $machineId ]
-      Set Field [ GridLayouts::SessionId ; "" ]
-      Set Field [ GridLayouts::Key ; $key ]
-    Else
-      Set Field [ GridLayouts::SessionId ; $sessionId ]
-      Set Field [ GridLayouts::MachineId ; $machineId ] // optional but useful
-      Set Field [ GridLayouts::Key ; $key ]
-    End If
-13) Perform Find
-14) If [ Get ( FoundCount ) = 0 ]
-      New Record/Request
-      Set Field [ GridLayouts::Key ; $key ]
-      If [ $scope = "machine" ]
-        Set Field [ GridLayouts::MachineId ; $machineId ]
-        Set Field [ GridLayouts::SessionId ; "" ]
-      Else
-        Set Field [ GridLayouts::SessionId ; $sessionId ]
-        Set Field [ GridLayouts::MachineId ; $machineId ]
-      End If
-    End If
-15) Set Field [ GridLayouts::Payload ; $json ]
-16) Set Field [ GridLayouts::Float ; Case ( $float ; 1 ; 0 ) ]
-17) Set Field [ GridLayouts::UpdatedAt ; Get ( CurrentTimestamp ) ]
-18) Commit Records/Requests [ No dialog ]
-19) Exit Script [ Result: "OK" ]
-
-******************************
-******************************
-Script: Grid_LoadLayout [ sessionId ; key ]
-Purpose: Return the saved layout envelope for the requested scope and key to the Web Viewer.
-
-Parameters (JSON preferred):
-- { "scope":"session"|"user", "sessionId":"...", "key":"docked" }
-- If scope omitted:
-  - If sessionId present → load session scope (SessionId + Key).
-  - Else → load user scope (AccountName + Key).
-
-Pseudo-steps:
-1) Set Variable [ $raw = Get ( ScriptParameter ) ]
-2) Set Variable [ $key =
-      Case(
-        PatternCount ( $raw ; "{" ) ;
-          JSONGetElement ( $raw ; "key" ) ;
-        not PatternCount ( $raw ; "{" ) ;
-          $raw ;
-        "" )
-   ]
-3) If [ IsEmpty ( $key ) ] Set Variable [ $key = "docked" ]
-4) Set Variable [ $scope = Lower ( JSONGetElement ( $raw ; "scope" ) ) ]
-5) Set Variable [ $sessionId =
-      Case(
-        PatternCount ( $raw ; "{" ) ;
-          JSONGetElement ( $raw ; "sessionId" ) ;
-        not PatternCount ( $raw ; "{" ) and not IsEmpty ( $$SessionId ) ;
-          $$SessionId ;
-        ""
-      )
-   ]
-6) Set Variable [ $machineId =
-      Case(
-        PatternCount ( $raw ; "{" ) ;
-          JSONGetElement ( $raw ; "machineId" ) ;
-        not PatternCount ( $raw ; "{" ) and not IsEmpty ( $$MachineId ) ;
-          $$MachineId
-      )
-   ]
-7) If [ IsEmpty ( $scope ) ]
-      If [ not IsEmpty ( $sessionId ) ]
-        Set Variable [ $scope = "session" ]
-      Else
-        Set Variable [ $scope = "machine" ]
-      End If
-   End If
-8) Go to Layout [ “GridLayouts” (GridLayouts) ]
+6) If [ IsEmpty ( $sessionId ) ] Exit Script [ Result: "ERROR:MISSING_SESSION" ]
+7) Set Variable [ $history = JSONGetElement ( $json ; "history" ) ]
+8) Go to Layout [ “ChatHistory” (ChatHistory) ]
 9) Enter Find Mode [ Pause: Off ]
-10) If [ $scope = "machine" ]
-      Set Field [ GridLayouts::MachineId ; $machineId ]
-      Set Field [ GridLayouts::SessionId ; "" ]
-      Set Field [ GridLayouts::Key ; $key ]
-    Else
-      Set Field [ GridLayouts::SessionId ; $sessionId ]
-      Set Field [ GridLayouts::Key ; $key ]
-    End If
+10) Set Field [ ChatHistory::SessionId ; $sessionId ]
 11) Perform Find
 12) If [ Get ( FoundCount ) = 0 ]
-      Exit Script [ Result: "" ] // none saved
+      New Record/Request
+      Set Field [ ChatHistory::SessionId ; $sessionId ]
     End If
-13) Set Variable [ $payload = GridLayouts::Payload ]
-14) Exit Script [ Result: $payload ]
+13) Set Field [ ChatHistory::HistoryJSON ; $history ]
+14) Set Field [ ChatHistory::UpdatedAt ; Get ( CurrentTimestamp ) ]
+15) Commit Records/Requests [ No dialog ]
+16) Exit Script [ Result: "{\"success\":true}" ]
 
 ******************************
-Script: Grid_RestoreDefaultLayout [ sessionId ; key ]
-Purpose: Return a default layout envelope for given mode; Web applies it as a reset.
+Script: Chat_GetHistory [ sessionId ]
+Purpose: Return the canonical conversation for a session.
 
-Parameters:
-- Similar to Grid_LoadLayout; determine $key and $sessionId the same way.
-
-Pseudo-steps:
-1) Determine $key (default "docked")
-2) Compute $payload:
-   If [ $key = "docked" ]
-     Set Variable [ $payload = 
-       JSONSetElement ( "{}" ;
-         [ "key" ; "docked" ; JSONString ] ;
-         [ "settings.version" ; 1 ; JSONNumber ] ;
-         [ "settings.columns" ; 12 ; JSONNumber ] ;
-         [ "settings.cellHeight" ; 8 ; JSONNumber ] ;
-         [ "settings.float" ; 1 ; JSONNumber ] ;
-         [ "settings.voice" ; 1 ; JSONNumber ] ;
-         [ "settings.text" ; 0 ; JSONNumber ] ;
-         [ "settings.toasts" ; 1 ; JSONNumber ] ;
-         [ "settings.layout[0].widget" ; "voice" ; JSONString ] ;
-         [ "settings.layout[0].x" ; 0 ; JSONNumber ] ;
-         [ "settings.layout[0].y" ; 0 ; JSONNumber ] ;
-         [ "settings.layout[0].w" ; 4 ; JSONNumber ] ;
-         [ "settings.layout[0].h" ; 4 ; JSONNumber ] ;
-         [ "settings.layout[1].widget" ; "toasts" ; JSONString ] ;
-         [ "settings.layout[1].x" ; 8 ; JSONNumber ] ;
-         [ "settings.layout[1].y" ; 0 ; JSONNumber ] ;
-         [ "settings.layout[1].w" ; 4 ; JSONNumber ] ;
-         [ "settings.layout[1].h" ; 6 ; JSONNumber ] ;
-         [ "settings.layout[2].widget" ; "text" ; JSONString ] ;
-         [ "settings.layout[2].x" ; 0 ; JSONNumber ] ;
-         [ "settings.layout[2].y" ; 12 ; JSONNumber ] ;
-         [ "settings.layout[2].w" ; 12 ; JSONNumber ] ;
-         [ "settings.layout[2].h" ; 6 ; JSONNumber ]
-       )
-     ]
-   Else
-     Set Variable [ $payload = 
-       JSONSetElement ( "{}" ;
-         [ "key" ; "undocked" ; JSONString ] ;
-         [ "settings.version" ; 1 ; JSONNumber ] ;
-         [ "settings.columns" ; 12 ; JSONNumber ] ;
-         [ "settings.cellHeight" ; 8 ; JSONNumber ] ;
-         [ "settings.float" ; 1 ; JSONNumber ] ;
-         [ "settings.voice" ; 1 ; JSONNumber ] ;
-         [ "settings.text" ; 0 ; JSONNumber ] ;
-         [ "settings.toasts" ; 1 ; JSONNumber ] ;
-         [ "settings.layout[0].widget" ; "convo" ; JSONString ] ;
-         [ "settings.layout[0].x" ; 0 ; JSONNumber ] ;
-         [ "settings.layout[0].y" ; 0 ; JSONNumber ] ;
-         [ "settings.layout[0].w" ; 3 ; JSONNumber ] ;
-         [ "settings.layout[0].h" ; 8 ; JSONNumber ] ;
-         [ "settings.layout[1].widget" ; "voice" ; JSONString ] ;
-         [ "settings.layout[1].x" ; 3 ; JSONNumber ] ;
-         [ "settings.layout[1].y" ; 0 ; JSONNumber ] ;
-         [ "settings.layout[1].w" ; 5 ; JSONNumber ] ;
-         [ "settings.layout[1].h" ; 4 ; JSONNumber ] ;
-         [ "settings.layout[2].widget" ; "toasts" ; JSONString ] ;
-         [ "settings.layout[2].x" ; 8 ; JSONNumber ] ;
-         [ "settings.layout[2].y" ; 0 ; JSONNumber ] ;
-         [ "settings.layout[2].w" ; 4 ; JSONNumber ] ;
-         [ "settings.layout[2].h" ; 6 ; JSONNumber ] ;
-         [ "settings.layout[3].widget" ; "text" ; JSONString ] ;
-         [ "settings.layout[3].x" ; 0 ; JSONNumber ] ;
-         [ "settings.layout[3].y" ; 12 ; JSONNumber ] ;
-         [ "settings.layout[3].w" ; 12 ; JSONNumber ] ;
-         [ "settings.layout[3].h" ; 6 ; JSONNumber ]
-       )
-     ]
-   End If
-3) Exit Script [ Result: $payload ]
-
-Updated persistence: per-user (same script names)
-
-******************************
-Script: App_Init [ sessionId ]
-Purpose: Return initialization bundle for the WebView.
-
-Parameters (JSON prefered):
+Parameters (JSON):
 - { "sessionId": "..." }
 
-Returns (JSON):
-{
-  "success": true,
-  "result": {
-    "sessionId": "...",
-    "settings": { "voice": false, "text": true, "toasts": true, "float": true, "mode": "docked" },
-    "layout": { ...payload from Grid_LoadLayout... } | "",
-    "history": [ ...canonical messages... ]              // optional, may be empty array if none
-  }
-}
-
 Pseudo-steps:
-1) Parse params → $sessionId, $machineId.
-2) Load preferences from AppPreferences by MachineId + SessionId (fallback: by MachineId, then defaults).
-3) Determine mode = settings.mode ("docked"|"undocked"), default "docked".
-4) Call Grid_LoadLayout with (scope:"session", sessionId, key:mode). If empty, call Grid_LoadLayout with (scope:"machine", machineId, key:mode).
-5) Call Chat_GetHistory(sessionId) to get canonical history (optional).
-6) Build JSON result { machineId, sessionId, settings, layout, history }.
-7) Exit Script [ Result: JSONSetElement ( JSONSetElement ( "{}" ; [ "success" ; 1 ; JSONBoolean ] ) ; [ "result" ; $json ; JSONObject ] ) ]
-
-******************************
-Script: Settings_SavePreferences [ sessionId ; settingsJSON ]
-Purpose: Persist UI toggles per machine and session.
-
-Parameters:
-- { "sessionId": "...", "settings": { "voice":..., "text":..., "toasts":..., "float":..., "mode":"docked|undocked" } }
-
-Pseudo-steps:
-1) Parse params → $sessionId, $machineId, $settings.
-2) Find AppPreferences by MachineId + SessionId.
-3) Upsert record; set Settings = $settings; UpdatedAt = now.
-4) Exit Script [ Result: "OK" ]
-
-Script: Grid_SaveLayout [ sessionId ; payloadJSON ]
-Purpose: Save layout keyed by machine and session.
-
-Parameters: payload as described in “JSON payload from Web”.
-
-Pseudo-steps differences vs V1:
-- Parse $machineId := JSONGetElement($json; "machineId")
-- Parse/resolve $sessionId := JSONGetElement($json; "sessionId") or $$SessionId
-- Parse/resolve $key := JSONGetElement($json; "key") default "docked"
-- Find GridLayouts by MachineId + SessionId + Key
-- Upsert Payload, Float, UpdatedAt
-
-Script: Grid_LoadLayout [ sessionId ; key ]
-Purpose: Return saved layout for machineId + sessionId + key.
-
-Parameters (JSON or plain):
-- { "sessionId":"...", "machineId":"...", "key":"docked" } or plain key + rely on $$ vars.
-
-Pseudo-steps:
-1) Resolve $key (default "docked"), $sessionId, $machineId.
-2) Find GridLayouts by MachineId + SessionId + Key.
-3) If none, return "".
-4) Return Payload.
-
-Notes
-- If you need per-user persistence, include AccountName in the key or store AccountName alongside MachineId for multi-user shared machines.
-- For autosave UX:
-  - History: flush on response.done, transcript commit, tool_call/tool_result, text submit, session switch, and viewer close; optionally every 30–60s if dirty.
-  - Session layout: flush on session switch and viewer close; optionally debounce flush on dragstop/resizestop/remove.
-  - Machine layout: only on explicit Save Layout action from the menu.
-- Realtime start: do not call initializeWebRTC on page load; start it when the Voice widget is enabled/mounted (or via explicit FileMaker call after bootstrap).
-- Optional combined script: App_SaveSessionState(sessionId; JSON)
-  - Accepts a payload: { sessionId, machineId, mode, history[], layoutEnvelope{ scope:"session", key, machineId, sessionId, settings{…} } }
-  - Server-side splits into Chat_SaveHistory + Grid_SaveLayout to persist both atomically for the session.
+1) Set Variable [ $raw = Get ( ScriptParameter ) ]
+2) If [ IsEmpty ( $raw ) ] Exit Script [ Result: "{\"success\":false,\"error\":\"EMPTY_PARAM\"}" ]
+3) Set Variable [ $json = JSONFormatElements ( $raw ) ]
+4) Set Variable [ $sessionId = JSONGetElement ( $json ; "sessionId" ) ]
+5) If [ IsEmpty ( $sessionId ) ]
+     Set Variable [ $sessionId = $$SessionId ]
+   End If
+6) If [ IsEmpty ( $sessionId ) ] Exit Script [ Result: "{\"success\":false,\"error\":\"MISSING_SESSION\"}" ]
+7) Go to Layout [ “ChatHistory” (ChatHistory) ]
+8) Enter Find Mode [ Pause: Off ]
+9) Set Field [ ChatHistory::SessionId ; $sessionId ]
+10) Perform Find
+11) If [ Get ( FoundCount ) = 0 ]
+      Exit Script [ Result: "{\"success\":true,\"result\":{\"sessionId\":\"" & $sessionId & "\",\"history\":[]}}" ]
+    End If
+12) Set Variable [ $out = JSONSetElement ( "{}" ;
+      [ "success" ; 1 ; JSONBoolean ] ;
+      [ "result.sessionId" ; $sessionId ; JSONString ] ;
+      [ "result.history" ; ChatHistory::HistoryJSON ; JSONRaw ]
+    ) ]
+13) Exit Script [ Result: $out ]
