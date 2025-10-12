@@ -109,7 +109,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
 
 6. API adapters
 - Realtime adapter:
-  - Preload: map canonical items → conversation.item.create; map tool_result → function_call_output.
+  - Preload: map canonical items to conversation.item.create; do not send function_call_output for historical tool results; instead inject assistant output_text lines describing prior tool calls/results to avoid priming tools.
   - Live mapping: response.created/response.delta/response.output → consolidate to assistant message(s); function_call(s) → tool_call entries; subsequent outputs → tool_result.
 - Chat Completions adapter:
   - Build messages[] from canonical (user/assistant/system). Include essential tool results: either as “tool” role (newer schema) or fold concise tool summaries into assistant/system to keep context tight.
