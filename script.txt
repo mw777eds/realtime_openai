@@ -1,59 +1,63 @@
 ******************************
-Script: Chat_SaveHistory [ sessionId ; historyJSON ]
-Purpose: Persist the canonical conversation (“text + tools”) for a session.
+Script: Session_SaveState [ sessionId ; payloadJSON ]
+Purpose: Upsert the unified session JSON (settings + history) keyed by sessionId. Merge only provided keys.
 
 Parameters (JSON):
-- { "sessionId": "...", "history": [ {canonical items as in instructions.md §4} ] }
+- { "sessionId":"...", "settings": { ... }, "history":[ ... ] }
+  - Either key can be present; update only what’s provided.
 
 Pseudo-steps:
 1) Set Variable [ $raw = Get ( ScriptParameter ) ]
 2) If [ IsEmpty ( $raw ) ] Exit Script [ Result: "ERROR:EMPTY_PARAM" ]
 3) Set Variable [ $json = JSONFormatElements ( $raw ) ]
 4) Set Variable [ $sessionId = JSONGetElement ( $json ; "sessionId" ) ]
-5) If [ IsEmpty ( $sessionId ) ]
-     Set Variable [ $sessionId = $$SessionId ]
-   End If
+5) If [ IsEmpty ( $sessionId ) ] Set Variable [ $sessionId = $$SessionId ]
 6) If [ IsEmpty ( $sessionId ) ] Exit Script [ Result: "ERROR:MISSING_SESSION" ]
-7) Set Variable [ $history = JSONGetElement ( $json ; "history" ) ]
-8) Go to Layout [ “ChatHistory” (ChatHistory) ]
-9) Enter Find Mode [ Pause: Off ]
-10) Set Field [ ChatHistory::SessionId ; $sessionId ]
-11) Perform Find
-12) If [ Get ( FoundCount ) = 0 ]
+7) Go to Layout [ “Sessions” (Sessions) ]
+8) Enter Find Mode [ Pause: Off ]
+9) Set Field [ Sessions::SessionId ; $sessionId ]
+10) Perform Find
+11) If [ Get ( FoundCount ) = 0 ]
       New Record/Request
-      Set Field [ ChatHistory::SessionId ; $sessionId ]
+      Set Field [ Sessions::SessionId ; $sessionId ]
     End If
-13) Set Field [ ChatHistory::HistoryJSON ; $history ]
-14) Set Field [ ChatHistory::UpdatedAt ; Get ( CurrentTimestamp ) ]
-15) Commit Records/Requests [ No dialog ]
-16) Exit Script [ Result: "{\"success\":true}" ]
+12) Set Variable [ $current = Sessions::SessionJSON ]
+13) If [ IsEmpty ( $current ) ] Set Variable [ $current = "{}" ]
+14) If [ not IsEmpty ( JSONGetElement ( $json ; "settings" ) ) ]
+      Set Variable [ $current = JSONSetElement ( $current ; "settings" ; JSONGetElement ( $json ; "settings" ) ; JSONRaw ) ]
+    End If
+15) If [ not IsEmpty ( JSONGetElement ( $json ; "history" ) ) ]
+      Set Variable [ $current = JSONSetElement ( $current ; "history" ; JSONGetElement ( $json ; "history" ) ; JSONRaw ) ]
+    End If
+16) Set Field [ Sessions::SessionJSON ; $current ]
+17) Set Field [ Sessions::UpdatedAt ; Get ( CurrentTimestamp ) ]
+18) Commit Records/Requests [ No dialog ]
+19) Exit Script [ Result: "{\"success\":true}" ]
 
 ******************************
-Script: Chat_GetHistory [ sessionId ]
-Purpose: Return the canonical conversation for a session.
+Script: Session_GetState [ sessionId ]
+Purpose: Return the unified session JSON (settings + history) for the given sessionId.
 
 Parameters (JSON):
-- { "sessionId": "..." }
+- { "sessionId":"..." } (if omitted, use $$SessionId)
 
 Pseudo-steps:
 1) Set Variable [ $raw = Get ( ScriptParameter ) ]
 2) If [ IsEmpty ( $raw ) ] Exit Script [ Result: "{\"success\":false,\"error\":\"EMPTY_PARAM\"}" ]
 3) Set Variable [ $json = JSONFormatElements ( $raw ) ]
 4) Set Variable [ $sessionId = JSONGetElement ( $json ; "sessionId" ) ]
-5) If [ IsEmpty ( $sessionId ) ]
-     Set Variable [ $sessionId = $$SessionId ]
-   End If
+5) If [ IsEmpty ( $sessionId ) ] Set Variable [ $sessionId = $$SessionId ]
 6) If [ IsEmpty ( $sessionId ) ] Exit Script [ Result: "{\"success\":false,\"error\":\"MISSING_SESSION\"}" ]
-7) Go to Layout [ “ChatHistory” (ChatHistory) ]
+7) Go to Layout [ “Sessions” (Sessions) ]
 8) Enter Find Mode [ Pause: Off ]
-9) Set Field [ ChatHistory::SessionId ; $sessionId ]
+9) Set Field [ Sessions::SessionId ; $sessionId ]
 10) Perform Find
 11) If [ Get ( FoundCount ) = 0 ]
-      Exit Script [ Result: "{\"success\":true,\"result\":{\"sessionId\":\"" & $sessionId & "\",\"history\":[]}}" ]
+      Exit Script [ Result: "{\"success\":true,\"result\":{\"sessionId\":\"" & $sessionId & "\",\"settings\":{},\"history\":[]}}" ]
     End If
 12) Set Variable [ $out = JSONSetElement ( "{}" ;
       [ "success" ; 1 ; JSONBoolean ] ;
       [ "result.sessionId" ; $sessionId ; JSONString ] ;
-      [ "result.history" ; ChatHistory::HistoryJSON ; JSONRaw ]
+      [ "result" ; Sessions::SessionJSON ; JSONRaw ]
     ) ]
 13) Exit Script [ Result: $out ]

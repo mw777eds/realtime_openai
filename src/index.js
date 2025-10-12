@@ -349,6 +349,7 @@ window.buildBootstrapTestPayload = buildBootstrapTestPayload;
 window.applyLoadedLayout = applyLoadedLayout;
 window.applySettingsEnvelope = applySettingsEnvelope;
 window.savePreferences = savePreferences;
+window.saveSession = saveSession;
 window.saveSessionState = saveSessionState;
 window.getSessionState = getSessionState;
 
@@ -1323,22 +1324,34 @@ function getSessionState() {
 }
 
 /**
- * Persist canonical history to FileMaker (Chat_SaveHistory).
+ * Upsert the unified session JSON in FileMaker via Session_SaveState.
+ * Use options to minimize payload: { settings: true|false, history: true|false }.
+ */
+function saveSession(opts = {}) {
+  if (!window.FileMaker?.PerformScript) return false;
+  const options = (opts && typeof opts === 'object') ? opts : {};
+  const payload = { sessionId: window.__sessionId || "" };
+  if (options.settings) {
+    payload.settings = buildSessionSettingsBundle();
+  }
+  if (options.history) {
+    payload.history = Array.isArray(sessionHistory) ? sessionHistory.slice() : [];
+  }
+  try {
+    window.FileMaker.PerformScript('Session_SaveState', JSON.stringify(payload));
+    return true;
+  } catch (e) {
+    console.warn('Session_SaveState failed', e);
+    return false;
+  }
+}
+
+/**
+ * Persist canonical history to FileMaker (Session_SaveState).
  * Call this on session switch or viewer close.
  */
 function saveSessionState() {
-  if (!window.FileMaker?.PerformScript) return false;
-  try {
-    const payload = {
-      sessionId: window.__sessionId || "",
-      history: Array.isArray(sessionHistory) ? sessionHistory.slice() : []
-    };
-    window.FileMaker.PerformScript('Chat_SaveHistory', JSON.stringify(payload));
-    return true;
-  } catch (e) {
-    console.warn('Chat_SaveHistory failed', e);
-    return false;
-  }
+  return saveSession({ history: true });
 }
 
 /* Flush history when the viewer is being closed/navigated away */
@@ -1364,6 +1377,44 @@ function computeCurrentSettingsSnapshot() {
     toasts: !!toastsWidgetEl,
     showToolCalls: !!showToolPills,
     layout: nodes
+  };
+}
+
+/**
+ * Build a unified settings bundle for this session:
+ * - Shared toggles (voice/text/toasts/float/showToolCalls)
+ * - Layout per mode: { docked: [...], undocked: [...] }
+ */
+function buildSessionSettingsBundle() {
+  const toggles = getCurrentToggleSettings();
+  const base = {
+    version: 1,
+    columns: grid?.engine?.column || grid?.opts?.column || 12,
+    cellHeight: undefined,
+    float: !!floatEnabled,
+    voice: !!toggles.voice,
+    text: !!toggles.text,
+    toasts: !!toggles.toasts,
+    showToolCalls: !!toggles.showToolCalls
+  };
+
+  const currentSnapshot = computeCurrentSettingsSnapshot();
+  const currentMode = getCurrentMode();
+
+  const dockedLayout = Array.isArray(persistedSettings.docked?.layout)
+    ? persistedSettings.docked.layout
+    : (currentMode === 'docked' ? (currentSnapshot?.layout || []) : []);
+
+  const undockedLayout = Array.isArray(persistedSettings.undocked?.layout)
+    ? persistedSettings.undocked.layout
+    : (currentMode === 'undocked' ? (currentSnapshot?.layout || []) : []);
+
+  return {
+    ...base,
+    layout: {
+      docked: dockedLayout,
+      undocked: undockedLayout
+    }
   };
 }
 
@@ -2440,13 +2491,8 @@ function getCurrentToggleSettings() {
 
 function savePreferences() {
   if (!prefsReady || applyingFromFM) return;
-  const settings = getCurrentToggleSettings();
-  if (window.FileMaker?.PerformScript) {
-    window.FileMaker.PerformScript('Settings_SavePreferences', JSON.stringify({
-      sessionId: window.__sessionId || "",
-      settings
-    }));
-  }
+  // Save only settings into the unified session JSON
+  saveSession({ settings: true });
 }
 
 /* 

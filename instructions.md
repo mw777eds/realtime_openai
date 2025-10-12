@@ -81,8 +81,8 @@ Each item is append-only. Realtime is the authority while active; all modes read
 }
 
 - FM scripts:
-  - Chat_SaveHistory(sessionId; JSON[]) → append/replace canonical log.
-  - Chat_GetHistory(sessionId) → return canonical log.
+  - Session_SaveState(sessionId; JSON) → upsert unified session JSON; merge provided keys (settings/history).
+  - Session_GetState(sessionId) → return unified session JSON.
   - Grid_SaveLayout(sessionId; JSON) / Grid_LoadLayout(sessionId).
   - Tools_Invoke(sessionId; JSON toolCalls[]).
   - HandleAPIError(JSON).
@@ -90,7 +90,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
 5. Synchronization rules
 - Realtime is the source of truth while active.
 - Realtime start:
-  - Load canonical via Chat_GetHistory(sessionId).
+  - Load canonical via Session_GetState(sessionId), then use result.history.
   - Preload into Realtime by sending conversation.item.create events in order (user/assistant/tool), and function_call_output for tool_result.
 - During Realtime:
   - Continuously append transcripts, assistant outputs, tool_call and tool_result to canonical.
@@ -244,7 +244,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Saved layout for mode and user (or default).
   - Canonical chat history for sessionId.
 - Update Grid_SaveLayout/Grid_LoadLayout to store/retrieve layouts by (SessionId, key) for session state and by (AccountName, key) for user defaults.
-- Add Settings_SavePreferences(sessionId; machineId; JSON) to persist toggle states per machine.
+- Use Session_SaveState(sessionId; JSON) for updating settings within the unified session JSON (no separate Settings_SavePreferences script).
 - Maintain canonical history rules across Realtime/Text as above.
 
 18. Session state, persistence and flush policy
@@ -274,8 +274,9 @@ Each item is append-only. Realtime is the authority while active; all modes read
     - Only when the user clicks Save Layout in the menu (explicit action).
 - JavaScript API surface (Web Viewer functions):
   - bootstrapApp({ sessionId, mode, settings? }): seeds in-memory state for current session; do not start Voice until the Voice widget mounts.
-  - SaveSessionState(): flush sessionHistory to FileMaker via Chat_SaveHistory. Layout defaults are saved explicitly via the Save Layout menu action.
-  - GetSessionState(): returns { sessionId, mode, history, layouts: {docked, undocked}, dirty: {history, layout} } for FileMaker-side logic.
-  - SwitchSession(newSessionId): calls SaveSessionState(); loads new session layouts/history; updates in-memory state; re-renders using precedence.
+  - saveSession(options): upsert unified session JSON via Session_SaveState. options = { settings?: boolean, history?: boolean }.
+  - saveSessionState(): alias for saveSession({ history: true }). Layout defaults are saved explicitly via the Save Layout menu action.
+  - getSessionState(): returns { sessionId, mode, history, layouts: {docked, undocked}, dirty: {history, layout} } for FileMaker-side logic.
+  - switchSession(newSessionId): calls saveSessionState(); loads new session layouts/history; updates in-memory state; re-renders using precedence.
 - Dock/undock behavior:
   - On dock/undock toggle, apply the current session’s layout for that mode if available; otherwise fall back to the user template for that mode; otherwise app defaults. Keep the session layout authoritative and update it on the next flush.
