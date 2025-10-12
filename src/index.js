@@ -2217,7 +2217,6 @@ function saveCurrentLayout() {
 
     // Send to FileMaker (user-scoped default; FileMaker derives user via Get( Username ))
     const envelope = {
-      scope: "user",
       key,
       sessionId: window.__sessionId || null,
       settings: settingsSnapshot
