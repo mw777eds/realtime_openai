@@ -232,6 +232,24 @@ html, body, #app {
   padding: 8px;
 }
 
+/* Conversation list items */
+.conversation-item {
+  padding: 6px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+.conversation-item:hover {
+  background: #f1f5f9;
+}
+.conversation-item.active {
+  background: #e6f4ff;
+  border-color: #cde7ff;
+}
+
 .new-convo-btn {
   margin: 8px;
 }

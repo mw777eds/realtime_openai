@@ -30,6 +30,90 @@ const sessionHistory = [];
 let showToolPills = false;
 let prefsReady = false;
 let applyingFromFM = false;
+
+/* Sessions list (for sidebar and undocked Conversations widget) */
+window.__sessions = window.__sessions || []; // [{id, title}]
+function setSessionList(list) {
+  if (!Array.isArray(list)) return;
+  window.__sessions = list.map(it => ({
+    id: String(it.id || it.sessionId || ''),
+    title: String(it.title || it.name || it.id || '')
+  })).filter(it => it.id);
+  renderSessionList();
+}
+
+function highlightActiveSession(sessionId) {
+  const all = document.querySelectorAll('.conversation-item');
+  all.forEach(el => {
+    const sid = el.getAttribute('data-session-id');
+    el.classList.toggle('active', !!sessionId && sid === sessionId);
+  });
+}
+
+function renderSessionList() {
+  const containers = document.querySelectorAll('.conversation-list');
+  if (!containers || containers.length === 0) return;
+
+  containers.forEach(container => {
+    container.innerHTML = '';
+    for (const s of (window.__sessions || [])) {
+      const row = document.createElement('div');
+      row.className = 'conversation-item';
+      row.setAttribute('data-session-id', s.id);
+      row.textContent = s.title || s.id;
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        switchSession(s.id);
+      });
+      container.appendChild(row);
+    }
+  });
+
+  highlightActiveSession(window.__sessionId || '');
+}
+
+/* Request full session bundle from FileMaker */
+function requestSessionState(sessionId) {
+  if (!window.FileMaker?.PerformScript) return false;
+  try {
+    window.FileMaker.PerformScript('Session_GetState', JSON.stringify({ sessionId }));
+    return true;
+  } catch (e) {
+    console.warn('Session_GetState failed', e);
+    return false;
+  }
+}
+
+/* Switch current session: flush current, then request next */
+function switchSession(newSessionId) {
+  const current = window.__sessionId || '';
+  if (!newSessionId || newSessionId === current) return false;
+
+  try { saveSession({ history: true, settings: true }); } catch (_) {}
+  window.__sessionId = newSessionId;
+  highlightActiveSession(newSessionId);
+  // Clear UI chat view immediately (optional)
+  try {
+    const list = document.getElementById('chat-messages');
+    if (list) list.innerHTML = '';
+  } catch (_) {}
+  requestSessionState(newSessionId);
+  return true;
+}
+
+/* FM callback to apply a session bundle returned by Session_GetState */
+function applySessionState(payload) {
+  try {
+    // Expect same shape we already use in bootstrapApp: { history, layout?, settings?, key?, sessionId? }
+    bootstrapApp(payload);
+    highlightActiveSession(window.__sessionId || '');
+    return true;
+  } catch (e) {
+    console.error('applySessionState failed', e);
+    return false;
+  }
+}
+
 // Active agent defaults (may be overridden by bootstrap or FileMaker)
 window.__activeAgent = window.__activeAgent || { voice: 'EmpoweredCore', text: 'EmpoweredCoreChat' };
 window.setActiveAgent = function updateActiveAgent(obj) {
@@ -363,6 +447,10 @@ window.savePreferences = savePreferences;
 window.saveSession = saveSession;
 window.saveSessionState = saveSessionState;
 window.getSessionState = getSessionState;
+window.switchSession = switchSession;
+window.applySessionState = applySessionState;
+window.requestSessionState = requestSessionState;
+window.setSessionList = setSessionList;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
 const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
@@ -1719,6 +1807,11 @@ function bootstrapApp(payload) {
     }
     const mode = data.key || data.mode || 'docked';
 
+    // Seed sessions list (sidebar and undocked widget)
+    if (Array.isArray(data.sessions)) {
+      setSessionList(data.sessions);
+    }
+
     // Seed history: preserve tool_call/tool_result; buffer only message items for legacy UI
     if (Array.isArray(data.history)) {
       const incoming = [];
@@ -1845,6 +1938,8 @@ function bootstrapApp(payload) {
     if (data.sessionId) {
       window.__sessionId = data.sessionId;
     }
+    // Highlight the active session in any rendered lists
+    highlightActiveSession(window.__sessionId || '');
 
     // If grid is already initialized, immediately align dock state and apply layout/toggles
     if (grid) {
@@ -3006,6 +3101,9 @@ document.addEventListener("DOMContentLoaded", () => {
     e.stopPropagation();
     if (isConvosDocked) undockConvos(); else dockConvos();
   });
+
+  // Render sessions list if we already have any
+  renderSessionList();
 
   // Initial mount: honor bootstrap mode if provided; default to docked
   loadPersistedSettings();

@@ -236,6 +236,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
 - FileMaker calls a bootstrap function (e.g., window.bootstrapApp) with:
   - sessionId: logical chat session identifier.
   - settings: { voice, text, toasts, float, mode: "docked"|"undocked" }.
+  - sessions: an array of { id, title } for the sidebar list (the current sessionId is highlighted and clickable to switch).
 - App behavior:
   - Load per-user saved layout for settings.mode if available; else load app defaults.
   - Apply settings to show/hide widgets; do not initializeWebRTC until Realtime is enabled.
