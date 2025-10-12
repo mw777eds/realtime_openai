@@ -28,6 +28,8 @@ const chatBuffer = [];
 const HISTORY_MAX_ITEMS = 400;
 const sessionHistory = [];
 let showToolPills = false;
+let prefsReady = false;
+let applyingFromFM = false;
 
 function createId(prefix = 'msg') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1699,6 +1701,7 @@ function bootstrapApp(payload) {
 
     // If grid is already initialized, immediately align dock state and apply layout/toggles
     if (grid) {
+      applyingFromFM = true;
       try {
         if (mode === 'docked') {
           if (!isConvosDocked && window.__dockConvos) window.__dockConvos();
@@ -1715,6 +1718,7 @@ function bootstrapApp(payload) {
       } catch (e) {
         console.warn('Immediate apply after bootstrap failed; will rely on initial mount', e);
       }
+      applyingFromFM = false;
     }
 
     return true;
@@ -2395,6 +2399,7 @@ function getCurrentToggleSettings() {
 }
 
 function savePreferences() {
+  if (!prefsReady || applyingFromFM) return;
   const settings = getCurrentToggleSettings();
   if (window.FileMaker?.PerformScript) {
     window.FileMaker.PerformScript('Settings_SavePreferences', JSON.stringify({
@@ -2862,6 +2867,7 @@ document.addEventListener("DOMContentLoaded", () => {
       syncWidgets();
     }
   }
+  prefsReady = true;
 });
 
 /* 
