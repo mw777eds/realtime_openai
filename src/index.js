@@ -1472,7 +1472,8 @@ function buildMinifiedHistoryFromSession() {
  */
 function buildBootstrapTestPayload() {
   const mode = getCurrentMode();
-  let settings = persistedSettings[mode] || computeCurrentSettingsSnapshot() || {
+  const snapshot = computeCurrentSettingsSnapshot();
+  const currentSettings = persistedSettings[mode] || snapshot || {
     version: 1,
     columns: 12,
     float: true,
@@ -1481,12 +1482,31 @@ function buildBootstrapTestPayload() {
     toasts: !!toastsWidgetEl,
     layout: []
   };
-  // Include showToolCalls in settings snapshot
-  settings.showToolCalls = !!showToolPills;
+
+  // Build settings without embedding layout
+  const settings = {
+    version: currentSettings.version || 1,
+    columns: currentSettings.columns || 12,
+    float: !!currentSettings.float,
+    voice: !!currentSettings.voice,
+    text: !!currentSettings.text,
+    toasts: !!currentSettings.toasts,
+    showToolCalls: !!showToolPills
+  };
+
+  // Collect per-mode layouts
+  const docked = Array.isArray(persistedSettings.docked?.layout)
+    ? persistedSettings.docked.layout
+    : (mode === 'docked' ? (snapshot?.layout || currentSettings.layout || []) : []);
+  const undocked = Array.isArray(persistedSettings.undocked?.layout)
+    ? persistedSettings.undocked.layout
+    : (mode === 'undocked' ? (snapshot?.layout || currentSettings.layout || []) : []);
+
   return {
     history: buildMinifiedHistoryFromSession(),
     key: mode,
     sessionId: window.__sessionId || '',
+    layout: { docked, undocked },
     settings
   };
 }
@@ -1779,19 +1799,25 @@ function bootstrapApp(payload) {
     // Cache per-mode settings (normalize debug -> toasts)
     const s = data.settings || {};
     const toasts = (s.toasts !== undefined) ? !!s.toasts : !!s.debug;
-    if (s.layout && typeof s.layout === 'object' && !Array.isArray(s.layout)) {
+    // Accept top-level layout {docked:[], undocked:[]} or legacy settings.layout
+    const layoutObj = (data.layout && typeof data.layout === 'object' && !Array.isArray(data.layout))
+      ? data.layout
+      : (s.layout && typeof s.layout === 'object' && !Array.isArray(s.layout) ? s.layout : null);
+
+    if (layoutObj) {
       ['docked', 'undocked'].forEach((k) => {
-        const arr = s.layout[k];
+        const arr = layoutObj[k];
         if (Array.isArray(arr)) {
+          const prev = persistedSettings[k] || {};
           persistedSettings[k] = {
-            version: s.version || 1,
-            columns: s.columns || 12,
-            cellHeight: s.cellHeight,
-            float: !!s.float,
-            voice: !!s.voice,
-            text: !!s.text,
+            version: s.version || prev.version || 1,
+            columns: s.columns || prev.columns || 12,
+            cellHeight: s.cellHeight !== undefined ? s.cellHeight : prev.cellHeight,
+            float: (s.float !== undefined) ? !!s.float : !!prev.float,
+            voice: (s.voice !== undefined) ? !!s.voice : !!prev.voice,
+            text: (s.text !== undefined) ? !!s.text : !!prev.text,
             toasts,
-            showToolCalls: (typeof s.showToolCalls === 'boolean') ? !!s.showToolCalls : undefined,
+            showToolCalls: (typeof s.showToolCalls === 'boolean') ? !!s.showToolCalls : prev.showToolCalls,
             layout: arr
           };
           try {
@@ -2458,25 +2484,30 @@ function applyLayout(payload) {
 // Helpers to apply settings/layouts from FileMaker and persist preferences
 function applySettingsEnvelope(envelope) {
   const env = typeof envelope === 'string' ? parseJsonSafely(envelope, 'settings envelope') : (envelope || {});
-  if (!env || !env.settings) return false;
+  if (!env) return false;
 
-  const L = env.settings.layout;
-  if (!L || typeof L !== 'object' || Array.isArray(L)) return false;
+  const S = env.settings || {};
+  // Accept layout at top-level (preferred) or legacy settings.layout
+  const L = (env.layout && typeof env.layout === 'object' && !Array.isArray(env.layout))
+    ? env.layout
+    : (S.layout && typeof S.layout === 'object' && !Array.isArray(S.layout) ? S.layout : null);
 
-  const toasts = (env.settings.toasts !== undefined) ? !!env.settings.toasts : !!env.settings.debug;
+  if (!L) return false;
 
   ['docked', 'undocked'].forEach((k) => {
     const arr = L[k];
     if (Array.isArray(arr)) {
+      const prev = persistedSettings[k] || {};
+      const toasts = (S.toasts !== undefined) ? !!S.toasts : (prev.toasts ?? !!S.debug);
       persistedSettings[k] = {
-        version: env.settings.version || 1,
-        columns: env.settings.columns || 12,
-        cellHeight: env.settings.cellHeight,
-        float: !!env.settings.float,
-        voice: !!env.settings.voice,
-        text: !!env.settings.text,
+        version: S.version || prev.version || 1,
+        columns: S.columns || prev.columns || 12,
+        cellHeight: S.cellHeight !== undefined ? S.cellHeight : prev.cellHeight,
+        float: (S.float !== undefined) ? !!S.float : !!prev.float,
+        voice: (S.voice !== undefined) ? !!S.voice : !!prev.voice,
+        text: (S.text !== undefined) ? !!S.text : !!prev.text,
         toasts,
-        showToolCalls: (typeof env.settings.showToolCalls === 'boolean') ? !!env.settings.showToolCalls : persistedSettings[k]?.showToolCalls,
+        showToolCalls: (typeof S.showToolCalls === 'boolean') ? !!S.showToolCalls : prev.showToolCalls,
         layout: arr
       };
       try {
@@ -2497,7 +2528,7 @@ function applyLoadedLayout(payload) {
   const obj = typeof payload === 'string' ? parseJsonSafely(payload, 'loaded layout') : payload;
   if (!obj) return false;
 
-  if (obj.settings || obj.key) {
+  if (obj.settings || obj.key || (obj.layout && typeof obj.layout === 'object' && !Array.isArray(obj.layout))) {
     return applySettingsEnvelope(obj);
   }
   if (Array.isArray(obj.layout)) {
