@@ -1887,14 +1887,19 @@ function sendTextToRealtime(text, requestResponse = true, modalitiesOverride = n
     return true;
   }
 
-  // Fallback: try FileMaker text mode (if available)
+  // Fallback: use FileMaker agent with session context
   if (window.FileMaker) {
+    try { saveSession({ history: true }); } catch (_) {}
     try {
-      window.FileMaker.PerformScript('Chat_SendMessage', JSON.stringify({ role: 'user', message: trimmed }));
+      window.FileMaker.PerformScript('CallAgent', JSON.stringify({
+        sessionId: window.__sessionId || "",
+        agentName: (window.__activeAgent && window.__activeAgent.text) || "EmpoweredCoreChat",
+        message: trimmed
+      }));
       appendChatMessage('user', trimmed, { source: 'typed' });
       return true;
     } catch (e) {
-      console.warn('Chat_SendMessage script not available', e);
+      console.warn('CallAgent script not available', e);
     }
   }
 
