@@ -2857,6 +2857,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     // wire search
     attachConversationSearch(searchEl, listEl);
+    // populate sessions into this new widget
+    renderSessionList();
+    highlightActiveSession(window.__sessionId || '');
   }
 
   function removeConversationsWidget() {
