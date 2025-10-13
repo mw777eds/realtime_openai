@@ -321,13 +321,17 @@ function updateSavedWidgetRect(widget, rect, mode = getCurrentMode()) {
 }
 
 /* Rebuild grid from a layout array (+ float), respecting current dock state for convo */
-function rebuildFromLayout(layout = [], float = floatEnabled) {
+function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   if (!grid) return;
 
   if (typeof float === 'boolean' && typeof grid.float === 'function') {
     floatEnabled = float;
     grid.float(floatEnabled);
   }
+
+  const includeVoice = options.includeVoice !== undefined ? !!options.includeVoice : true;
+  const includeText = options.includeText !== undefined ? !!options.includeText : true;
+  const includeToasts = options.includeToasts !== undefined ? !!options.includeToasts : true;
 
   // Remove all existing widgets
   const existing = [...(grid.engine?.nodes || [])];
@@ -337,17 +341,23 @@ function rebuildFromLayout(layout = [], float = floatEnabled) {
   textWidgetEl = null;
   convosWidgetEl = null;
 
-  // Add widgets back based on layout
+  // Add widgets back based on layout (respect toggles)
   layout.forEach(n => {
     switch (n.widget) {
       case 'voice':
-        window.__addRealtimeWidget && window.__addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        if (includeVoice) {
+          window.__addRealtimeWidget && window.__addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        }
         break;
       case 'toasts':
-        window.__addToastsWidget && window.__addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        if (includeToasts) {
+          window.__addToastsWidget && window.__addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        }
         break;
       case 'text':
-        window.__addTextWidget && window.__addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        if (includeText) {
+          window.__addTextWidget && window.__addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        }
         break;
       case 'convo':
         if (!isConvosDocked) {
@@ -398,7 +408,11 @@ function applySettingsForMode(mode) {
     renderChatFromHistory();
   }
 
-  rebuildFromLayout(settings.layout, settings.float);
+  rebuildFromLayout(settings.layout, settings.float, {
+    includeVoice: !!settings.voice,
+    includeText: !!settings.text,
+    includeToasts: !!settings.toasts
+  });
   return true;
 }
 
@@ -2504,17 +2518,28 @@ function applyLayout(payload) {
   textWidgetEl = null;
   convosWidgetEl = null;
 
-  // Rebuild widgets from layout data
+  // Rebuild widgets from layout data (respect current toggle states)
+  const toggles = getCurrentToggleSettings();
+  const includeVoice = !!toggles.voice;
+  const includeText = !!toggles.text;
+  const includeToasts = !!toggles.toasts;
+
   payload.layout.forEach(n => {
     switch (n.widget) {
       case 'voice':
-        window.__addRealtimeWidget && window.__addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        if (includeVoice) {
+          window.__addRealtimeWidget && window.__addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        }
         break;
       case 'toasts':
-        window.__addToastsWidget && window.__addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        if (includeToasts) {
+          window.__addToastsWidget && window.__addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        }
         break;
       case 'text':
-        window.__addTextWidget && window.__addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        if (includeText) {
+          window.__addTextWidget && window.__addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
+        }
         break;
       case 'convo':
         if (!isConvosDocked) {
