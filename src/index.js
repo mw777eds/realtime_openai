@@ -114,17 +114,7 @@ function applySessionState(payload) {
   }
 }
 
-// Active agent defaults (may be overridden by bootstrap or FileMaker)
-window.__activeAgent = window.__activeAgent || { voice: 'EmpoweredCore', text: 'EmpoweredCoreChat' };
-window.setActiveAgent = function updateActiveAgent(obj) {
-  if (!obj || typeof obj !== 'object') return;
-  window.__activeAgent = {
-    voice: (obj.voice !== undefined ? String(obj.voice) : (window.__activeAgent?.voice || 'EmpoweredCore')),
-    text: (obj.text !== undefined ? String(obj.text) : (window.__activeAgent?.text || 'EmpoweredCoreChat'))
-  };
-  // Persist new agent preferences into the session
-  try { saveSession({ settings: true }); } catch (_) {}
-};
+/* Agents are fully managed by FileMaker (no agent state in JS) */
 
 function createId(prefix = 'msg') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1512,7 +1502,6 @@ function buildSessionSettingsBundle() {
 
   return {
     ...base,
-    activeAgent: window.__activeAgent || { voice: 'EmpoweredCore', text: 'EmpoweredCoreChat' },
     layout: {
       docked: dockedLayout,
       undocked: undockedLayout
@@ -1731,7 +1720,7 @@ function ensureRealtimeReady() {
   if (window.FileMaker?.PerformScript) {
     try {
       window.FileMaker.PerformScript('Realtime_Init', JSON.stringify({
-        agentName: (window.__activeAgent && window.__activeAgent.voice) || "EmpoweredCore"
+        sessionId: window.__sessionId || ""
       }));
     } catch (e) {
       console.warn('Failed to call Realtime_Init', e);
@@ -1920,18 +1909,7 @@ function bootstrapApp(payload) {
       });
     }
 
-    // Active agent settings (voice/text) from bootstrap
-    if (s.activeAgent && typeof s.activeAgent === 'object') {
-      window.__activeAgent = {
-        voice: s.activeAgent.voice || window.__activeAgent.voice || 'EmpoweredCore',
-        text: s.activeAgent.text || window.__activeAgent.text || 'EmpoweredCoreChat'
-      };
-    } else if (data.activeAgent && typeof data.activeAgent === 'object') {
-      window.__activeAgent = {
-        voice: data.activeAgent.voice || window.__activeAgent.voice || 'EmpoweredCore',
-        text: data.activeAgent.text || window.__activeAgent.text || 'EmpoweredCoreChat'
-      };
-    }
+    // Agents are managed in FileMaker; ignore any activeAgent in payload
 
     // Persist desired mode and session id for later application
     window.__bootstrapMode = mode;
@@ -2008,19 +1986,18 @@ function sendTextToRealtime(text, requestResponse = true, modalitiesOverride = n
     return true;
   }
 
-  // Fallback: use FileMaker agent with session context
+  // Fallback: ask FileMaker to route text via its agent selection
   if (window.FileMaker) {
     try { saveSession({ history: true }); } catch (_) {}
     try {
-      window.FileMaker.PerformScript('CallAgent', JSON.stringify({
+      window.FileMaker.PerformScript('Chat_TextRequest', JSON.stringify({
         sessionId: window.__sessionId || "",
-        agentName: (window.__activeAgent && window.__activeAgent.text) || "EmpoweredCoreChat",
         message: trimmed
       }));
       appendChatMessage('user', trimmed, { source: 'typed' });
       return true;
     } catch (e) {
-      console.warn('CallAgent script not available', e);
+      console.warn('Chat_TextRequest script not available', e);
     }
   }
 

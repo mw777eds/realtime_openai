@@ -125,7 +125,7 @@ Return:
 
 ******************************
 Script: Realtime_Init [ sessionId ]
-Purpose: Generate an ephemeral OpenAI token and return WebRTC session config to the Web Viewer.
+Purpose: Generate an ephemeral OpenAI token and return WebRTC session config to the Web Viewer. FileMaker chooses agent/config (no agentName from JS).
 
 Parameters (JSON):
 - { "sessionId":"..." }
@@ -150,6 +150,27 @@ Behavior:
 
 Return:
 - "{\"success\":true}" (optional; primary handoff is via JS callback)
+
+******************************
+Script: Chat_TextRequest [ sessionId ; payloadJSON ]
+Purpose: Wrapper for text messages when Realtime is inactive. Chooses the agent in FileMaker, loads history, calls CallAgent, and persists updates.
+
+Parameters (JSON):
+- { "sessionId":"...", "message":"..." }
+
+Pseudo-steps:
+1) Parse params → $sessionId, $message; validate both.
+2) Perform Script [ Session_GetState ; JSONSetElement ( "{}" ; [ "sessionId" ; $sessionId ; JSONString ] ) ] → parse result.result.history.
+3) Determine agentName (e.g., from user/session prefs).
+4) Perform Script [ CallAgent ; JSONSetElement ( "{}" ; 
+      [ "sessionId" ; $sessionId ; JSONString ] ;
+      [ "agentName" ; agentName ; JSONString ] ;
+      [ "message" ; $message ; JSONString ] ) ].
+5) If CallAgent did not persist, Perform Script [ Session_SaveState ; JSONSetElement ( "{}" ; [ "sessionId" ; $sessionId ; JSONString ] ; [ "history" ; updatedHistory ; JSONRaw ] ) ].
+6) Optionally Perform JavaScript in Web Viewer to echo assistant text immediately.
+
+Return:
+- "{\"success\":true}"
 
 ******************************
 Script: CallTools [ sessionId ; toolCallsJSON ]

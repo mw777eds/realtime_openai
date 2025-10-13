@@ -29,7 +29,7 @@ FileMaker AI Chat + Realtime API Unified Interface — Revised Requirements
   - Save Layout sends an envelope: { key, sessionId, settings { version, columns, cellHeight?, float, voice, text, toasts|debug, showToolCalls?, layout: { docked: [...], undocked: [...] } } }. If only the current mode’s array is provided, FileMaker merges it into the stored layout object by key.
     - When the user clicks Save Layout in the menu, it updates the per-user defaults (used to seed new sessions and for Restore Default).
     - Session state is saved separately under sessionId when you choose (e.g., via saveSessionState on pagehide); do not overwrite user defaults unless Save Layout is clicked.
-    - There is no scope parameter; scripts determine the target: Save Layout updates user defaults, Chat_SaveHistory persists the session’s conversation. Grid_LoadLayout should prefer session state for the current key, else fall back to user defaults.
+    - There is no scope parameter; scripts determine the target: Save Layout updates user defaults, Session_SaveState persists the session’s conversation. Grid_LoadLayout should prefer session state for the current key, else fall back to user defaults.
   - Restore loads the envelope for the current mode and applies settings (float and toggles) and settings.layout to rebuild widgets. If none is saved, defaults are applied and users can arrange, then Save Layout.
   - Front-end caching: on load, fetch both “docked” and “undocked” settings once and cache them in-memory; docking/undocking applies the cached settings immediately without a round-trip. Save Layout updates both FileMaker and the in-memory cache for the current mode.
 - Widgets:
@@ -81,8 +81,9 @@ Each item is append-only. Realtime is the authority while active; all modes read
 }
 
 - FM scripts:
-  - Realtime_Init(agentName) → return ephemeral key + model/session config for Realtime (does not require sessionId).
-  - CallAgent(sessionId; JSON { agentName, message }) → text-mode handler that loads history via Session_GetState and continues the chat; persists updates via Session_SaveState.
+  - Realtime_Init(sessionId) → return ephemeral key + model/session config for Realtime; FM selects the agent/config (JS does not pass agent).
+  - Chat_TextRequest(sessionId; JSON { message }) → wrapper that selects the agent in FileMaker, loads history via Session_GetState, calls CallAgent internally, and persists updates via Session_SaveState.
+  - CallAgent(sessionId; JSON { agentName, message }) → invoked by Chat_TextRequest; continues the chat and persists updates.
   - Session_SaveState(sessionId; JSON) → upsert unified session JSON; merge provided keys (settings/history).
   - Session_GetState(sessionId) → return unified session JSON.
   - Grid_SaveLayout(sessionId; JSON) / Grid_LoadLayout(sessionId).
@@ -108,7 +109,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - The next text submission builds its messages[] solely from the updated canonical log.
 - Text mode:
   - Before sending, ensure the latest Realtime transcript (if any) is flushed to FileMaker (the web client calls saveSession({ history:true }) when Voice is closed).
-  - Call CallAgent with { sessionId, agentName: settings.activeAgent.text, message }. CallAgent loads history via Session_GetState, builds context, gets the assistant reply, and appends assistant/tool events.
+  - Call Chat_TextRequest with { sessionId, message }. FileMaker selects the agent, loads history via Session_GetState, builds context, calls CallAgent, and appends assistant/tool events.
   - Persist updates via Session_SaveState on the FileMaker side.
 
 6. API adapters
@@ -278,8 +279,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - User templates (AccountName + key):
     - Only when the user clicks Save Layout in the menu (explicit action).
 - JavaScript API surface (Web Viewer functions):
-  - bootstrapApp({ sessionId, mode, settings?, activeAgent? }): seeds state; if activeAgent provided, sets settings.activeAgent = { voice, text }.
-  - setActiveAgent({ voice?, text? }): update active agents for voice/text; persists to session settings via Session_SaveState.
+  - bootstrapApp({ sessionId, mode, settings? }): seeds state.
   - saveSession(options): upsert unified session JSON via Session_SaveState. options = { settings?: boolean, history?: boolean }.
   - saveSessionState(): alias for saveSession({ history: true }). Layout defaults are saved explicitly via the Save Layout menu action.
   - getSessionState(): returns { sessionId, mode, history, layouts: {docked, undocked}, dirty: {history, layout} } for FileMaker-side logic.
