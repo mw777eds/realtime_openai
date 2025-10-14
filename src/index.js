@@ -1903,8 +1903,9 @@ async function preloadHistoryIntoRealtime(items) {
 let __rtState = 'idle';
 function ensureRealtimeReady() {
   if (__rtState === 'requesting' || __rtState === 'connecting' || __rtState === 'ready') return;
-  __rtState = 'requesting';
+
   if (window.FileMaker?.PerformScript) {
+    __rtState = 'requesting';
     try {
       window.FileMaker.PerformScript('Realtime_Init', JSON.stringify({
         sessionId: window.__sessionId || ""
@@ -1914,7 +1915,15 @@ function ensureRealtimeReady() {
       __rtState = 'idle';
     }
   } else {
-    console.log('FileMaker not available; call applyRealtimeInit(...) manually.');
+    // Suppress early logs until after bootstrap has run; then log once if FM is unavailable
+    if (!window.__bootstrapDone) {
+      __rtState = 'idle';
+      return;
+    }
+    if (!window.__rtInitNoticeShown) {
+      console.log('FileMaker not available; call applyRealtimeInit(...) manually.');
+      window.__rtInitNoticeShown = true;
+    }
     __rtState = 'idle';
   }
 }
@@ -2128,6 +2137,8 @@ function bootstrapApp(payload) {
       applyingFromFM = false;
     }
 
+    // Mark bootstrap as completed to enable post-bootstrap behaviors/logging
+    window.__bootstrapDone = true;
     return true;
   } catch (e) {
     console.error('bootstrapApp failed', e);
