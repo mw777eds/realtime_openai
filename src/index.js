@@ -139,7 +139,7 @@ function appendCanonicalMessage(role, text, metadata = {}) {
   // Ensure Conversations widget appears when undocked even if omitted from layout
   if (!isConvosDocked && !convosWidgetEl) {
     const saved = getSavedWidgetRect('convo', getCurrentMode());
-    window.__addConversationsWidget && window.__addConversationsWidget(saved || { x: 0, y: 0, w: 3, h: 8 });
+    window.__addConversationsWidget && window.__addConversationsWidget(saved || DEFAULT_POS.convo);
   }
   trimHistory();
 }
@@ -331,6 +331,14 @@ function addWidgetByType(type, rect, flags) {
   const fn = adders[type];
   if (fn) fn(rect);
 }
+
+/* Centralized defaults for widget positions/sizes (Step 5) */
+const DEFAULT_POS = Object.freeze({
+  voice: { x: 0, y: 0, w: 4, h: 4 },
+  toasts: { x: 8, y: 0, w: 4, h: 6 },
+  text: { x: 0, y: 12, w: 12, h: 6 },
+  convo: { x: 0, y: 0, w: 3, h: 8 }
+});
 
 /* Rebuild grid from a layout array (+ float), respecting current dock state for convo */
 function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
@@ -2562,7 +2570,7 @@ function applyLayout(payload) {
   // Ensure Conversations widget appears when undocked even if omitted
   if (!isConvosDocked && !convosWidgetEl) {
     const saved = getSavedWidgetRect('convo', getCurrentMode());
-    window.__addConversationsWidget && window.__addConversationsWidget(saved || { x: 0, y: 0, w: 3, h: 8 });
+    window.__addConversationsWidget && window.__addConversationsWidget(saved || DEFAULT_POS.convo);
   }
 
   // Update menu button states to reflect presence
@@ -2777,7 +2785,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (realtimeWidgetEl) return;
     const mode = getCurrentMode();
     const saved = !pos ? getSavedWidgetRect('voice', mode) : null;
-    const p = pos || saved || { x: 0, y: 0, w: 4, h: 4 };
+    const p = pos || saved || DEFAULT_POS.voice;
     const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
@@ -2837,7 +2845,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (toastsWidgetEl) return;
     const mode = getCurrentMode();
     const saved = !pos ? getSavedWidgetRect('toasts', mode) : null;
-    const p = pos || saved || { x: 8, y: 0, w: 4, h: 6 };
+    const p = pos || saved || DEFAULT_POS.toasts;
     const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
@@ -2877,7 +2885,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (convosWidgetEl) return;
     const mode = getCurrentMode();
     const saved = !pos ? getSavedWidgetRect('convo', mode) : null;
-    const p = pos || saved || { x: 0, y: 0, w: 3, h: 8 };
+    const p = pos || saved || DEFAULT_POS.convo;
     const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
@@ -2982,7 +2990,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (textWidgetEl) return;
     const mode = getCurrentMode();
     const saved = !pos ? getSavedWidgetRect('text', mode) : null;
-    const p = pos || saved || { x: 0, y: 12, w: 12, h: 6 };
+    const p = pos || saved || DEFAULT_POS.text;
     const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
