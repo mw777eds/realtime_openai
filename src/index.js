@@ -2665,14 +2665,25 @@ function savePreferences() {
 document.addEventListener("DOMContentLoaded", () => {
   const sidebarEl = document.querySelector('.sidebar');
 
-  // Show a DEVELOPMENT banner when not running inside FileMaker (e.g., Byte/local dev)
+  // Show a DEVELOPMENT banner when served from local dev (e.g., Byte/Vite), regardless of FileMaker presence
+  function isDevServed() {
+    try {
+      const isHttp = /^https?:$/.test(location.protocol);
+      const host = (location.host || '').toLowerCase();
+      const looksDevHost = /localhost|127\.0\.0\.1|\.local|\.lan|byte/.test(host) || (location.port === '5173');
+      const isViteDev = typeof import !== 'undefined'
+        && typeof import.meta !== 'undefined'
+        && (import.meta.hot || (import.meta.env && import.meta.env.DEV));
+      return (isHttp && looksDevHost) || isViteDev;
+    } catch (_) {
+      return false;
+    }
+  }
   try {
     const headerEl = document.querySelector('.app-header');
-    const isFM = !!(window.FileMaker && typeof window.FileMaker.PerformScript === 'function');
-    const isWeb = /^https?:$/.test(location.protocol);
-    const looksDevHost = /localhost|127\.0\.0\.1|\.local|\.lan|byte/i.test(location.host || '');
-    if (headerEl && (!isFM) && (isWeb || location.protocol === 'file:' || looksDevHost)) {
-      let banner = document.getElementById('env-banner');
+    const shouldShow = isDevServed();
+    let banner = document.getElementById('env-banner');
+    if (shouldShow && headerEl) {
       if (!banner) {
         banner = document.createElement('div');
         banner.id = 'env-banner';
@@ -2680,9 +2691,8 @@ document.addEventListener("DOMContentLoaded", () => {
         banner.textContent = 'DEVELOPMENT';
         headerEl.appendChild(banner);
       }
-    } else {
-      const banner = document.getElementById('env-banner');
-      if (banner) banner.remove();
+    } else if (banner) {
+      banner.remove();
     }
   } catch (_) {}
 
