@@ -853,6 +853,8 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
     }
   }
 
+  // Mark time so we can log the next model output as the image result
+  window.__lastImageSendAt = Date.now();
 
   showToast("Shared image context with assistant", "tool-response", "left", null, 4);
 
@@ -885,11 +887,7 @@ function sendToolResponse(toolResponse) {
       }
     };
 
-    console.log("Preparing to send response:", response);
-    console.log("Response stringified:", JSON.stringify(response));
-
     dc.send(JSON.stringify(response));
-    console.log("Sent tool response");
     // Append tool_result to canonical history
     try {
       appendToolResult(toolResponse.call_id, toolResponse.output, 'success');
@@ -923,7 +921,6 @@ function createModelResponse() {
       }
     };
     dc.send(JSON.stringify(responseCreateEvent));
-    console.log("Requested new model response");
   } else {
     console.error("Data channel not ready for response creation");
   }
@@ -1043,7 +1040,6 @@ function updateSession(updateParamsJson) {
     };
 
     dc.send(JSON.stringify(sessionUpdateEvent));
-    console.log("Sent session update:", updateParams);
 
     currentSessionConfig = deepMerge(currentSessionConfig || {}, updateParams);
 
@@ -1173,7 +1169,6 @@ function stopLLMGeneration() {
       type: "stop"
     };
     dc.send(JSON.stringify(stopEvent));
-    console.log("Sent stop event to cut off LLM output");
     return true;
   }
   return false;
@@ -3306,7 +3301,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
       if (realtimeEvent.type === "response.done" && realtimeEvent.response.output?.some(item => item.type === "function_call")) {
         const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
-        console.log("Model tool calls:", toolCalls);
 
         showToast("Assistant requested tools", "tool-call", "right", JSON.stringify({ toolCalls }), 8);
 
@@ -3392,13 +3386,31 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
         // Only try to access output if it exists and has elements
         if (realtimeEvent.response.output && realtimeEvent.response.output.length > 0) {
-          console.log("Model response:", realtimeEvent.response.output[0]);
           const transcript = realtimeEvent.response.output[0].content?.[0]?.transcript;
           if (transcript) {
             appendChatMessage('assistant', transcript, { source: 'realtime' });
           }
-        } else {
-          console.log("Model response: No output available");
+        }
+        // If a recent image was uploaded, log a concise result from the model's output
+        if (window.__lastImageSendAt && Date.now() - window.__lastImageSendAt < 15000) {
+          try {
+            const out = realtimeEvent.response.output || [];
+            let resultText = null;
+            for (const it of out) {
+              const parts = Array.isArray(it.content) ? it.content : [];
+              for (const part of parts) {
+                if (typeof part?.text === 'string' && part.text) { resultText = part.text; break; }
+                if (typeof part?.transcript === 'string' && part.transcript) { resultText = part.transcript; break; }
+              }
+              if (resultText) break;
+            }
+            if (resultText) {
+              console.log('Image response:', resultText);
+            } else {
+              console.log('Image response: (no text content returned)');
+            }
+          } catch (_) {}
+          window.__lastImageSendAt = 0;
         }
       }
 
@@ -3407,7 +3419,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         const transcript = realtimeEvent.item?.content?.transcript || realtimeEvent.transcript || '';
         if (transcript) {
           enableToolsIfDisabled();
-          console.log("User message:", transcript);
           appendChatMessage('user', transcript, { source: 'realtime' });
         }
       }
