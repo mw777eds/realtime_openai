@@ -2699,6 +2699,7 @@ function savePreferences() {
   saveSession({ settings: true });
 }
 
+
 /* 
  * Initialize the application when the DOM is fully loaded
  * 
