@@ -1,0 +1,90 @@
+# Cleanup Tasks for src/index.js Reorganization
+
+Use this checklist to perform safe, incremental refactors. Keep behavior identical after each step and test before proceeding.
+
+## Incremental Steps (execute in order)
+- [ ] Step 1: Introduce FileMaker wrapper and centralized script-name constants (no behavior change).
+- [ ] Step 2: Add audio level interval management (create audioLevelInterval; clear it in cleanupWebRTC and removeRealtimeWidget).
+- [ ] Step 3: Extract tiny DOM helpers: setPressed(btn, on) and stopDragFrom(el) to reduce repetition.
+- [ ] Step 4: Consolidate widget add/remove dispatch into small dispatcher maps (voice/toasts/text/convo) to replace repeated switch statements.
+- [ ] Step 5: Centralize default widget rects (DEFAULT_POS) used by add*Widget functions.
+- [ ] Step 6: Reorder functions by module sections (utilities → FM bridge → sessions → history → text chat → toasts → grid/layout → realtime → bootstrap) without changing any logic.
+- [ ] Step 7: Extract safeStr and readFileAsDataUrl into Utilities section (pure helpers only).
+- [ ] Step 8: Normalize save/build settings paths to use a single function for current settings bundle where possible (no behavior change).
+- [ ] Step 9: Final tidy: replace repeated PerformScript calls with callFM where appropriate.
+
+## Detailed To-Do by Area
+
+### Utilities
+- [ ] Add helper: setPressed(btn, on) to toggle .active + aria-pressed.
+- [ ] Add helper: stopDragFrom(el) to stopPropagation for pointer events.
+- [ ] Extract safeStr(v, max) used in buildHistoryEvents.
+- [ ] Keep parseJsonSafely, deepMerge, normalizeModalitiesList, normalizeImagePayload, createId, trimHistory grouped together.
+- [ ] Keep readFileAsDataUrl here.
+
+### FileMaker Bridge
+- [ ] Add callFM(name, payload) wrapper (stringify payload if object; try/catch).
+- [ ] Add FM constants: { SaveState, GetState, GridSave, GridLoad, GridRestore, RealtimeInit, ChatText, CallTools, HandleAPIError, LogMessage, ShowJSON }.
+- [ ] Replace direct PerformScript calls gradually with callFM (in sendTextToRealtime fallback, Grid save/load, HandleAPIError, tool calls, etc.).
+
+### Sessions and Sidebar
+- [ ] Keep setSessionList, renderSessionList, highlightActiveSession, switchSession together.
+- [ ] Ensure switchSession flushes via saveSession({ history:true, settings:true }) before requesting next state.
+
+### Canonical History and Rendering
+- [ ] Keep appendCanonicalMessage, appendToolCall, appendToolResult together.
+- [ ] Keep buildMinifiedHistoryFromSession near them.
+- [ ] Keep renderChatFromHistory and renderToolPill collocated and using showToolPills flag.
+
+### Text Chat
+- [ ] Keep recordChatMessage, renderChatMessage, appendChatMessage, chatHistoryToText, logChatHistory, getChatBuffer, logChatBufferRaw grouped.
+- [ ] Verify sendTextToRealtime fallback passes { sessionId, prompt } (current code already does).
+- [ ] Keep handleChatSend and handleChatImageUpload together.
+
+### Toasts
+- [ ] Keep createToastTimeline, showToast, dismissToast grouped.
+
+### Grid/Layout and Settings
+- [ ] Keep loadPersistedSettings, ensureModeSettings, persistModeSettings, getSavedWidgetRect, updateSavedWidgetRect together.
+- [ ] Keep computeCurrentSettingsSnapshot and buildSessionSettingsBundle together.
+- [ ] Keep getCurrentToggleSettings and savePreferences together.
+- [ ] Consolidate rebuildFromLayout/applyLayout/applySettingsForMode to use dispatcher maps.
+- [ ] Keep saveCurrentLayout, restoreDefaultLayout, loadLayoutForCurrentMode together.
+- [ ] Keep dockConvos/undockConvos and Conversations widget add/remove in this area.
+
+### Realtime/WebRTC
+- [ ] Keep prepareSessionConfiguration, getResponseModalities, enableToolsIfDisabled together.
+- [ ] Manage audio level interval:
+  - Create: let audioLevelInterval = null (module scope).
+  - Set in ontrack: audioLevelInterval = setInterval(checkAudioActivity, 100).
+  - Clear in cleanupWebRTC() and removeRealtimeWidget().
+- [ ] Keep initializeCanvas/drawWaveform/startWaveform/stopWaveform with waveformResizeObserver handling.
+- [ ] Keep sendToolResponse, createModelResponse, updateSession together.
+- [ ] Keep sendResponseCancel, hasActiveResponse, stopLLMGeneration grouped.
+- [ ] Keep ensureRealtimeReady and applyRealtimeInit together.
+- [ ] Keep buildHistoryEvents and preloadHistoryIntoRealtime together.
+- [ ] Ensure cleanupWebRTC resets defaults and clears intervals; stop and null audioTrack.
+
+### Bootstrap and Wiring
+- [ ] Keep bootstrapApp near bottom but above DOMContentLoaded wiring.
+- [ ] Keep DOMContentLoaded handler last to wire grid init, widgets, menu, and mount according to persisted/boot settings.
+- [ ] Keep pagehide handler to flush history.
+
+## Gotchas and Warnings (do not break these)
+- Keep function declarations (not const/arrow) so hoisting preserves call sites above definitions.
+- Keep top-level window API exports available immediately (do NOT move inside DOMContentLoaded).
+- Do not move DOMContentLoaded above function definitions.
+- ensureRealtimeReady must be defined before addRealtimeWidget uses it (hoisting via declarations is okay).
+- applyRealtimeInit and initializeWebRTC must remain callable by FileMaker as soon as the viewer evaluates the script.
+- Clear audio level interval (setInterval in ontrack) during cleanup; otherwise memory/timer leaks.
+- When consolidating rebuild/apply layout logic, preserve conditions for isConvosDocked so Conversations widget only appears when undocked.
+- Maintain prompt property in Chat_TextRequest fallback payload (do not revert to message).
+- Preserve persistedSettings shape and localStorage keys: settings:docked and settings:undocked.
+
+## Quick Tests After Each Step
+- [ ] Text send while Realtime disconnected triggers Chat_TextRequest with { prompt } and renders user bubble.
+- [ ] Realtime start still preloads history; speaking shows waveform; muting cancels response and shows sleep icon.
+- [ ] Toggling Voice/Text/Toasts adds/removes widgets and persists positions in localStorage.
+- [ ] Dock/Undock toggles sidebar/widget correctly and preserves layout per mode.
+- [ ] Tool calls render tool pills when enabled; JSON modal opens and closes.
+- [ ] No console errors on reload; apply bootstrap payload still renders sessions and history.
