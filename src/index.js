@@ -2671,8 +2671,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const isHttp = /^https?:$/.test(location.protocol);
       const host = (location.host || '').toLowerCase();
       const looksDevHost = /localhost|127\.0\.0\.1|\.local|\.lan|byte/.test(host) || (location.port === '5173');
-      const isViteDev = typeof import !== 'undefined'
-        && typeof import.meta !== 'undefined'
+      const isViteDev = (typeof import.meta !== 'undefined')
         && (import.meta.hot || (import.meta.env && import.meta.env.DEV));
       return (isHttp && looksDevHost) || isViteDev;
     } catch (_) {
