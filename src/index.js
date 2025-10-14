@@ -1074,10 +1074,8 @@ function updateSession(updateParamsJson) {
       session: updateParams
     };
 
-    try {
-      dcSendJSONSafe(sessionUpdateEvent);
-    } catch (err) {
-      console.warn("Data channel send failed in updateSession", err);
+    if (!dcSendJSONSafe(sessionUpdateEvent)) {
+      console.warn("Data channel send failed in updateSession");
       return false;
     }
 
