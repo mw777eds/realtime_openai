@@ -831,12 +831,9 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
 
   const imageContent = {
     type: "input_image",
-    image_base64: normalized.base64Data
+    image_url: processedDataUrl
   };
 
-  if (normalized.mimeType) {
-    imageContent.mime_type = normalized.mimeType;
-  }
   // Hint lower detail if we resized to save tokens
   if (wasResized) {
     imageContent.detail = 'low';
@@ -858,10 +855,13 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
   };
 
   // Fallback guard if still oversized after client-side resize (~900k base64 chars ≈ ~675kB)
-  if (normalized.base64Data && normalized.base64Data.length > 900000) {
-    console.warn("Image still too large for RTCDataChannel after resize:", normalized.base64Data.length);
-    showToast("Image too large for realtime channel even after resizing. Try a smaller image.", "tool-error", "left", null, 6);
-    return false;
+  {
+    const base64Len = (processedDataUrl.split(',')[1] || '').length;
+    if (base64Len > 900000) {
+      console.warn("Image still too large for RTCDataChannel after resize:", base64Len);
+      showToast("Image too large for realtime channel even after resizing. Try a smaller image.", "tool-error", "left", null, 6);
+      return false;
+    }
   }
 
   try {
