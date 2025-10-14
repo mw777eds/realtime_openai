@@ -320,6 +320,18 @@ function updateSavedWidgetRect(widget, rect, mode = getCurrentMode()) {
   persistModeSettings(mode);
 }
 
+/* Widget add dispatcher used by layout rebuilders (Step 4) */
+function addWidgetByType(type, rect, flags) {
+  const adders = {
+    voice: (r) => flags.includeVoice && window.__addRealtimeWidget && window.__addRealtimeWidget(r),
+    toasts: (r) => flags.includeToasts && window.__addToastsWidget && window.__addToastsWidget(r),
+    text: (r) => flags.includeText && window.__addTextWidget && window.__addTextWidget(r),
+    convo: (r) => (!isConvosDocked) && window.__addConversationsWidget && window.__addConversationsWidget(r)
+  };
+  const fn = adders[type];
+  if (fn) fn(rect);
+}
+
 /* Rebuild grid from a layout array (+ float), respecting current dock state for convo */
 function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   if (!grid) return;
@@ -341,32 +353,10 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   textWidgetEl = null;
   convosWidgetEl = null;
 
-  // Add widgets back based on layout (respect toggles)
+  // Add widgets back based on layout (respect toggles) via dispatcher
+  const flags = { includeVoice, includeText, includeToasts };
   layout.forEach(n => {
-    switch (n.widget) {
-      case 'voice':
-        if (includeVoice) {
-          window.__addRealtimeWidget && window.__addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
-        }
-        break;
-      case 'toasts':
-        if (includeToasts) {
-          window.__addToastsWidget && window.__addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
-        }
-        break;
-      case 'text':
-        if (includeText) {
-          window.__addTextWidget && window.__addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
-        }
-        break;
-      case 'convo':
-        if (!isConvosDocked) {
-          window.__addConversationsWidget && window.__addConversationsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
-        }
-        break;
-      default:
-        break;
-    }
+    addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h }, flags);
   });
 }
 
@@ -2563,31 +2553,10 @@ function applyLayout(payload) {
   const includeText = !!toggles.text;
   const includeToasts = !!toggles.toasts;
 
+  // Rebuild via dispatcher
+  const flags = { includeVoice, includeText, includeToasts };
   payload.layout.forEach(n => {
-    switch (n.widget) {
-      case 'voice':
-        if (includeVoice) {
-          window.__addRealtimeWidget && window.__addRealtimeWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
-        }
-        break;
-      case 'toasts':
-        if (includeToasts) {
-          window.__addToastsWidget && window.__addToastsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
-        }
-        break;
-      case 'text':
-        if (includeText) {
-          window.__addTextWidget && window.__addTextWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
-        }
-        break;
-      case 'convo':
-        if (!isConvosDocked) {
-          window.__addConversationsWidget && window.__addConversationsWidget({ x: n.x, y: n.y, w: n.w, h: n.h });
-        }
-        break;
-      default:
-        break;
-    }
+    addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h }, flags);
   });
 
   // Ensure Conversations widget appears when undocked even if omitted

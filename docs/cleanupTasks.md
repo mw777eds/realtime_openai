@@ -6,7 +6,7 @@ Use this checklist to perform safe, incremental refactors. Keep behavior identic
 - [ ] Step 1: Introduce FileMaker wrapper and centralized script-name constants (no behavior change).
 - [x] Step 2: Add audio level interval management (create audioLevelInterval; clear it in cleanupWebRTC and removeRealtimeWidget).
 - [x] Step 3: Extract tiny DOM helpers: setPressed(btn, on) and stopDragFrom(el) to reduce repetition.
-- [ ] Step 4: Consolidate widget add/remove dispatch into small dispatcher maps (voice/toasts/text/convo) to replace repeated switch statements.
+- [x] Step 4: Consolidate widget add/remove dispatch into small dispatcher maps (voice/toasts/text/convo) to replace repeated switch statements.
 - [ ] Step 5: Centralize default widget rects (DEFAULT_POS) used by add*Widget functions.
 - [ ] Step 6: Reorder functions by module sections (utilities → FM bridge → sessions → history → text chat → toasts → grid/layout → realtime → bootstrap) without changing any logic.
 - [ ] Step 7: Extract safeStr and readFileAsDataUrl into Utilities section (pure helpers only).
