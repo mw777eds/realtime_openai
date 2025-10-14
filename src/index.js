@@ -2719,6 +2719,7 @@ function savePreferences() {
 }
 
 
+
 /* 
  * Initialize the application when the DOM is fully loaded
  * 
