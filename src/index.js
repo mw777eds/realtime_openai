@@ -784,16 +784,6 @@ function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
     dc.send(JSON.stringify(responseCreateEvent));
   }
 
-  if (window.FileMaker) {
-    try {
-      window.FileMaker.PerformScript("LogMessage", JSON.stringify({
-        role: "user",
-        message: promptText ? `${promptText} [image shared]` : "[image shared]"
-      }));
-    } catch (error) {
-      console.warn("Failed to log image message to FileMaker:", error);
-    }
-  }
 
   showToast("Shared image context with assistant", "tool-response", "left", null, 4);
 
@@ -3373,12 +3363,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         if (realtimeEvent.response.output && realtimeEvent.response.output.length > 0) {
           console.log("Model response:", realtimeEvent.response.output[0]);
           const transcript = realtimeEvent.response.output[0].content?.[0]?.transcript;
-          if (window.FileMaker && transcript) {
-            window.FileMaker.PerformScript("LogMessage", JSON.stringify({
-              role: "assistant",
-              message: transcript
-            }));
-          }
           if (transcript) {
             appendChatMessage('assistant', transcript, { source: 'realtime' });
           }
@@ -3393,12 +3377,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         if (transcript) {
           enableToolsIfDisabled();
           console.log("User message:", transcript);
-          if (window.FileMaker) {
-            window.FileMaker.PerformScript("LogMessage", JSON.stringify({
-              role: "user",
-              message: transcript
-            }));
-          }
           appendChatMessage('user', transcript, { source: 'realtime' });
         }
       }
