@@ -1700,7 +1700,7 @@ function buildHistoryEvents(items) {
         item: {
           type: 'message',
           role,
-          content: [{ type: role === 'user' ? 'input_text' : 'output_text', text: m.content }]
+          content: [{ type: role === 'user' ? 'input_text' : 'text', text: m.content }]
         }
       });
       continue;
@@ -1716,7 +1716,7 @@ function buildHistoryEvents(items) {
           type: 'message',
           role: 'assistant',
           content: [{
-            type: 'output_text',
+            type: 'text',
             text: `Context only (do not re-execute): assistant previously requested tool "${name}" with arguments ${argsStr}`
           }]
         }
@@ -1734,7 +1734,7 @@ function buildHistoryEvents(items) {
           type: 'message',
           role: 'assistant',
           content: [{
-            type: 'output_text',
+            type: 'text',
             text: `Context only (do not re-execute): tool_result for call_id=${callId} (status=${status}) → ${outStr}`
           }]
         }
