@@ -451,23 +451,8 @@ window.requestSessionState = requestSessionState;
 window.setSessionList = setSessionList;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
-const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
-  type: "function",
-  name: "request_container_image",
-  description: "Request the latest image stored in the FileMaker container field so the assistant can use it as visual context.",
-  parameters: {
-    type: "object",
-    properties: {
-      prompt: {
-        type: "string",
-        description: "Optional guidance for the user about the kind of image that should be provided."
-      }
-    }
-  }
-});
 
 let defaultResponseModalities = [...DEFAULT_MODALITIES];
-let containerImageToolName = DEFAULT_CONTAINER_IMAGE_TOOL.name;
 let currentSessionConfig = null;
 let toolsEnabled = false;
 
@@ -568,23 +553,7 @@ function prepareSessionConfiguration(instructions, toolsStr, toolChoice, session
 
   const additionalConfig = parseJsonSafely(sessionConfig, 'session configuration') || {};
 
-  let disableContainerImageTool = false;
-  if (typeof additionalConfig.disableDefaultContainerImageTool !== 'undefined') {
-    disableContainerImageTool = Boolean(additionalConfig.disableDefaultContainerImageTool);
-    delete additionalConfig.disableDefaultContainerImageTool;
-  } else if (typeof additionalConfig.disable_container_image_tool !== 'undefined') {
-    disableContainerImageTool = Boolean(additionalConfig.disable_container_image_tool);
-    delete additionalConfig.disable_container_image_tool;
-  }
 
-  let containerImageToolDefinition = null;
-  if (additionalConfig.containerImageTool && typeof additionalConfig.containerImageTool === 'object') {
-    containerImageToolDefinition = additionalConfig.containerImageTool;
-    delete additionalConfig.containerImageTool;
-  } else if (additionalConfig.container_image_tool && typeof additionalConfig.container_image_tool === 'object') {
-    containerImageToolDefinition = additionalConfig.container_image_tool;
-    delete additionalConfig.container_image_tool;
-  }
 
   let defaultModalitiesOverride = null;
   if (additionalConfig.defaultResponseModalities) {
@@ -600,15 +569,6 @@ function prepareSessionConfiguration(instructions, toolsStr, toolChoice, session
     delete additionalConfig.tools;
   }
 
-  const imageTool = containerImageToolDefinition
-    ? JSON.parse(JSON.stringify(containerImageToolDefinition))
-    : JSON.parse(JSON.stringify(DEFAULT_CONTAINER_IMAGE_TOOL));
-  if (!disableContainerImageTool) {
-    const existingNames = new Set(tools.map(tool => tool && tool.name));
-    if (!existingNames.has(imageTool.name)) {
-      tools.push(imageTool);
-    }
-  }
 
   const defaultSessionConfig = {
     instructions: instructions || "You are a helpful AI assistant.",
@@ -635,8 +595,7 @@ function prepareSessionConfiguration(instructions, toolsStr, toolChoice, session
 
   return {
     sessionConfig: finalSessionConfig,
-    defaultModalities,
-    containerToolName: imageTool.name
+    defaultModalities
   };
 }
 
@@ -995,23 +954,6 @@ function updateSession(updateParamsJson) {
       return false;
     }
 
-    let disableContainerImageTool = false;
-    if (typeof parsedUpdate.disableDefaultContainerImageTool !== 'undefined') {
-      disableContainerImageTool = Boolean(parsedUpdate.disableDefaultContainerImageTool);
-      delete parsedUpdate.disableDefaultContainerImageTool;
-    } else if (typeof parsedUpdate.disable_container_image_tool !== 'undefined') {
-      disableContainerImageTool = Boolean(parsedUpdate.disable_container_image_tool);
-      delete parsedUpdate.disable_container_image_tool;
-    }
-
-    let containerImageToolDefinition = null;
-    if (parsedUpdate.containerImageTool && typeof parsedUpdate.containerImageTool === 'object') {
-      containerImageToolDefinition = parsedUpdate.containerImageTool;
-      delete parsedUpdate.containerImageTool;
-    } else if (parsedUpdate.container_image_tool && typeof parsedUpdate.container_image_tool === 'object') {
-      containerImageToolDefinition = parsedUpdate.container_image_tool;
-      delete parsedUpdate.container_image_tool;
-    }
 
     let newDefaultModalities = null;
     if (Object.prototype.hasOwnProperty.call(parsedUpdate, 'defaultResponseModalities')) {
@@ -1071,34 +1013,6 @@ function updateSession(updateParamsJson) {
       delete updateParams.tools;
     }
 
-    if (Array.isArray(updateParams.tools)) {
-      if (containerImageToolDefinition && containerImageToolDefinition.name) {
-        containerImageToolName = containerImageToolDefinition.name;
-      }
-
-      const containerToolFromConfig = containerImageToolDefinition
-        || (currentSessionConfig?.tools || []).find(tool => tool && tool.name === containerImageToolName)
-        || DEFAULT_CONTAINER_IMAGE_TOOL;
-
-      const containerToolToUse = containerToolFromConfig && containerToolFromConfig.name
-        ? JSON.parse(JSON.stringify(containerToolFromConfig))
-        : null;
-
-      const existingNames = new Set(updateParams.tools.map(tool => tool && tool.name));
-
-      if (disableContainerImageTool) {
-        updateParams.tools = updateParams.tools.filter(tool => tool && tool.name !== containerImageToolName);
-      } else if (containerToolToUse && !existingNames.has(containerToolToUse.name)) {
-        updateParams.tools.push(containerToolToUse);
-      }
-    }
-
-    if (containerImageToolDefinition && Array.isArray(updateParams.tools)) {
-      const index = updateParams.tools.findIndex(tool => tool && tool.name === containerImageToolName);
-      if (index >= 0) {
-        updateParams.tools[index] = JSON.parse(JSON.stringify(containerImageToolDefinition));
-      }
-    }
 
     const normalizedModalities = normalizeModalitiesList(updateParams.modalities);
     if (normalizedModalities && normalizedModalities.length > 0) {
@@ -3324,7 +3238,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     defaultResponseModalities = Array.isArray(preparedConfig.defaultModalities) && preparedConfig.defaultModalities.length > 0
       ? [...preparedConfig.defaultModalities]
       : [...DEFAULT_MODALITIES];
-    containerImageToolName = preparedConfig.containerToolName || DEFAULT_CONTAINER_IMAGE_TOOL.name;
     currentSessionConfig = resolvedSessionConfig;
 
     pc = new RTCPeerConnection();
@@ -3393,9 +3306,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         const toolCalls = realtimeEvent.response.output.filter(item => item.type === "function_call");
         console.log("Model tool calls:", toolCalls);
 
-        if (toolCalls.some(call => call.name === containerImageToolName)) {
-          showToast("Assistant requested an image from FileMaker", "tool-call", "right", JSON.stringify({ toolCalls }), 8);
-        }
+        showToast("Assistant requested tools", "tool-call", "right", JSON.stringify({ toolCalls }), 8);
 
         if (window.FileMaker) {
           showIcon('thought');
