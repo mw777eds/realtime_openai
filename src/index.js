@@ -819,7 +819,14 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
     return false;
   }
 
-  enableToolsIfDisabled();
+  // Defer tool enabling slightly to avoid backpressure after large image payload
+  setTimeout(() => {
+    try {
+      if (dc && dc.readyState === 'open' && !toolsEnabled) {
+        enableToolsIfDisabled();
+      }
+    } catch (_) {}
+  }, 250);
 
   const shouldRequestResponse = typeof payload?.requestResponse === 'boolean'
     ? payload.requestResponse
@@ -834,11 +841,15 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
         modalities
       }
     };
-    try {
-      dc.send(JSON.stringify(responseCreateEvent));
-    } catch (err) {
-      console.warn("Failed to send response.create after image:", err);
-    }
+    setTimeout(() => {
+      try {
+        if (dc && dc.readyState === 'open') {
+          dc.send(JSON.stringify(responseCreateEvent));
+        }
+      } catch (err) {
+        console.warn("Failed to send response.create after image:", err);
+      }
+    }, 100);
   }
 
   // Mark time so we can log the next model output as the image result
@@ -1027,7 +1038,12 @@ function updateSession(updateParamsJson) {
       session: updateParams
     };
 
-    dc.send(JSON.stringify(sessionUpdateEvent));
+    try {
+      dc.send(JSON.stringify(sessionUpdateEvent));
+    } catch (err) {
+      console.warn("Data channel send failed in updateSession", err);
+      return false;
+    }
 
     currentSessionConfig = deepMerge(currentSessionConfig || {}, updateParams);
 
