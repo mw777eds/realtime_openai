@@ -543,6 +543,43 @@ function deepMerge(target = {}, source = {}) {
   return output;
 }
 
+/**
+ * Safely send a JSON event over the RTCDataChannel with basic backpressure handling.
+ * Returns true if queued/sent, false if the channel is not open or serialization fails.
+ */
+function dcSendJSONSafe(obj, opts = {}) {
+  if (!dc || dc.readyState !== 'open') return false;
+  try {
+    const json = JSON.stringify(obj);
+    // Ensure a sane low threshold and wait if the buffer is high (especially after large image sends)
+    try { dc.bufferedAmountLowThreshold = 65536; } catch (_) {}
+    const highNow = dc.bufferedAmount > 131072; // 128KB
+    if (highNow || opts.highVolume) {
+      if (dc.bufferedAmount > (dc.bufferedAmountLowThreshold || 65536)) {
+        let sent = false;
+        const onLow = () => {
+          if (sent) return;
+          sent = true;
+          try { dc.send(json); } catch (_) {}
+          dc.removeEventListener('bufferedamountlow', onLow);
+        };
+        dc.addEventListener('bufferedamountlow', onLow, { once: true });
+        setTimeout(() => {
+          if (sent) return;
+          try { dc.send(json); } catch (_) {}
+          dc.removeEventListener('bufferedamountlow', onLow);
+        }, 800);
+        return true;
+      }
+    }
+    dc.send(json);
+    return true;
+  } catch (e) {
+    console.warn('dcSendJSONSafe failed', e);
+    return false;
+  }
+}
+
 function prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfig) {
   let tools = [];
 
@@ -810,14 +847,13 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
     console.log(`Sending image to Realtime (~${__estKB} KB, resized: ${wasResized ? 'yes' : 'no'}, type: ${normalized.mimeType || 'unknown'})`);
   }
 
-  try {
-    dc.send(JSON.stringify(conversationEvent));
-    console.log("Image message sent to Realtime");
-  } catch (err) {
-    console.error("Failed to send image message over data channel:", err);
+  const okImage = dcSendJSONSafe(conversationEvent, { highVolume: true });
+  if (!okImage) {
+    console.error("Failed to send image message over data channel");
     showToast("Failed to send image to assistant. Try again.", "tool-error", "left", null, 6);
     return false;
   }
+  console.log("Image message sent to Realtime");
 
   // Defer tool enabling slightly to avoid backpressure after large image payload
   setTimeout(() => {
@@ -844,7 +880,7 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
     setTimeout(() => {
       try {
         if (dc && dc.readyState === 'open') {
-          dc.send(JSON.stringify(responseCreateEvent));
+          dcSendJSONSafe(responseCreateEvent);
         }
       } catch (err) {
         console.warn("Failed to send response.create after image:", err);
@@ -886,7 +922,7 @@ function sendToolResponse(toolResponse) {
       }
     };
 
-    dc.send(JSON.stringify(response));
+    dcSendJSONSafe(response);
     // Append tool_result to canonical history
     try {
       appendToolResult(toolResponse.call_id, toolResponse.output, 'success');
@@ -919,7 +955,7 @@ function createModelResponse() {
         modalities: getResponseModalities()
       }
     };
-    dc.send(JSON.stringify(responseCreateEvent));
+    dcSendJSONSafe(responseCreateEvent);
   } else {
     console.error("Data channel not ready for response creation");
   }
@@ -1039,7 +1075,7 @@ function updateSession(updateParamsJson) {
     };
 
     try {
-      dc.send(JSON.stringify(sessionUpdateEvent));
+      dcSendJSONSafe(sessionUpdateEvent);
     } catch (err) {
       console.warn("Data channel send failed in updateSession", err);
       return false;
@@ -1172,7 +1208,7 @@ function stopLLMGeneration() {
     const stopEvent = {
       type: "stop"
     };
-    dc.send(JSON.stringify(stopEvent));
+    dcSendJSONSafe(stopEvent);
     return true;
   }
   return false;
@@ -2047,7 +2083,7 @@ function sendTextToRealtime(text, requestResponse = true, modalitiesOverride = n
       }
     };
     try {
-      dc.send(JSON.stringify(conversationEvent));
+      dcSendJSONSafe(conversationEvent);
       enableToolsIfDisabled();
 
       if (requestResponse) {
@@ -2058,7 +2094,7 @@ function sendTextToRealtime(text, requestResponse = true, modalitiesOverride = n
           response: { modalities }
         };
         try {
-          dc.send(JSON.stringify(responseCreateEvent));
+          dcSendJSONSafe(responseCreateEvent);
         } catch (e2) {
           console.warn("Failed to send response.create over data channel", e2);
         }
@@ -3268,6 +3304,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     audioSender = pc.addTrack(audioTrack);
 
     dc = pc.createDataChannel("oai-events");
+    try { dc.bufferedAmountLowThreshold = 65536; } catch (_) {}
     // Reset state if channel closes later (allows re-init on re-add)
     dc.addEventListener("close", () => { __rtState = 'idle'; try { delete window.__historyPreloadedFor; } catch (_) {} });
     dc.addEventListener("error", (e) => { console.warn("Data channel error", e); showToast("Data channel error; try toggling Voice off/on.", "tool-error", "left", null, 6); });
@@ -3454,8 +3491,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             };
 
             // Send tool response back to OpenAI
-            dc.send(JSON.stringify(toolResponse));
-
+            dcSendJSONSafe(toolResponse);
 
             // After sending the tool response, request the model to generate a response
             const responseCreateEvent = {
@@ -3464,7 +3500,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
                 modalities: ["text"]
               }
             };
-            dc.send(JSON.stringify(responseCreateEvent));
+            dcSendJSONSafe(responseCreateEvent);
           }
         }
       }
