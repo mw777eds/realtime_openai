@@ -2949,6 +2949,32 @@ document.addEventListener("DOMContentLoaded", () => {
     '#appGrid'
   );
 
+  // Persist layout changes on drag/resize stop (and generic 'change')
+  function __handleGridNodesChanged(evt, movedNodes) {
+    if (applyingFromFM) return;
+    const mode = getCurrentMode();
+    const nodes = Array.isArray(movedNodes) ? movedNodes : (evt && Array.isArray(evt.nodes) ? evt.nodes : []);
+    if (!nodes || nodes.length === 0) return;
+    let touched = false;
+    try {
+      nodes.forEach(n => {
+        const w = n?.el?.dataset?.widget;
+        if (!w) return;
+        updateSavedWidgetRect(w, { x: n.x, y: n.y, w: n.w, h: n.h }, mode);
+        touched = true;
+      });
+    } catch (_) {}
+    if (touched) {
+      // Save updated settings snapshot to the current session
+      saveSession({ settings: true });
+    }
+  }
+  try {
+    grid.on('dragstop', __handleGridNodesChanged);
+    grid.on('resizestop', __handleGridNodesChanged);
+    grid.on('change', __handleGridNodesChanged);
+  } catch (_) {}
+
   function addRealtimeWidget(pos) {
     if (realtimeWidgetEl) return;
     const mode = getCurrentMode();
