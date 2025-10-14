@@ -779,7 +779,7 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
 
   let processedDataUrl = originalDataUrl;
   try {
-    processedDataUrl = await downscaleDataUrlToLimit(originalDataUrl, 900000, 1280, 1280);
+    processedDataUrl = await downscaleDataUrlToLimit(originalDataUrl, 160000, 1024, 1024);
   } catch (e) {
     console.warn('Image downscale failed; will try sending original size', e);
   }
@@ -830,12 +830,59 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
     }
   };
 
-  // Fallback guard if still oversized after client-side resize (~900k base64 chars ≈ ~675kB)
+  // Fallback guard if still oversized after client-side resize (≤ ~160k base64 chars ≈ ~120KB)
   {
     const base64Len = (processedDataUrl.split(',')[1] || '').length;
-    if (base64Len > 900000) {
+    if (base64Len > 160000) {
       console.warn("Image still too large for RTCDataChannel after resize:", base64Len);
       showToast("Image too large for realtime channel even after resizing. Try a smaller image.", "tool-error", "left", null, 6);
+      return false;
+    }
+  }
+
+  // Ensure event JSON fits RTC maxMessageSize by further downscaling if necessary
+  {
+    const maxMsg = (pc && pc.sctp && typeof pc.sctp.maxMessageSize === 'number') ? pc.sctp.maxMessageSize : 240000;
+    let jsonLen = JSON.stringify(conversationEvent).length;
+    let attempts = 0;
+    let limitChars = 160000;
+    let maxW = 1024, maxH = 1024;
+
+    while (jsonLen > Math.max(16384, maxMsg - 4096) && attempts < 3) {
+      attempts += 1;
+      // tighten constraints
+      limitChars = Math.max(60000, Math.round(limitChars * 0.7));
+      maxW = Math.max(320, Math.round(maxW * 0.75));
+      maxH = Math.max(320, Math.round(maxH * 0.75));
+      try {
+        processedDataUrl = await downscaleDataUrlToLimit(processedDataUrl, limitChars, maxW, maxH);
+        const m2 = processedDataUrl.match(/^data:(.+?);base64,(.+)$/);
+        if (m2) {
+          normalized.mimeType = m2[1];
+          normalized.base64Data = m2[2];
+        }
+        // rebuild content with resized image
+        const newImageContent = { type: "input_image", image_url: processedDataUrl };
+        newImageContent.detail = 'low';
+        if (payload && payload.metadata && typeof payload.metadata === 'object') {
+          newImageContent.metadata = payload.metadata;
+        }
+        const contentNew = [];
+        if (promptText && promptText.trim() !== '') {
+          contentNew.push({ type: "input_text", text: promptText.trim() });
+        }
+        contentNew.push(newImageContent);
+        conversationEvent.item.content = contentNew;
+
+        jsonLen = JSON.stringify(conversationEvent).length;
+      } catch (_) {
+        break;
+      }
+    }
+
+    if (jsonLen > Math.max(16384, maxMsg - 4096)) {
+      console.warn("Event JSON still too large for RTCDataChannel after resizing:", jsonLen, ">", maxMsg);
+      showToast("Image too large to send after resizing. Try a smaller image.", "tool-error", "left", null, 6);
       return false;
     }
   }
