@@ -389,21 +389,17 @@ function applySettingsForMode(mode) {
   const btnToasts = document.getElementById('btn-toasts');
   const btnToolCalls = document.getElementById('btn-tool-calls');
   if (btnVoice) {
-    btnVoice.classList.toggle('active', !!settings.voice);
-    btnVoice.setAttribute('aria-pressed', String(!!settings.voice));
+    setPressed(btnVoice, !!settings.voice);
   }
   if (btnText) {
-    btnText.classList.toggle('active', !!settings.text);
-    btnText.setAttribute('aria-pressed', String(!!settings.text));
+    setPressed(btnText, !!settings.text);
   }
   if (btnToasts) {
-    btnToasts.classList.toggle('active', !!settings.toasts);
-    btnToasts.setAttribute('aria-pressed', String(!!settings.toasts));
+    setPressed(btnToasts, !!settings.toasts);
   }
   if (btnToolCalls) {
     const on = (typeof settings.showToolCalls === 'boolean') ? !!settings.showToolCalls : !!showToolPills;
-    btnToolCalls.classList.toggle('active', on);
-    btnToolCalls.setAttribute('aria-pressed', String(on));
+    setPressed(btnToolCalls, on);
     showToolPills = on;
     renderChatFromHistory();
   }
@@ -492,6 +488,19 @@ function parseJsonSafely(value, label) {
     console.error(`Failed to parse JSON for ${label}:`, error);
     return null;
   }
+}
+
+function setPressed(btn, on) {
+  if (!btn) return;
+  btn.classList.toggle('active', !!on);
+  btn.setAttribute('aria-pressed', String(!!on));
+}
+
+function stopDragFrom(el) {
+  if (!el) return;
+  ['mousedown', 'touchstart', 'pointerdown'].forEach(evt => {
+    el.addEventListener(evt, (e) => e.stopPropagation(), true);
+  });
 }
  
 /* FileMaker bridge: centralized script names and safe wrapper (no behavior change yet) */
@@ -2386,16 +2395,13 @@ function setUISettings(updateParamsJson) {
     const btnToasts = document.getElementById('btn-toasts');
 
     if (btnVoice && voice !== undefined) {
-      btnVoice.classList.toggle('active', !!voice);
-      btnVoice.setAttribute('aria-pressed', String(!!voice));
+      setPressed(btnVoice, !!voice);
     }
     if (btnText && text !== undefined) {
-      btnText.classList.toggle('active', !!text);
-      btnText.setAttribute('aria-pressed', String(!!text));
+      setPressed(btnText, !!text);
     }
     if (btnToasts && toasts !== undefined) {
-      btnToasts.classList.toggle('active', !!toasts);
-      btnToasts.setAttribute('aria-pressed', String(!!toasts));
+      setPressed(btnToasts, !!toasts);
     }
 
     if (convos !== undefined) {
@@ -2886,9 +2892,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Prevent dragging from inside the timeline; only header should drag
     const timelineEl = contentEl.querySelector('.toast-timeline');
     if (timelineEl) {
-      ['mousedown', 'touchstart', 'pointerdown'].forEach(evt => {
-        timelineEl.addEventListener(evt, (e) => e.stopPropagation(), true);
-      });
+      stopDragFrom(timelineEl);
     }
   }
 
@@ -2936,12 +2940,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnEl = contentEl.querySelector('.new-convo-btn');
     const searchEl = contentEl.querySelector('.conversation-search-input');
     const dockBtn = contentEl.querySelector('.dock-convos-widget-btn');
-    ['mousedown', 'touchstart', 'pointerdown'].forEach(evt => {
-      listEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
-      btnEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
-      searchEl?.addEventListener(evt, (e) => e.stopPropagation(), true);
-      dockBtn?.addEventListener(evt, (e) => e.stopPropagation(), true);
-    });
+    stopDragFrom(listEl);
+    stopDragFrom(btnEl);
+    stopDragFrom(searchEl);
+    stopDragFrom(dockBtn);
     // Inject icons
     if (dockBtn) {
       dockBtn.innerHTML = '';
@@ -3055,14 +3057,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
       // prevent grid drag from content
-      ['mousedown', 'touchstart', 'pointerdown'].forEach(evt => {
-        inputEl.addEventListener(evt, (e) => e.stopPropagation(), true);
-      });
+      stopDragFrom(inputEl);
     }
     if (messagesEl) {
-      ['mousedown', 'touchstart', 'pointerdown'].forEach(evt => {
-        messagesEl.addEventListener(evt, (e) => e.stopPropagation(), true);
-      });
+      stopDragFrom(messagesEl);
     }
     if (imageBtn && imageInput) {
       imageBtn.addEventListener('click', () => imageInput.click());
@@ -3122,31 +3120,30 @@ document.addEventListener("DOMContentLoaded", () => {
   // Toggle buttons
   btnVoice?.addEventListener('click', (e) => {
     e.stopPropagation();
-    btnVoice.classList.toggle('active');
-    btnVoice.setAttribute('aria-pressed', String(btnVoice.classList.contains('active')));
+    const on = !btnVoice.classList.contains('active');
+    setPressed(btnVoice, on);
     syncWidgets();
     savePreferences();
   });
   btnText?.addEventListener('click', (e) => {
     e.stopPropagation();
-    btnText.classList.toggle('active');
-    btnText.setAttribute('aria-pressed', String(btnText.classList.contains('active')));
+    const on = !btnText.classList.contains('active');
+    setPressed(btnText, on);
     syncWidgets();
     savePreferences();
   });
   btnToasts?.addEventListener('click', (e) => {
     e.stopPropagation();
-    btnToasts.classList.toggle('active');
-    btnToasts.setAttribute('aria-pressed', String(btnToasts.classList.contains('active')));
+    const on = !btnToasts.classList.contains('active');
+    setPressed(btnToasts, on);
     syncWidgets();
     savePreferences();
   });
   // Show Tool Calls toggle
   btnToolCalls?.addEventListener('click', (e) => {
     e.stopPropagation();
-    btnToolCalls.classList.toggle('active');
-    const on = btnToolCalls.classList.contains('active');
-    btnToolCalls.setAttribute('aria-pressed', String(on));
+    const on = !btnToolCalls.classList.contains('active');
+    setPressed(btnToolCalls, on);
     showToolPills = on;
     renderChatFromHistory();
     savePreferences();
