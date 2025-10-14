@@ -687,46 +687,27 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
   // Attempt client-side downscaling/compression to fit RTCDataChannel limits
   const originalDataUrl = payload?.dataUrl || `data:${normalized.mimeType || 'image/png'};base64,${normalized.base64Data}`;
   async function downscaleDataUrlToLimit(dataUrl, maxChars = 900000, maxW = 1280, maxH = 1280) {
-    try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      await new Promise((res, rej) => {
-        img.onload = () => res();
-        img.onerror = (e) => rej(e);
-      });
-      img.src = dataUrl;
-    } catch (_) {
-      // If preload failed due to ordering, reassign src then await
-    }
-    // Ensure src is set (in case onload binding happened before)
-    if (!/^data:/.test(originalDataUrl)) {
-      // no-op, but keep structure clear
-    }
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = dataUrl;
-    await new Promise((res, rej) => {
-      if (img.complete && img.naturalWidth) return res();
-      img.onload = () => res();
-      img.onerror = (e) => rej(e);
+    // Load image reliably, then draw into canvas and compress to stay under maxChars
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.crossOrigin = 'anonymous';
+      i.onload = () => resolve(i);
+      i.onerror = (e) => reject(e);
+      i.src = dataUrl;
     });
 
     let w = img.naturalWidth || img.width || 1;
     let h = img.naturalHeight || img.height || 1;
 
-    let targetW = w;
-    let targetH = h;
-
-    // First pass: clamp into bounding box
+    // Clamp to bounding box
     const scale1 = Math.min(1, maxW / w, maxH / h);
-    targetW = Math.max(1, Math.round(w * scale1));
-    targetH = Math.max(1, Math.round(h * scale1));
+    let targetW = Math.max(1, Math.round(w * scale1));
+    let targetH = Math.max(1, Math.round(h * scale1));
 
     const canvas = document.createElement('canvas');
     const ctx2 = canvas.getContext('2d');
     let quality = 0.82;
-    let outType = 'image/jpeg'; // favor JPEG for smaller payloads
+    const outType = 'image/jpeg'; // favor JPEG for smaller payloads
 
     function renderToDataUrl(width, height, q) {
       canvas.width = Math.max(1, Math.round(width));
@@ -745,12 +726,11 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
     let iter = 0;
 
     // Iterate reducing quality and occasionally size until under limit or max attempts
-    while (base64.length > maxChars && iter < 5) {
+    while (base64.length > maxChars && iter < 6) {
       iter += 1;
       if (quality > 0.55) {
         quality -= 0.12;
       } else {
-        // reduce dimensions by 80%
         targetW = Math.max(64, Math.round(targetW * 0.8));
         targetH = Math.max(64, Math.round(targetH * 0.8));
       }
@@ -823,8 +803,16 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
     }
   }
 
+  // Log concise info for debugging image sends
+  {
+    const __b64Len = (processedDataUrl.split(',')[1] || '').length;
+    const __estKB = Math.round(__b64Len * 0.75 / 1024);
+    console.log(`Sending image to Realtime (~${__estKB} KB, resized: ${wasResized ? 'yes' : 'no'}, type: ${normalized.mimeType || 'unknown'})`);
+  }
+
   try {
     dc.send(JSON.stringify(conversationEvent));
+    console.log("Image message sent to Realtime");
   } catch (err) {
     console.error("Failed to send image message over data channel:", err);
     showToast("Failed to send image to assistant. Try again.", "tool-error", "left", null, 6);
