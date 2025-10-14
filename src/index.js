@@ -708,7 +708,7 @@ function normalizeImagePayload(imagePayload) {
   };
 }
 
-function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
+async function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
   if (!dc || dc.readyState !== "open") {
     console.error("Data channel not ready for sending image context");
     return false;
@@ -724,6 +724,97 @@ function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
     console.error("Invalid image payload supplied to sendContainerImageToRealtime");
     return false;
   }
+
+  // Attempt client-side downscaling/compression to fit RTCDataChannel limits
+  const originalDataUrl = payload?.dataUrl || `data:${normalized.mimeType || 'image/png'};base64,${normalized.base64Data}`;
+  async function downscaleDataUrlToLimit(dataUrl, maxChars = 900000, maxW = 1280, maxH = 1280) {
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise((res, rej) => {
+        img.onload = () => res();
+        img.onerror = (e) => rej(e);
+      });
+      img.src = dataUrl;
+    } catch (_) {
+      // If preload failed due to ordering, reassign src then await
+    }
+    // Ensure src is set (in case onload binding happened before)
+    if (!/^data:/.test(originalDataUrl)) {
+      // no-op, but keep structure clear
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = dataUrl;
+    await new Promise((res, rej) => {
+      if (img.complete && img.naturalWidth) return res();
+      img.onload = () => res();
+      img.onerror = (e) => rej(e);
+    });
+
+    let w = img.naturalWidth || img.width || 1;
+    let h = img.naturalHeight || img.height || 1;
+
+    let targetW = w;
+    let targetH = h;
+
+    // First pass: clamp into bounding box
+    const scale1 = Math.min(1, maxW / w, maxH / h);
+    targetW = Math.max(1, Math.round(w * scale1));
+    targetH = Math.max(1, Math.round(h * scale1));
+
+    const canvas = document.createElement('canvas');
+    const ctx2 = canvas.getContext('2d');
+    let quality = 0.82;
+    let outType = 'image/jpeg'; // favor JPEG for smaller payloads
+
+    function renderToDataUrl(width, height, q) {
+      canvas.width = Math.max(1, Math.round(width));
+      canvas.height = Math.max(1, Math.round(height));
+      ctx2.clearRect(0, 0, canvas.width, canvas.height);
+      ctx2.drawImage(img, 0, 0, canvas.width, canvas.height);
+      try {
+        return canvas.toDataURL(outType, q);
+      } catch (_) {
+        return canvas.toDataURL(); // fallback
+      }
+    }
+
+    let out = renderToDataUrl(targetW, targetH, quality);
+    let base64 = (out.split(',')[1] || '');
+    let iter = 0;
+
+    // Iterate reducing quality and occasionally size until under limit or max attempts
+    while (base64.length > maxChars && iter < 5) {
+      iter += 1;
+      if (quality > 0.55) {
+        quality -= 0.12;
+      } else {
+        // reduce dimensions by 80%
+        targetW = Math.max(64, Math.round(targetW * 0.8));
+        targetH = Math.max(64, Math.round(targetH * 0.8));
+      }
+      out = renderToDataUrl(targetW, targetH, quality);
+      base64 = (out.split(',')[1] || '');
+    }
+    return out;
+  }
+
+  let processedDataUrl = originalDataUrl;
+  try {
+    processedDataUrl = await downscaleDataUrlToLimit(originalDataUrl, 900000, 1280, 1280);
+  } catch (e) {
+    console.warn('Image downscale failed; will try sending original size', e);
+  }
+  const wasResized = processedDataUrl !== originalDataUrl;
+  try {
+    const m = processedDataUrl.match(/^data:(.+?);base64,(.+)$/);
+    if (m) {
+      normalized.mimeType = m[1];
+      normalized.base64Data = m[2];
+    }
+  } catch (_) {}
 
   const content = [];
 
@@ -746,6 +837,10 @@ function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
   if (normalized.mimeType) {
     imageContent.mime_type = normalized.mimeType;
   }
+  // Hint lower detail if we resized to save tokens
+  if (wasResized) {
+    imageContent.detail = 'low';
+  }
 
   if (payload && payload.metadata && typeof payload.metadata === 'object') {
     imageContent.metadata = payload.metadata;
@@ -762,10 +857,10 @@ function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
     }
   };
 
-  // Prevent oversized image payloads from breaking the data channel (~900k base64 chars ≈ ~675kB)
+  // Fallback guard if still oversized after client-side resize (~900k base64 chars ≈ ~675kB)
   if (normalized.base64Data && normalized.base64Data.length > 900000) {
-    console.warn("Image base64 too large for RTCDataChannel:", normalized.base64Data.length);
-    showToast("Image is too large for realtime channel. Try a smaller image.", "tool-error", "left", null, 6);
+    console.warn("Image still too large for RTCDataChannel after resize:", normalized.base64Data.length);
+    showToast("Image too large for realtime channel even after resizing. Try a smaller image.", "tool-error", "left", null, 6);
     return false;
   }
 
@@ -2129,7 +2224,7 @@ async function handleChatImageUpload(files, promptFromInput = '') {
     appendChatMessage('user', promptFromInput ? `${promptFromInput} [image shared]` : '[image shared]', { source: 'typed' });
 
     // Send to Realtime
-    sendContainerImageToRealtime({ dataUrl, mimeType, prompt: promptFromInput }, true);
+    await sendContainerImageToRealtime({ dataUrl, mimeType, prompt: promptFromInput }, true);
   } catch (e) {
     console.error('Failed to read image for upload', e);
     showToast('Failed to attach image.', 'tool-error', 'left', null, 5);
