@@ -762,7 +762,20 @@ function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
     }
   };
 
-  dc.send(JSON.stringify(conversationEvent));
+  // Prevent oversized image payloads from breaking the data channel (~900k base64 chars ≈ ~675kB)
+  if (normalized.base64Data && normalized.base64Data.length > 900000) {
+    console.warn("Image base64 too large for RTCDataChannel:", normalized.base64Data.length);
+    showToast("Image is too large for realtime channel. Try a smaller image.", "tool-error", "left", null, 6);
+    return false;
+  }
+
+  try {
+    dc.send(JSON.stringify(conversationEvent));
+  } catch (err) {
+    console.error("Failed to send image message over data channel:", err);
+    showToast("Failed to send image to assistant. Try again.", "tool-error", "left", null, 6);
+    return false;
+  }
 
   enableToolsIfDisabled();
 
@@ -779,7 +792,11 @@ function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
         modalities
       }
     };
-    dc.send(JSON.stringify(responseCreateEvent));
+    try {
+      dc.send(JSON.stringify(responseCreateEvent));
+    } catch (err) {
+      console.warn("Failed to send response.create after image:", err);
+    }
   }
 
 
@@ -2021,22 +2038,31 @@ function sendTextToRealtime(text, requestResponse = true, modalitiesOverride = n
         content: [{ type: 'input_text', text: trimmed }]
       }
     };
-    dc.send(JSON.stringify(conversationEvent));
-    enableToolsIfDisabled();
+    try {
+      dc.send(JSON.stringify(conversationEvent));
+      enableToolsIfDisabled();
 
-    if (requestResponse) {
-      const normalizedModalitiesOverride = normalizeModalitiesList(modalitiesOverride) || modalitiesOverride;
-      const modalities = getResponseModalities(normalizedModalitiesOverride);
-      const responseCreateEvent = {
-        type: 'response.create',
-        response: { modalities }
-      };
-      dc.send(JSON.stringify(responseCreateEvent));
+      if (requestResponse) {
+        const normalizedModalitiesOverride = normalizeModalitiesList(modalitiesOverride) || modalitiesOverride;
+        const modalities = getResponseModalities(normalizedModalitiesOverride);
+        const responseCreateEvent = {
+          type: 'response.create',
+          response: { modalities }
+        };
+        try {
+          dc.send(JSON.stringify(responseCreateEvent));
+        } catch (e2) {
+          console.warn("Failed to send response.create over data channel", e2);
+        }
+      }
+
+      // mirror in UI
+      appendChatMessage('user', trimmed, { source: 'typed' });
+      return true;
+    } catch (e) {
+      console.warn("Data channel send failed; falling back to FileMaker", e);
+      // fall through to FM fallback
     }
-
-    // mirror in UI
-    appendChatMessage('user', trimmed, { source: 'typed' });
-    return true;
   }
 
   // Fallback: ask FileMaker to route text via its agent selection
@@ -3224,6 +3250,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     dc = pc.createDataChannel("oai-events");
     // Reset state if channel closes later (allows re-init on re-add)
     dc.addEventListener("close", () => { __rtState = 'idle'; try { delete window.__historyPreloadedFor; } catch (_) {} });
+    dc.addEventListener("error", (e) => { console.warn("Data channel error", e); showToast("Data channel error; try toggling Voice off/on.", "tool-error", "left", null, 6); });
     dc.addEventListener("open", () => {
       // Mark Realtime as ready after channel opens
       __rtState = 'ready';
