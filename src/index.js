@@ -1205,6 +1205,8 @@ function cleanupWebRTC() {
   window.activeResponseId = null;
   currentSessionConfig = null;
   defaultResponseModalities = [...DEFAULT_MODALITIES];
+  // Reset Realtime init state so re-adding Voice can request again
+  __rtState = 'idle';
 
   // Stop audio level monitoring interval
   if (audioLevelInterval) {
@@ -3241,7 +3243,11 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     audioSender = pc.addTrack(audioTrack);
 
     dc = pc.createDataChannel("oai-events");
+    // Reset state if channel closes later (allows re-init on re-add)
+    dc.addEventListener("close", () => { __rtState = 'idle'; });
     dc.addEventListener("open", () => {
+      // Mark Realtime as ready after channel opens
+      __rtState = 'ready';
       const sessionUpdateEvent = {
         type: "session.update",
         session: resolvedSessionConfig
