@@ -580,6 +580,24 @@ function dcSendJSONSafe(obj, opts = {}) {
   }
 }
 
+/**
+ * Normalize conversation.item.create event content types for Realtime.
+ * Maps any 'output_text' parts to 'text' to satisfy the Realtime schema.
+ */
+function normalizeConversationCreateEvent(ev) {
+  try {
+    if (ev && ev.type === 'conversation.item.create' && ev.item && ev.item.type === 'message' && Array.isArray(ev.item.content)) {
+      ev.item.content = ev.item.content.map((part) => {
+        if (part && part.type === 'output_text') {
+          return { ...part, type: 'text' };
+        }
+        return part;
+      });
+    }
+  } catch (_) {}
+  return ev;
+}
+
 function prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfig) {
   let tools = [];
 
@@ -1863,7 +1881,7 @@ async function preloadHistoryIntoRealtime(items) {
   if (window.__historyPreloadedFor === sid) return true;
   const evs = buildHistoryEvents(items);
   for (const ev of evs) {
-    dc.send(JSON.stringify(ev));
+    dcSendJSONSafe(normalizeConversationCreateEvent(ev));
     await new Promise(r => setTimeout(r, 5));
   }
   window.__historyPreloadedFor = sid;
@@ -2130,7 +2148,7 @@ function sendTextToRealtime(text, requestResponse = true, modalitiesOverride = n
       }
     };
     try {
-      dcSendJSONSafe(conversationEvent);
+      dcSendJSONSafe(normalizeConversationCreateEvent(conversationEvent));
       enableToolsIfDisabled();
 
       if (requestResponse) {
