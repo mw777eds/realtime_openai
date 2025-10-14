@@ -2555,7 +2555,8 @@ function loadLayoutForCurrentMode() {
         key
       };
       window.FileMaker.PerformScript('Grid_LoadLayout', JSON.stringify(payload));
-      return true;
+      // FM not wired yet: return false to allow default fallback (syncWidgets) to run
+      return false;
     }
 
     // Fallback to cached/localStorage if FileMaker not available
