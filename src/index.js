@@ -543,6 +543,16 @@ function deepMerge(target = {}, source = {}) {
   return output;
 }
 
+function safeStr(v, max = 800) {
+  try {
+    const s = typeof v === 'string' ? v : JSON.stringify(v);
+    return s.length > max ? s.slice(0, max) + '…' : s;
+  } catch (_) {
+    try { return String(v); } catch (__){ return ''; }
+  }
+}
+
+
 /**
  * Safely send a JSON event over the RTCDataChannel with basic backpressure handling.
  * Returns true if queued/sent, false if the channel is not open or serialization fails.
@@ -1813,15 +1823,6 @@ function copyMinifiedHistory() {
  */
 function buildHistoryEvents(items) {
   const evs = [];
-
-  const safeStr = (v, max = 800) => {
-    try {
-      const s = typeof v === 'string' ? v : JSON.stringify(v);
-      return s.length > max ? s.slice(0, max) + '…' : s;
-    } catch (_) {
-      try { return String(v); } catch (__){ return ''; }
-    }
-  };
 
   for (const m of items || []) {
     if (!m) continue;
