@@ -550,7 +550,15 @@ function deepMerge(target = {}, source = {}) {
 function dcSendJSONSafe(obj, opts = {}) {
   if (!dc || dc.readyState !== 'open') return false;
   try {
-    const json = JSON.stringify(obj);
+    // Normalize any conversation.item.create content types and fix lingering 'output_text'
+    const normalized = (typeof normalizeConversationCreateEvent === 'function')
+      ? normalizeConversationCreateEvent(obj)
+      : obj;
+    let json = JSON.stringify(normalized);
+    if (json.includes('"type":"output_text"')) {
+      json = json.replace(/"type"\s*:\s*"output_text"/g, '"type":"text"');
+    }
+
     // Ensure a sane low threshold and wait if the buffer is high (especially after large image sends)
     try { dc.bufferedAmountLowThreshold = 65536; } catch (_) {}
     const highNow = dc.bufferedAmount > 131072; // 128KB
@@ -3380,7 +3388,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         type: "session.update",
         session: resolvedSessionConfig
       };
-      dc.send(JSON.stringify(sessionUpdateEvent));
+      dcSendJSONSafe(sessionUpdateEvent);
 
       // Preload canonical history without triggering a response
       if (Array.isArray(sessionHistory) && sessionHistory.length > 0) {
