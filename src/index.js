@@ -2216,18 +2216,28 @@ function readFileAsDataUrl(file) {
 async function handleChatImageUpload(files, promptFromInput = '') {
   if (!files || files.length === 0) return;
   try {
-    const file = files[0];
-    const dataUrl = await readFileAsDataUrl(file);
-    const mimeType = file.type || undefined;
+    const list = Array.from(files);
+    // Mirror a single summary message in UI
+    const summary = list.length === 1
+      ? (promptFromInput ? `${promptFromInput} [image shared]` : '[image shared]')
+      : (promptFromInput ? `${promptFromInput} [${list.length} images shared]` : `[${list.length} images shared]`);
+    appendChatMessage('user', summary, { source: 'typed' });
 
-    // Mirror in UI
-    appendChatMessage('user', promptFromInput ? `${promptFromInput} [image shared]` : '[image shared]', { source: 'typed' });
-
-    // Send to Realtime
-    await sendContainerImageToRealtime({ dataUrl, mimeType, prompt: promptFromInput }, true);
+    // Send images sequentially; attach prompt only on first; request response only after last
+    for (let i = 0; i < list.length; i++) {
+      const file = list[i];
+      const dataUrl = await readFileAsDataUrl(file);
+      const mimeType = file.type || undefined;
+      const isLast = (i === list.length - 1);
+      await sendContainerImageToRealtime({
+        dataUrl,
+        mimeType,
+        prompt: i === 0 ? promptFromInput : '' // include prompt only for the first image
+      }, isLast);
+    }
   } catch (e) {
-    console.error('Failed to read image for upload', e);
-    showToast('Failed to attach image.', 'tool-error', 'left', null, 5);
+    console.error('Failed to read image(s) for upload', e);
+    showToast('Failed to attach image(s).', 'tool-error', 'left', null, 5);
   }
 }
 
@@ -3120,7 +3130,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="gs-handle">Text Chat</div>
           <div class="chat-messages" id="chat-messages"></div>
           <div class="chat-input">
-            <input type="file" id="chat-image-input" accept="image/*" style="display:none" />
+            <input type="file" id="chat-image-input" accept="image/*" multiple style="display:none" />
             <button class="chat-btn" id="chat-image-btn" title="Attach image">📎</button>
             <textarea id="chat-input" rows="1" placeholder="Type a message..."></textarea>
             <button class="chat-btn primary" id="chat-send-btn">Send</button>
