@@ -1207,6 +1207,12 @@ function cleanupWebRTC() {
   currentSessionConfig = null;
   defaultResponseModalities = [...DEFAULT_MODALITIES];
 
+  // Stop audio level monitoring interval
+  if (audioLevelInterval) {
+    try { clearInterval(audioLevelInterval); } catch (_) {}
+    audioLevelInterval = null;
+  }
+
   if (dc) {
     dc.close();
     dc = null;
@@ -2264,6 +2270,7 @@ let audioEl = null;
 let audioContext = null;
 let audioAnalyser = null;
 let audioDataArray = null;
+let audioLevelInterval = null;
 
 /* 
  * Function to initialize the audio analyzer
@@ -2844,6 +2851,11 @@ document.addEventListener("DOMContentLoaded", () => {
       try { waveformResizeObserver.disconnect(); } catch (_) { }
       waveformResizeObserver = null;
     }
+    // Clear audio level monitoring interval
+    if (audioLevelInterval) {
+      try { clearInterval(audioLevelInterval); } catch (_) {}
+      audioLevelInterval = null;
+    }
     ensureModeSettings(mode);
     persistedSettings[mode].voice = false;
     persistModeSettings(mode);
@@ -3233,7 +3245,8 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
       source.connect(audioAnalyser);
 
       // Start monitoring audio levels
-      setInterval(checkAudioActivity, 100);
+      if (audioLevelInterval) { clearInterval(audioLevelInterval); }
+      audioLevelInterval = setInterval(checkAudioActivity, 100);
     };
 
     const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
