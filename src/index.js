@@ -493,6 +493,38 @@ function parseJsonSafely(value, label) {
     return null;
   }
 }
+ 
+/* FileMaker bridge: centralized script names and safe wrapper (no behavior change yet) */
+const FM_SCRIPTS = Object.freeze({
+  SaveState: 'Session_SaveState',
+  GetState: 'Session_GetState',
+  GridSave: 'Grid_SaveLayout',
+  GridLoad: 'Grid_LoadLayout',
+  GridRestore: 'Grid_RestoreDefaultLayout',
+  RealtimeInit: 'Realtime_Init',
+  ChatText: 'Chat_TextRequest',
+  CallTools: 'CallTools',
+  HandleAPIError: 'HandleAPIError',
+  LogMessage: 'LogMessage',
+  ShowJSON: 'ShowJSON'
+});
+
+/**
+ * Safely call a FileMaker script.
+ * Accepts an object or string payload; objects are JSON-stringified.
+ * Returns true on success, false on failure or when FileMaker is not available.
+ */
+function callFM(name, payload) {
+  if (!window.FileMaker?.PerformScript) return false;
+  try {
+    const arg = typeof payload === 'string' ? payload : (payload != null ? JSON.stringify(payload) : '');
+    window.FileMaker.PerformScript(name, arg);
+    return true;
+  } catch (e) {
+    console.warn('FileMaker.PerformScript failed', name, e);
+    return false;
+  }
+}
 
 function deepMerge(target = {}, source = {}) {
   const output = Array.isArray(target) ? [...target] : { ...target };
