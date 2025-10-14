@@ -75,6 +75,7 @@ Use this checklist to perform safe, incremental refactors. Keep behavior identic
 - Keep top-level window API exports available immediately (do NOT move inside DOMContentLoaded).
 - Do not move DOMContentLoaded above function definitions.
 - Reset __rtState to 'idle' during cleanup and when the data channel closes; set to 'ready' on channel open so re-adding the Voice widget can reinitialize Realtime.
+- Clear window.__historyPreloadedFor on cleanup and on data channel close so canonical history is preloaded on every reconnect.
 - ensureRealtimeReady must be defined before addRealtimeWidget uses it (hoisting via declarations is okay).
 - applyRealtimeInit and initializeWebRTC must remain callable by FileMaker as soon as the viewer evaluates the script.
 - Clear audio level interval (setInterval in ontrack) during cleanup; otherwise memory/timer leaks.
