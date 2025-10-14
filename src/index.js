@@ -845,6 +845,8 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
     const __b64Len = (processedDataUrl.split(',')[1] || '').length;
     const __estKB = Math.round(__b64Len * 0.75 / 1024);
     console.log(`Sending image to Realtime (~${__estKB} KB, resized: ${wasResized ? 'yes' : 'no'}, type: ${normalized.mimeType || 'unknown'})`);
+    console.log('RTC maxMessageSize:', pc?.sctp?.maxMessageSize);
+    console.log('Event JSON size (bytes):', JSON.stringify(conversationEvent).length);
   }
 
   const okImage = dcSendJSONSafe(conversationEvent, { highVolume: true });
