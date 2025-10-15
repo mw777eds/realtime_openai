@@ -2004,18 +2004,25 @@ async function preloadHistoryIntoRealtime(items) {
  * FileMaker should call back: window.applyRealtimeInit({ success, result:{ ... } })
  */
 let __rtState = 'idle';
+let __rtInitInFlight = false;
 function ensureRealtimeReady() {
-  if (__rtState === 'requesting' || __rtState === 'connecting' || __rtState === 'ready') return;
+  if (__rtState === 'requesting' || __rtState === 'connecting' || __rtState === 'ready' || __rtInitInFlight) return;
 
   if (window.FileMaker?.PerformScript) {
     __rtState = 'requesting';
+    __rtInitInFlight = true;
     try {
-      callFM(FM_SCRIPTS.RealtimeInit, {
+      const ok = callFM(FM_SCRIPTS.RealtimeInit, {
         sessionId: window.__sessionId || ""
       });
+      if (!ok) {
+        __rtState = 'idle';
+        __rtInitInFlight = false;
+      }
     } catch (e) {
       console.warn('Failed to call Realtime_Init', e);
       __rtState = 'idle';
+      __rtInitInFlight = false;
     }
   } else {
     // Suppress early logs until after bootstrap has run; then log once if FM is unavailable
@@ -2028,6 +2035,7 @@ function ensureRealtimeReady() {
       window.__rtInitNoticeShown = true;
     }
     __rtState = 'idle';
+    __rtInitInFlight = false;
   }
 }
 
@@ -2036,6 +2044,8 @@ function ensureRealtimeReady() {
  */
 function applyRealtimeInit(payload) {
   try {
+    // Receiving the callback means init request is no longer in-flight
+    __rtInitInFlight = false;
     const raw = typeof payload === 'string' ? JSON.parse(payload) : (payload || {});
     const data = (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'success'))
       ? (raw.success ? (raw.result || {}) : null)
