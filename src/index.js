@@ -3065,7 +3065,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Persist layout changes on drag/resize stop (and generic 'change')
   function __handleGridNodesChanged(evt, movedNodes) {
-    if (applyingFromFM) return;
+    if (applyingFromFM || !prefsReady) return;
     const mode = getCurrentMode();
     const nodes = Array.isArray(movedNodes) ? movedNodes : (evt && Array.isArray(evt.nodes) ? evt.nodes : []);
     if (!nodes || nodes.length === 0) return;
@@ -3479,6 +3479,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!loadLayoutForCurrentMode()) {
       syncWidgets();
     }
+  }
+  if (realtimeWidgetEl && __rtState === 'idle') {
+    ensureRealtimeReady();
   }
   prefsReady = true;
 });
