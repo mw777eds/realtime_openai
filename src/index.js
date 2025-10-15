@@ -101,6 +101,14 @@ function switchSession(newSessionId) {
   return true;
 }
 
+function startNewSession(title = null) {
+  try { saveSession({ history: true, settings: true }); } catch (_) {}
+  const payload = {};
+  if (title && typeof title === 'string') payload.title = title;
+  if (window.__sessionId) payload.previousSessionId = window.__sessionId;
+  callFM(FM_SCRIPTS.NewSession, payload);
+}
+
 /* FM callback to apply a session bundle returned by Session_GetState */
 function applySessionState(payload) {
   try {
@@ -505,6 +513,7 @@ window.saveSession = saveSession;
 window.saveSessionState = saveSessionState;
 window.getSessionState = getSessionState;
 window.switchSession = switchSession;
+window.startNewSession = startNewSession;
 window.applySessionState = applySessionState;
 window.requestSessionState = requestSessionState;
 window.setSessionList = setSessionList;
@@ -549,6 +558,7 @@ function stopDragFrom(el) {
 const FM_SCRIPTS = Object.freeze({
   SaveState: 'Session_SaveState',
   GetState: 'Session_GetState',
+  NewSession: 'Session_New',
   GridSave: 'Grid_SaveLayout',
   GridLoad: 'Grid_LoadLayout',
   GridRestore: 'Grid_RestoreDefaultLayout',
@@ -2984,6 +2994,10 @@ document.addEventListener("DOMContentLoaded", () => {
     sidebarNewBtn.innerHTML = '';
     const svg = createNewConvoIcon(18);
     if (svg) sidebarNewBtn.appendChild(svg);
+    sidebarNewBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      startNewSession();
+    });
   }
 
   // Hamburger menu elements
@@ -3208,6 +3222,10 @@ document.addEventListener("DOMContentLoaded", () => {
       btnEl.innerHTML = '';
       const svg = createNewConvoIcon(18);
       if (svg) btnEl.appendChild(svg);
+      btnEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        startNewSession();
+      });
     }
     // wire search
     attachConversationSearch(searchEl, listEl);
