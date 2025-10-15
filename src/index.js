@@ -2121,7 +2121,7 @@ function bootstrapApp(payload) {
         // Canonical tool_call
         if (m && m.type === 'tool_call') {
           incoming.push({
-            id: createId('tc'),
+            id: (typeof m.id === 'string' && m.id.trim()) ? m.id : createId('tc'),
             ts,
             role: 'tool',
             type: 'tool_call',
@@ -2141,7 +2141,7 @@ function bootstrapApp(payload) {
         // Canonical tool_result
         if (m && m.type === 'tool_result') {
           incoming.push({
-            id: createId('tr'),
+            id: (typeof m.id === 'string' && m.id.trim()) ? m.id : createId('tr'),
             ts,
             role: 'tool',
             type: 'tool_result',
@@ -2161,7 +2161,7 @@ function bootstrapApp(payload) {
           : (typeof m?.text === 'string' ? m.text : '');
 
         incoming.push({
-          id: createId('m'),
+          id: (typeof m.id === 'string' && m.id.trim()) ? m.id : createId('m'),
           ts,
           role,
           type: 'message',
