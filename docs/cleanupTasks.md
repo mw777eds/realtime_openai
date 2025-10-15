@@ -17,11 +17,11 @@ Use this checklist to perform safe, incremental refactors. Keep behavior identic
 ## Detailed To-Do by Area
 
 ### Utilities
-- [ ] Add helper: setPressed(btn, on) to toggle .active + aria-pressed.
-- [ ] Add helper: stopDragFrom(el) to stopPropagation for pointer events.
-- [ ] Extract safeStr(v, max) used in buildHistoryEvents.
-- [ ] Keep parseJsonSafely, deepMerge, normalizeModalitiesList, normalizeImagePayload, createId, trimHistory grouped together.
-- [ ] Keep readFileAsDataUrl here.
+- [x] Add helper: setPressed(btn, on) to toggle .active + aria-pressed.
+- [x] Add helper: stopDragFrom(el) to stopPropagation for pointer events.
+- [x] Extract safeStr(v, max) used in buildHistoryEvents.
+- [x] Keep parseJsonSafely, deepMerge, normalizeModalitiesList, normalizeImagePayload, createId, trimHistory grouped together.
+- [x] Keep readFileAsDataUrl here.
 
 ### FileMaker Bridge
 - [ ] Add callFM(name, payload) wrapper (stringify payload if object; try/catch).

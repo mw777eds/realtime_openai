@@ -629,6 +629,7 @@ function safeStr(v, max = 800) {
 }
 
 
+
 /**
  * Safely send a JSON event over the RTCDataChannel with basic backpressure handling.
  * Returns true if queued/sent, false if the channel is not open or serialization fails.
@@ -2932,6 +2933,7 @@ function savePreferences() {
   // Save only settings into the unified session JSON
   saveSession({ settings: true });
 }
+
 
 
 
