@@ -1259,6 +1259,8 @@ function enableToolsIfDisabled() {
 async function startAudioTransmission() {
   // Ensure microphone is sending
   try {
+    // If muted, do nothing (preserve user intent)
+    if (isPaused) return true;
     if (!pc) {
       console.error("Peer connection not available");
     }
@@ -3518,6 +3520,8 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
     const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
     audioTrack = ms.getTracks()[0];
+    // If currently muted, keep the mic track disabled on init
+    try { audioTrack.enabled = !isPaused; } catch (_) {}
     audioSender = pc.addTrack(audioTrack);
 
     dc = pc.createDataChannel("oai-events");
@@ -3539,7 +3543,18 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         preloadHistoryIntoRealtime(sessionHistory).catch(() => {});
       }
 
-      startAudioTransmission();
+      // Respect current mute state across session changes
+      if (!isPaused) {
+        startAudioTransmission();
+      } else {
+        // Keep output muted if user had muted
+        try {
+          if (audioEl && audioEl.srcObject) {
+            audioEl.srcObject.getAudioTracks().forEach(t => t.enabled = false);
+          }
+        } catch (_) {}
+        showIcon('sleep');
+      }
     });
 
     dc.addEventListener("message", async (e) => {
