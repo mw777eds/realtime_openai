@@ -47,6 +47,24 @@
         </section>
       </div>
     </div>
+    <script>
+      (function(){
+        try {
+          window.__pendingBootstrapPayload = window.__pendingBootstrapPayload || null;
+          window.__pendingRealtimeInitPayload = window.__pendingRealtimeInitPayload || null;
+          if (typeof window.bootstrapApp !== 'function') {
+            window.bootstrapApp = function(payload){ try { window.__pendingBootstrapPayload = payload; } catch (_) {} };
+          }
+          if (typeof window.applySessionState !== 'function') {
+            window.applySessionState = function(payload){ try { window.__pendingBootstrapPayload = payload; } catch (_) {} };
+          }
+          if (typeof window.applyRealtimeInit !== 'function') {
+            window.applyRealtimeInit = function(payload){ try { window.__pendingRealtimeInitPayload = payload; } catch (_) {} };
+          }
+          window.__bootstrapStubsReady = true;
+        } catch (_) {}
+      })();
+    </script>
     <script type="module">
       import "./src/index.js";
     </script>
