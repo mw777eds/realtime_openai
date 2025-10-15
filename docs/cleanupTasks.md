@@ -3,7 +3,7 @@
 Use this checklist to perform safe, incremental refactors. Keep behavior identical after each step and test before proceeding.
 
 ## Incremental Steps (execute in order)
-- [ ] Step 1: Introduce FileMaker wrapper and centralized script-name constants (no behavior change).
+- [x] Step 1: Introduce FileMaker wrapper and centralized script-name constants (no behavior change).
 - [x] Step 2: Add audio level interval management (create audioLevelInterval; clear it in cleanupWebRTC and removeRealtimeWidget).
 - [x] Step 3: Extract tiny DOM helpers: setPressed(btn, on) and stopDragFrom(el) to reduce repetition.
 - [x] Step 4: Consolidate widget add/remove dispatch into small dispatcher maps (voice/toasts/text/convo) to replace repeated switch statements.
@@ -11,8 +11,8 @@ Use this checklist to perform safe, incremental refactors. Keep behavior identic
 - [ ] Step 6: Reorder functions by module sections (utilities → FM bridge → sessions → history → text chat → toasts → grid/layout → realtime → bootstrap) without changing any logic.
 - [x] Step 6a: Move initializeWebRTC above DOMContentLoaded so DOMContentLoaded is last.
 - [x] Step 7: Extract safeStr and readFileAsDataUrl into Utilities section (pure helpers only).
-- [ ] Step 8: Normalize save/build settings paths to use a single function for current settings bundle where possible (no behavior change).
-- [ ] Step 9: Final tidy: replace repeated PerformScript calls with callFM where appropriate.
+- [x] Step 8: Normalize save/build settings paths to use a single function for current settings bundle where possible (no behavior change).
+- [x] Step 9: Final tidy: replace repeated PerformScript calls with callFM where appropriate.
 
 ## Detailed To-Do by Area
 

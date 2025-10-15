@@ -74,14 +74,7 @@ function renderSessionList() {
 
 /* Request full session bundle from FileMaker */
 function requestSessionState(sessionId) {
-  if (!window.FileMaker?.PerformScript) return false;
-  try {
-    window.FileMaker.PerformScript('Session_GetState', JSON.stringify({ sessionId }));
-    return true;
-  } catch (e) {
-    console.warn('Session_GetState failed', e);
-    return false;
-  }
+  return callFM(FM_SCRIPTS.GetState, { sessionId });
 }
 
 /* Switch current session: flush current, then request next */
@@ -198,7 +191,7 @@ function renderToolPill(label, data, id = null) {
   pill.style.position = 'relative';
   pill.addEventListener('click', () => {
     if (window.FileMaker) {
-      try { window.FileMaker.PerformScript('ShowJSON', JSON.stringify(data)); return; } catch (_) {}
+      try { if (callFM(FM_SCRIPTS.ShowJSON, data)) return; } catch (_) {}
     }
     showJsonModal(data);
   });
@@ -1730,7 +1723,6 @@ function getSessionState() {
  * Use options to minimize payload: { settings: true|false, history: true|false }.
  */
 function saveSession(opts = {}) {
-  if (!window.FileMaker?.PerformScript) return false;
   const options = (opts && typeof opts === 'object') ? opts : {};
   const payload = { sessionId: window.__sessionId || "" };
   if (options.settings) {
@@ -1739,13 +1731,7 @@ function saveSession(opts = {}) {
   if (options.history) {
     payload.history = Array.isArray(sessionHistory) ? sessionHistory.slice() : [];
   }
-  try {
-    window.FileMaker.PerformScript('Session_SaveState', JSON.stringify(payload));
-    return true;
-  } catch (e) {
-    console.warn('Session_SaveState failed', e);
-    return false;
-  }
+  return callFM(FM_SCRIPTS.SaveState, payload);
 }
 
 /**
@@ -2022,9 +2008,9 @@ function ensureRealtimeReady() {
   if (window.FileMaker?.PerformScript) {
     __rtState = 'requesting';
     try {
-      window.FileMaker.PerformScript('Realtime_Init', JSON.stringify({
+      callFM(FM_SCRIPTS.RealtimeInit, {
         sessionId: window.__sessionId || ""
-      }));
+      });
     } catch (e) {
       console.warn('Failed to call Realtime_Init', e);
       __rtState = 'idle';
@@ -2311,15 +2297,15 @@ function sendTextToRealtime(text, requestResponse = true, modalitiesOverride = n
   // Fallback: ask FileMaker to route text via its agent selection
   if (window.FileMaker) {
     try { saveSession({ history: true }); } catch (_) {}
-    try {
-      window.FileMaker.PerformScript('Chat_TextRequest', JSON.stringify({
-        sessionId: window.__sessionId || "",
-        message: trimmed
-      }));
+    const ok = callFM(FM_SCRIPTS.ChatText, {
+      sessionId: window.__sessionId || "",
+      prompt: trimmed
+    });
+    if (ok) {
       appendChatMessage('user', trimmed, { source: 'typed' });
       return true;
-    } catch (e) {
-      console.warn('Chat_TextRequest script not available', e);
+    } else {
+      console.warn('Chat_TextRequest script not available');
     }
   }
 
@@ -2430,12 +2416,8 @@ function showToast(message, type, side, jsonData = null, durationSeconds = 5) {
       e.preventDefault();
       e.stopPropagation();
 
-      if (window.FileMaker) {
-        try {
-          window.FileMaker.PerformScript("ShowJSON", jsonString);
-        } catch (error) {
-          console.error('Error calling FileMaker script:', error);
-        }
+      if (!callFM(FM_SCRIPTS.ShowJSON, jsonString)) {
+        console.error('Error calling FileMaker script: ShowJSON');
       }
     });
   } else {
@@ -2700,24 +2682,8 @@ function setUISettings(updateParamsJson) {
 function saveCurrentLayout() {
   if (!grid) return false;
   try {
-    const nodes = (grid.engine?.nodes || []).map(n => ({
-      widget: n.el?.dataset?.widget || null,
-      x: n.x, y: n.y, w: n.w, h: n.h
-    }));
     const key = isConvosDocked ? 'docked' : 'undocked';
-
-    // Snapshot current toggles by widget presence
-    const settingsSnapshot = {
-      version: 1,
-      columns: grid.engine?.column || grid.opts?.column || 12,
-      // Note: cellHeight not currently dynamic; include if you expose it
-      float: !!floatEnabled,
-      voice: !!realtimeWidgetEl,
-      text: !!textWidgetEl,
-      toasts: !!toastsWidgetEl,
-      showToolCalls: !!showToolPills,
-      layout: nodes
-    };
+    const settingsSnapshot = computeCurrentSettingsSnapshot();
 
     // Cache in-memory and localStorage for this mode
     persistedSettings[key] = settingsSnapshot;
@@ -2734,9 +2700,7 @@ function saveCurrentLayout() {
       sessionId: window.__sessionId || null,
       settings: settingsSnapshot
     };
-    if (window.FileMaker) {
-      window.FileMaker.PerformScript('Grid_SaveLayout', JSON.stringify(envelope));
-    } else {
+    if (!callFM(FM_SCRIPTS.GridSave, envelope)) {
       console.log('Layout envelope:', envelope);
     }
 
@@ -2755,7 +2719,7 @@ function restoreDefaultLayout() {
     const key = isConvosDocked ? 'docked' : 'undocked';
     if (window.FileMaker?.PerformScript) {
       const payload = { sessionId: window.__sessionId || "", key };
-      window.FileMaker.PerformScript('Grid_RestoreDefaultLayout', JSON.stringify(payload));
+      callFM(FM_SCRIPTS.GridRestore, payload);
       return true;
     }
     // Fallback: local default behavior
@@ -2788,7 +2752,7 @@ function loadLayoutForCurrentMode() {
         sessionId: window.__sessionId || "",
         key
       };
-      window.FileMaker.PerformScript('Grid_LoadLayout', JSON.stringify(payload));
+      callFM(FM_SCRIPTS.GridLoad, payload);
       // FM not wired yet: return false to allow default fallback (syncWidgets) to run
       return false;
     }
@@ -3603,7 +3567,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           }
 
           // Call FileMaker script once
-          window.FileMaker.PerformScript("CallTools", JSON.stringify({ 'toolCalls': toolCalls }));
+          callFM(FM_SCRIPTS.CallTools, { toolCalls });
         }
 
         // Append tool_call items to canonical history
@@ -3651,11 +3615,11 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
               // Notify FileMaker if available
               if (window.FileMaker) {
-                window.FileMaker.PerformScript("HandleAPIError", JSON.stringify({
+                callFM(FM_SCRIPTS.HandleAPIError, {
                   code: errorCode,
                   message: errorMessage,
                   type: errorType
-                }));
+                });
               }
             }
           }
