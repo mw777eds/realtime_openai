@@ -3797,12 +3797,6 @@ document.addEventListener("DOMContentLoaded", () => {
   } else {
     undockConvos();
   }
-  // Try to apply cached settings for selected mode; fallback to defaults
-  if (!applySettingsForMode(bootMode)) {
-    if (!loadLayoutForCurrentMode()) {
-      syncWidgets();
-    }
-  }
   if (realtimeWidgetEl && __rtState === 'idle') {
     ensureRealtimeReady();
   }
