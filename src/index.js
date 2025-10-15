@@ -2238,6 +2238,10 @@ function bootstrapApp(payload) {
       applyingFromFM = false;
     }
 
+    // After bootstrap finishes, if Voice widget is present and Realtime not started, init now.
+    if (realtimeWidgetEl && __rtState === 'idle') {
+      ensureRealtimeReady();
+    }
     // Mark bootstrap as completed to enable post-bootstrap behaviors/logging
     window.__bootstrapDone = true;
     return true;
@@ -3087,8 +3091,10 @@ document.addEventListener("DOMContentLoaded", () => {
       clickOverlay.addEventListener('click', toggleAudioTransmission);
     }
     showIcon(isPaused ? 'sleep' : 'ear');
-    // Ask FM for ephemeral token/model; then boot Realtime and preload history
-    ensureRealtimeReady();
+    // Defer Realtime init until bootstrap is done to avoid duplicate init
+    if (window.__bootstrapDone && !applyingFromFM && __rtState === 'idle') {
+      ensureRealtimeReady();
+    }
   }
 
   function removeRealtimeWidget() {
