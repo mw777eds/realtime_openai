@@ -3191,10 +3191,10 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="text-widget">
           <div class="gs-handle">Text Chat</div>
           <div class="chat-messages" id="chat-messages"></div>
-          <div class="chat-input">
+          <div class="chat-input" style="display:flex; align-items:center; gap:8px;">
             <input type="file" id="chat-image-input" accept="image/*" multiple style="display:none" />
             <button class="chat-btn" id="chat-image-btn" title="Attach image">📎</button>
-            <textarea id="chat-input" rows="1" placeholder="Type a message..."></textarea>
+            <textarea id="chat-input" rows="1" placeholder="Type a message..." style="flex:1 1 auto;"></textarea>
             <button class="chat-btn primary" id="chat-send-btn">Send</button>
           </div>
         </div>`;
