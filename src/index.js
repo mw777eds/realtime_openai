@@ -2902,6 +2902,30 @@ function applyLoadedLayout(payload) {
   const obj = typeof payload === 'string' ? parseJsonSafely(payload, 'loaded layout') : payload;
   if (!obj) return false;
 
+  const currentMode = getCurrentMode();
+  const currentSessionId = window.__sessionId || '';
+
+  // Do we already have a session-scoped layout cached for this mode?
+  const hasSessionLayoutAlready =
+    !!(persistedSettings[currentMode] &&
+       Array.isArray(persistedSettings[currentMode].layout) &&
+       persistedSettings[currentMode].layout.length > 0);
+
+  // Try to detect session-scoped payloads (preferred) vs machine/default (no sessionId)
+  const payloadSessionId =
+    (typeof obj.sessionId === 'string' && obj.sessionId) ? obj.sessionId
+    : (obj.settings && typeof obj.settings.sessionId === 'string' && obj.settings.sessionId) ? obj.settings.sessionId
+    : '';
+
+  // If we already have session layout and this callback is not explicitly for the current session,
+  // ignore it to avoid overriding with machine/default envelopes.
+  if (hasSessionLayoutAlready) {
+    const targetsCurrentSession = payloadSessionId && payloadSessionId === currentSessionId;
+    if (!targetsCurrentSession) {
+      return false;
+    }
+  }
+
   if (obj.settings || obj.key || (obj.layout && typeof obj.layout === 'object' && !Array.isArray(obj.layout))) {
     return applySettingsEnvelope(obj);
   }
