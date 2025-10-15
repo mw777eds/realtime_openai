@@ -10,6 +10,7 @@ Use this checklist to perform safe, incremental refactors. Keep behavior identic
 - [x] Step 5: Centralize default widget rects (DEFAULT_POS) used by add*Widget functions.
 - [ ] Step 6: Reorder functions by module sections (utilities → FM bridge → sessions → history → text chat → toasts → grid/layout → realtime → bootstrap) without changing any logic.
 - [x] Step 6a: Move initializeWebRTC above DOMContentLoaded so DOMContentLoaded is last.
+- [x] Step 6b: Remove redundant applySettingsForMode call during init to avoid double rebuild.
 - [x] Step 7: Extract safeStr and readFileAsDataUrl into Utilities section (pure helpers only).
 - [x] Step 8: Normalize save/build settings paths to use a single function for current settings bundle where possible (no behavior change).
 - [x] Step 9: Final tidy: replace repeated PerformScript calls with callFM where appropriate.
@@ -24,9 +25,9 @@ Use this checklist to perform safe, incremental refactors. Keep behavior identic
 - [x] Keep readFileAsDataUrl here.
 
 ### FileMaker Bridge
-- [ ] Add callFM(name, payload) wrapper (stringify payload if object; try/catch).
-- [ ] Add FM constants: { SaveState, GetState, GridSave, GridLoad, GridRestore, RealtimeInit, ChatText, CallTools, HandleAPIError, LogMessage, ShowJSON }.
-- [ ] Replace direct PerformScript calls gradually with callFM (in sendTextToRealtime fallback, Grid save/load, HandleAPIError, tool calls, etc.).
+- [x] Add callFM(name, payload) wrapper (stringify payload if object; try/catch).
+- [x] Add FM constants: { SaveState, GetState, GridSave, GridLoad, GridRestore, RealtimeInit, ChatText, CallTools, HandleAPIError, LogMessage, ShowJSON }.
+- [x] Replace direct PerformScript calls gradually with callFM (in sendTextToRealtime fallback, Grid save/load, HandleAPIError, tool calls, etc.).
 
 ### Sessions and Sidebar
 - [ ] Keep setSessionList, renderSessionList, highlightActiveSession, switchSession together.

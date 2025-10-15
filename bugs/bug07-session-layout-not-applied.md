@@ -101,4 +101,15 @@ Update 1 (investigation + next attempted fix)
     - Confirm that when a session layout is returned, it is persisted (shows __source=session) and later operations don’t overwrite it with machine/default.
   - If the MD5s still show correct values but positions differ, we’ll instrument per-node logs (x,y,w,h per widget) next.
 
-Status: Open (with fix attempt + diagnostics added)
+Update 2 (console logs analysis)
+- Bootstrap seeds session layouts with MD5s 08bfb48… (docked) and f094028… (undocked), confirming session-scoped payloads arrive.
+- During init, a second apply shows MD5 change to bee698b… — this reflects client-side normalization, not a switch to machine defaults.
+- After moving/resizing, uploads show evolving md5_docked values; saves are firing.
+- On reload, FileMaker returns the original docked MD5 (08bfb48…) instead of the latest uploaded MD5, indicating the session layout is not being round-tripped from FM.
+- JS change deployed to remove redundant init apply (a29ae69) to avoid double rebuild; gating and MD5 diagnostics are in place.
+
+Next steps
+- Verify FileMaker scripts persist session layouts on Session_SaveState and prefer them in Grid_LoadLayout (return sessionId with session-scoped envelopes).
+- Optional dev fallback: client can prefer the newest local cached session layout if FM returns an older MD5 for the same session+mode.
+
+Status: Open (awaiting FileMaker-side verification; JS gating/logging in place)

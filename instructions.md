@@ -32,6 +32,8 @@ FileMaker AI Chat + Realtime API Unified Interface — Revised Requirements
     - There is no scope parameter; scripts determine the target: Save Layout updates user defaults, Session_SaveState persists the session’s conversation. Grid_LoadLayout should prefer session state for the current key, else fall back to user defaults.
   - Restore loads the envelope for the current mode and applies settings (float and toggles) and settings.layout to rebuild widgets. If none is saved, defaults are applied and users can arrange, then Save Layout.
   - Front-end caching: on load, fetch both “docked” and “undocked” settings once and cache them in-memory; docking/undocking applies the cached settings immediately without a round-trip. Save Layout updates both FileMaker and the in-memory cache for the current mode.
+  - Client gating and precedence: the web app tags cached settings with __source ('session'|'machine') and __sessionId. applyLoadedLayout ignores machine/default envelopes once a session-scoped layout for the current session is present. Grid_LoadLayout responses should include sessionId when returning session state so the client can distinguish sources.
+  - Debug logging: the app logs MD5s for layouts/settings on upload and load: [Grid_LoadLayout] Request/Fallback, [applySettingsEnvelope]/[applyLoadedLayout], [applySettingsForMode]/[rebuildFromLayout], [Grid_SaveLayout], [Session_SaveState]. Use these to verify round-trips and precedence in FileMaker.
 - Widgets:
   - Chat Widget (unified): renders canonical history; shows streaming rows; nests tool calls/results; markdown rendering.
   - Voice Widget: mic toggle, connection state (listening/thinking/speaking), device indicators.
@@ -203,6 +205,8 @@ Each item is append-only. Realtime is the authority while active; all modes read
     - Deferred Realtime initialization until after bootstrap; added __rtInitInFlight guard to avoid double init.
     - Mute state persists across session switches.
     - Grid layout autosaves to session on drag/resize/change.
+    - Removed redundant applySettingsForMode call during init to avoid double rebuild and unintended churn (commit a29ae69).
+    - Added layout/settings MD5 debug logs and session-vs-machine gating; array payloads are persisted into cached settings before applying to prevent later overrides.
 
 15. Next steps
 - Initialization and per-user config
