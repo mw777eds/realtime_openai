@@ -82,7 +82,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
 
 - FM scripts:
   - Realtime_Init(sessionId) → return ephemeral key + model/session config for Realtime; FM selects the agent/config (JS does not pass agent).
-  - Chat_TextRequest(sessionId; JSON { message }) → wrapper that selects the agent in FileMaker, loads history via Session_GetState, calls CallAgent internally, and persists updates via Session_SaveState.
+  - Chat_TextRequest(sessionId; JSON { prompt }) → wrapper that selects the agent in FileMaker, loads history via Session_GetState, calls CallAgent internally, and persists updates via Session_SaveState.
   - CallAgent(sessionId; JSON { agentName, message }) → invoked by Chat_TextRequest; continues the chat and persists updates.
   - Session_SaveState(sessionId; JSON) → upsert unified session JSON; merge provided keys (settings/history).
   - Session_GetState(sessionId) → return unified session JSON.
@@ -198,6 +198,11 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - setUISettings exposed to FileMaker to flip toggles programmatically; setUISettings({ convos: true }) undocks; setUISettings({ convos: false }) docks.
   - Save Layout (menu) saves the current mode as a machine template using the envelope shape above with scope:"machine" and calls Grid_SaveLayout; Restore applies the saved machine envelope.
   - Session layouts are authoritative and kept in memory; they are flushed to FileMaker with scope:"session" on session switch and Web Viewer close (optionally debounced on grid changes). Dock/undock applies the current session’s cached layout for that mode, falling back to machine template, then app defaults.
+  - Reliability fixes:
+    - Early JS stubs added in index.html buffer FileMaker callbacks (bootstrapApp/applySessionState/applyRealtimeInit) before module load; src/index.js drains pending payloads on DOMContentLoaded.
+    - Deferred Realtime initialization until after bootstrap; added __rtInitInFlight guard to avoid double init.
+    - Mute state persists across session switches.
+    - Grid layout autosaves to session on drag/resize/change.
 
 15. Next steps
 - Initialization and per-user config
@@ -222,7 +227,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Spawn artifact widgets programmatically from tool results and persist layout.
 - Persistence:
   - Wire Grid_SaveLayout/Grid_LoadLayout to save/restore per-machine layouts (machineId) per session and per mode (docked/undocked).
-  - Persist preferences per session via Settings_SavePreferences; user defaults are updated only via Save Layout.
+  - Persist preferences per session via Session_SaveState; user defaults are updated only via Save Layout.
 - Concurrency and synchronization:
   - Ensure typed messages/images during Realtime are appended to canonical and sent over the data channel immediately.
   - On Realtime stop, next text request uses updated canonical context.
@@ -243,6 +248,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - Apply settings to show/hide widgets; do not initializeWebRTC until Realtime is enabled.
   - If Realtime is enabled at bootstrap, initializeWebRTC only after mounting the Realtime widget.
   - Load canonical history for sessionId and render in Text widget; Realtime preload occurs when Realtime is started.
+  - Note: FileMaker may call JS before the module loads; index.html defines early stubs to buffer callbacks and src/index.js applies pending payloads on DOMContentLoaded to prevent bootstrap races.
 
 17. Impact on FileMaker scripts (see script.txt)
 - Add App_Init(sessionId) to return:

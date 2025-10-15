@@ -83,6 +83,7 @@ Use this checklist to perform safe, incremental refactors. Keep behavior identic
 - When consolidating rebuild/apply layout logic, preserve conditions for isConvosDocked so Conversations widget only appears when undocked.
 - Maintain prompt property in Chat_TextRequest fallback payload (do not revert to message).
 - Preserve persistedSettings shape and localStorage keys: settings:docked and settings:undocked.
+- FileMaker can call JS before modules evaluate; keep inline stubs in index.html to buffer bootstrapApp/applySessionState/applyRealtimeInit and drain pending payloads in DOMContentLoaded.
 
 ## Quick Tests After Each Step
 - [ ] Text send while Realtime disconnected triggers Chat_TextRequest with { prompt } and renders user bubble.

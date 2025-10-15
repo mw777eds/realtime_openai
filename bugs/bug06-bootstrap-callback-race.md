@@ -1,6 +1,11 @@
 # Bug 06 — Bootstrap callback race causes “ReferenceError: Can't find variable: bootstrapApp”
 
-Status: Open
+Status: Closed
+
+Resolution
+- Implemented Option A (inline early stubs in index.html before module load) to buffer FileMaker callbacks.
+- Drained pending payloads in src/index.js during DOMContentLoaded.
+- Added in-flight guard (__rtInitInFlight) and deferred init until after bootstrap to prevent duplicate Realtime initialization.
 Severity: High (breaks initial load; Realtime never initializes)
 First seen after commits:
 - 90208c0 “fix: defer Realtime init until after bootstrap to avoid double-init”
