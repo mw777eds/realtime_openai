@@ -420,6 +420,18 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   const includeText = options.includeText !== undefined ? !!options.includeText : true;
   const includeToasts = options.includeToasts !== undefined ? !!options.includeToasts : true;
 
+  // If tearing down existing voice widget, silence/cleanup Realtime to preserve mute across rebuilds
+  if (realtimeWidgetEl) {
+    try {
+      if (audioEl && audioEl.srcObject) {
+        audioEl.srcObject.getAudioTracks().forEach(t => t.enabled = false);
+      }
+      if (audioTrack) audioTrack.enabled = false;
+      if (audioEl) audioEl.muted = true;
+    } catch (_) {}
+    cleanupWebRTC();
+  }
+
   // Remove all existing widgets
   const existing = [...(grid.engine?.nodes || [])];
   existing.forEach(n => n?.el && grid.removeWidget(n.el));
@@ -1289,6 +1301,7 @@ async function startAudioTransmission() {
   if (audioEl && audioEl.srcObject) {
     const audioTracks = audioEl.srcObject.getAudioTracks();
     audioTracks.forEach(track => track.enabled = true);
+    try { audioEl.muted = false; } catch (_) {}
   } else {
     console.error("AI audio output not available");
   }
@@ -1392,6 +1405,7 @@ async function stopAudioTransmission() {
     if (audioEl && audioEl.srcObject) {
       const audioTracks = audioEl.srcObject.getAudioTracks();
       audioTracks.forEach(track => track.enabled = false);
+      try { audioEl.muted = true; } catch (_) {}
     }
 
     // Stop waveform animation
@@ -3108,7 +3122,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (clickOverlay) {
       clickOverlay.addEventListener('click', toggleAudioTransmission);
     }
-    showIcon('ear');
+    showIcon(isPaused ? 'sleep' : 'ear');
     // Ask FM for ephemeral token/model; then boot Realtime and preload history
     ensureRealtimeReady();
   }
@@ -3501,6 +3515,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     audioEl = document.createElement("audio");
     audioEl.autoplay = true;
     pc.ontrack = e => {
+      audioEl.muted = !!isPaused;
       audioEl.srcObject = e.streams[0];
       // Get the audio tracks from the stream
       const audioTracks = audioEl.srcObject.getAudioTracks();
@@ -3553,6 +3568,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             audioEl.srcObject.getAudioTracks().forEach(t => t.enabled = false);
           }
         } catch (_) {}
+        try { if (audioEl) audioEl.muted = true; } catch (_) {}
         showIcon('sleep');
       }
     });
