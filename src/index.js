@@ -187,6 +187,7 @@ function renderToolPill(label, data, id = null) {
   pill.type = 'button';
   pill.className = 'tool-pill';
   pill.textContent = label;
+  pill.style.position = 'relative';
   pill.addEventListener('click', () => {
     if (window.FileMaker) {
       try { window.FileMaker.PerformScript('ShowJSON', JSON.stringify(data)); return; } catch (_) {}
@@ -207,6 +208,7 @@ function renderToolPill(label, data, id = null) {
   closeBtn.style.color = 'inherit';
   closeBtn.style.cursor = 'pointer';
   closeBtn.style.fontSize = '12px';
+  closeBtn.style.zIndex = '2';
   closeBtn.setAttribute('aria-label', 'Delete item');
   closeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -215,11 +217,11 @@ function renderToolPill(label, data, id = null) {
     }
   });
 
-  row.addEventListener('mouseenter', () => { closeBtn.style.display = 'block'; });
-  row.addEventListener('mouseleave', () => { closeBtn.style.display = 'none'; });
+  pill.addEventListener('mouseenter', () => { closeBtn.style.display = 'block'; });
+  pill.addEventListener('mouseleave', () => { closeBtn.style.display = 'none'; });
 
   row.appendChild(pill);
-  row.appendChild(closeBtn);
+  pill.appendChild(closeBtn);
 
   const list = document.getElementById('chat-messages');
   if (list) {
@@ -1587,6 +1589,7 @@ function renderChatMessage(role, text, id = null) {
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   bubble.textContent = text;
+  bubble.style.position = 'relative';
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
@@ -1601,6 +1604,7 @@ function renderChatMessage(role, text, id = null) {
   closeBtn.style.color = 'inherit';
   closeBtn.style.cursor = 'pointer';
   closeBtn.style.fontSize = '12px';
+  closeBtn.style.zIndex = '2';
   closeBtn.setAttribute('aria-label', 'Delete message');
   closeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1609,11 +1613,11 @@ function renderChatMessage(role, text, id = null) {
     }
   });
 
-  row.addEventListener('mouseenter', () => { closeBtn.style.display = 'block'; });
-  row.addEventListener('mouseleave', () => { closeBtn.style.display = 'none'; });
+  bubble.addEventListener('mouseenter', () => { closeBtn.style.display = 'block'; });
+  bubble.addEventListener('mouseleave', () => { closeBtn.style.display = 'none'; });
 
   row.appendChild(bubble);
-  row.appendChild(closeBtn);
+  bubble.appendChild(closeBtn);
   list.appendChild(row);
 
   // autoscroll
