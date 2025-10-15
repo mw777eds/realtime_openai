@@ -127,21 +127,23 @@ function trimHistory() {
 }
 
 function appendCanonicalMessage(role, text, metadata = {}) {
-  if (!text) return;
-  sessionHistory.push({
+  if (!text) return null;
+  const item = {
     id: createId('m'),
     ts: Date.now(),
     role,
     type: 'message',
     content: text,
     metadata
-  });
+  };
+  sessionHistory.push(item);
   // Ensure Conversations widget appears when undocked even if omitted from layout
   if (!isConvosDocked && !convosWidgetEl) {
     const saved = getSavedWidgetRect('convo', getCurrentMode());
     window.__addConversationsWidget && window.__addConversationsWidget(saved || DEFAULT_POS.convo);
   }
   trimHistory();
+  return item;
 }
 
 function appendToolCall(name, args, call_id, responseId) {
@@ -176,9 +178,11 @@ function appendToolResult(call_id, output, status = 'success', error = null) {
   trimHistory();
 }
 
-function renderToolPill(label, data) {
+function renderToolPill(label, data, id = null) {
   const row = document.createElement('div');
   row.className = 'tool-pill-row';
+  row.style.position = 'relative';
+
   const pill = document.createElement('button');
   pill.type = 'button';
   pill.className = 'tool-pill';
@@ -189,7 +193,34 @@ function renderToolPill(label, data) {
     }
     showJsonModal(data);
   });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'msg-close';
+  closeBtn.textContent = '×';
+  closeBtn.style.position = 'absolute';
+  closeBtn.style.top = '4px';
+  closeBtn.style.right = '6px';
+  closeBtn.style.display = 'none';
+  closeBtn.style.border = 'none';
+  closeBtn.style.background = 'transparent';
+  closeBtn.style.color = 'inherit';
+  closeBtn.style.cursor = 'pointer';
+  closeBtn.style.fontSize = '12px';
+  closeBtn.setAttribute('aria-label', 'Delete item');
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (id) {
+      deleteHistoryItem(id);
+    }
+  });
+
+  row.addEventListener('mouseenter', () => { closeBtn.style.display = 'block'; });
+  row.addEventListener('mouseleave', () => { closeBtn.style.display = 'none'; });
+
   row.appendChild(pill);
+  row.appendChild(closeBtn);
+
   const list = document.getElementById('chat-messages');
   if (list) {
     list.appendChild(row);
@@ -203,14 +234,40 @@ function renderChatFromHistory() {
   list.innerHTML = '';
   for (const item of sessionHistory) {
     if (item.type === 'message') {
-      renderChatMessage(item.role, item.content);
+      renderChatMessage(item.role, item.content, item.id);
     } else if ((item.type === 'tool_call' || item.type === 'tool_result') && showToolPills) {
       const label = item.type === 'tool_call'
         ? `Tool call: ${item?.metadata?.tool?.name || 'unknown'}`
         : `Tool result: ${item?.metadata?.tool?.name || ''}`.trim();
-      renderToolPill(label, item);
+      renderToolPill(label, item, item.id);
     }
   }
+}
+
+function deleteHistoryItem(id) {
+  const idx = sessionHistory.findIndex(it => it && it.id === id);
+  if (idx >= 0) {
+    sessionHistory.splice(idx, 1);
+    rebuildChatBufferFromSession();
+    renderChatFromHistory();
+    try { saveSession({ history: true }); } catch (_) {}
+    return true;
+  }
+  return false;
+}
+
+function rebuildChatBufferFromSession() {
+  try {
+    const msgs = sessionHistory
+      .filter(it => it && it.type === 'message')
+      .map(it => ({
+        role: it.role,
+        text: it.content || '',
+        ts: it.ts,
+        source: it.metadata?.api || null
+      }));
+    chatBuffer.splice(0, chatBuffer.length, ...msgs);
+  } catch (_) {}
 }
 
 function showJsonModal(data) {
@@ -1518,18 +1575,45 @@ function recordChatMessage(role, text, opts = {}) {
 /**
  * Render a single chat message to the Text widget UI (if mounted).
  */
-function renderChatMessage(role, text) {
+function renderChatMessage(role, text, id = null) {
   const list = document.getElementById('chat-messages');
   if (!list || !text) return;
 
   const row = document.createElement('div');
   row.className = `chat-message ${role}`;
+  row.style.position = 'relative';
+  if (id) row.setAttribute('data-id', id);
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   bubble.textContent = text;
 
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'msg-close';
+  closeBtn.textContent = '×';
+  closeBtn.style.position = 'absolute';
+  closeBtn.style.top = '4px';
+  closeBtn.style.right = '6px';
+  closeBtn.style.display = 'none';
+  closeBtn.style.border = 'none';
+  closeBtn.style.background = 'transparent';
+  closeBtn.style.color = 'inherit';
+  closeBtn.style.cursor = 'pointer';
+  closeBtn.style.fontSize = '12px';
+  closeBtn.setAttribute('aria-label', 'Delete message');
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (id) {
+      deleteHistoryItem(id);
+    }
+  });
+
+  row.addEventListener('mouseenter', () => { closeBtn.style.display = 'block'; });
+  row.addEventListener('mouseleave', () => { closeBtn.style.display = 'none'; });
+
   row.appendChild(bubble);
+  row.appendChild(closeBtn);
   list.appendChild(row);
 
   // autoscroll
@@ -1545,8 +1629,8 @@ function renderChatMessage(role, text) {
 function appendChatMessage(role, text, opts = {}) {
   if (!text) return;
   recordChatMessage(role, text, opts);
-  appendCanonicalMessage(role, text, { api: opts.source || null });
-  renderChatMessage(role, text);
+  const item = appendCanonicalMessage(role, text, { api: opts.source || null });
+  renderChatMessage(role, text, item?.id || null);
 }
 
 /**
