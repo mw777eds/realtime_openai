@@ -66,3 +66,39 @@ Workaround (until fixed)
 
 Related issues
 - Bug 06 — Bootstrap callback race (ensure we don’t regress those guards).
+
+Update 1 (investigation + next attempted fix)
+- New observations:
+  - The loaded payload MD5 matches the saved session layout MD5, but the grid still ends up using machine defaults.
+  - In cases where FileMaker returns a direct array payload shape ({ layout:[...] }) instead of a full envelope ({ key, settings:{ layout:{docked,undocked} } }), our previous code path applied the layout to the grid (applyLayout) but did not update in-memory persistedSettings for that mode. A subsequent apply/applySettingsForMode/sync could then overwrite the grid using the cached machine defaults, making it look like the session layout was ignored.
+  - Gating in applyLoadedLayout also treated “any existing layout” as authoritative which could cause us to ignore a correct session layout if an earlier machine template was cached.
+
+- Hypothesis update:
+  - Session layout is being received correctly but is not persisted into persistedSettings on the “array payload” path, so later flow re-applies the machine layout.
+  - Additionally, we should track “source” (session vs machine) for persistedSettings per mode so that a later machine/default envelope can be safely ignored when a session-scoped layout has already been applied for the current session.
+
+- Attempted fix (applied):
+  - Treat array payloads as authoritative for the current mode:
+    - Persist into persistedSettings[currentMode].layout (and float if provided) and mark __source ('session' when payload.sessionId matches current session, else 'machine') and __sessionId.
+    - Then call applySettingsForMode(currentMode) so all subsequent operations use the same source-of-truth path.
+  - Improve gating:
+    - If payload targets a different sessionId → ignore.
+    - If we already hold a session-scoped layout for this session and the incoming payload has no sessionId (machine/default), ignore the override.
+  - Add extensive console logging:
+    - MD5 of settings/layout on upload (Grid_SaveLayout and Session_SaveState with settings).
+    - MD5 on load for both envelope and array payloads.
+    - Logs for applySettingsForMode/applyLayout/rebuildFromLayout with mode, counts, and MD5s.
+    - Logs for Grid_LoadLayout requests and whether a payload is applied or ignored, including source detection.
+    - “Pending first-change” guard: if a drag/resize happens before prefsReady is true, set a flag and flush settings once ready (helps diagnose the “first move not saving” suspicion).
+
+- Secondary issue (first move/resize not saving):
+  - Added detection: if grid change events fire before prefsReady, we mark window.__pendingLayoutDirty = true and flush settings once prefsReady becomes true at the end of DOMContentLoaded.
+  - Added console logs to trace the first-change flow.
+
+- Next steps:
+  - Run through session switch and initial load while watching the console:
+    - Look for [Grid_LoadLayout], [applyLoadedLayout], [applySettingsEnvelope], [applySettingsForMode], [rebuildFromLayout] logs with MD5 values.
+    - Confirm that when a session layout is returned, it is persisted (shows __source=session) and later operations don’t overwrite it with machine/default.
+  - If the MD5s still show correct values but positions differ, we’ll instrument per-node logs (x,y,w,h per widget) next.
+
+Status: Open (with fix attempt + diagnostics added)
