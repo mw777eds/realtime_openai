@@ -2,6 +2,31 @@ import { showIcon, createAnchorIcon, createNewConvoIcon, createMenuIcon } from '
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 
+// Early stubs for FM → JS callbacks in case FM calls before the module finishes evaluating
+try {
+  if (typeof window !== 'undefined') {
+    // Capture bootstrap/apply payloads until real functions are loaded
+    window.__pendingBootstrapPayload = window.__pendingBootstrapPayload || null;
+    window.__pendingRealtimeInitPayload = window.__pendingRealtimeInitPayload || null;
+
+    if (typeof window.bootstrapApp !== 'function') {
+      window.bootstrapApp = function(payload) {
+        try { window.__pendingBootstrapPayload = payload; } catch (_) {}
+      };
+    }
+    if (typeof window.applySessionState !== 'function') {
+      window.applySessionState = function(payload) {
+        try { window.__pendingBootstrapPayload = payload; } catch (_) {}
+      };
+    }
+    if (typeof window.applyRealtimeInit !== 'function') {
+      window.applyRealtimeInit = function(payload) {
+        try { window.__pendingRealtimeInitPayload = payload; } catch (_) {}
+      };
+    }
+  }
+} catch (_) {}
+
 /* 
  * Canvas-related variables for the audio waveform visualization
  * canvas: The HTML canvas element
@@ -2929,6 +2954,20 @@ function savePreferences() {
  * Bootstraps GridStack and mounts the Realtime / Toasts / Text widgets based on toggles.
  */
 document.addEventListener("DOMContentLoaded", () => {
+  // Apply any FM callbacks that may have arrived before the module finished loading
+  try {
+    if (window.__pendingBootstrapPayload) {
+      const p = window.__pendingBootstrapPayload;
+      window.__pendingBootstrapPayload = null;
+      bootstrapApp(p);
+    }
+    if (window.__pendingRealtimeInitPayload) {
+      const p2 = window.__pendingRealtimeInitPayload;
+      window.__pendingRealtimeInitPayload = null;
+      applyRealtimeInit(p2);
+    }
+  } catch (_) {}
+
   const sidebarEl = document.querySelector('.sidebar');
 
   // Show a DEVELOPMENT banner when served from local dev (e.g., Byte/Vite), regardless of FileMaker presence
