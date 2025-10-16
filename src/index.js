@@ -111,7 +111,7 @@ function switchSession(newSessionId) {
   const current = window.__sessionId || '';
   if (!newSessionId || newSessionId === current) return false;
 
-  try { saveSession({ history: true, settings: true }); } catch (_) {}
+  try { saveSession({ history: true }); } catch (_) {}
   window.__sessionId = newSessionId;
   highlightActiveSession(newSessionId);
   // Clear UI chat view immediately (optional)
@@ -481,7 +481,7 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   }
   } finally {
     mutatingLayout = false;
-    if (prefsReady) scheduleSaveSettings(250);
+    if (prefsReady && !applyingFromFM) scheduleSaveSettings(250);
   }
 }
 
@@ -2887,7 +2887,7 @@ function applyLayout(payload) {
   }
   } finally {
     mutatingLayout = false;
-    if (prefsReady) scheduleSaveSettings(250);
+    if (prefsReady && !applyingFromFM) scheduleSaveSettings(250);
   }
 }
 
@@ -3577,10 +3577,6 @@ document.addEventListener("DOMContentLoaded", () => {
     ensureRealtimeReady();
   }
   prefsReady = true;
-  if (window.__pendingLayoutDirty) {
-    saveSession({ settings: true });
-    window.__pendingLayoutDirty = false;
-  }
 });
 
 /* 
