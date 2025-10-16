@@ -1,6 +1,28 @@
 import { showIcon, createAnchorIcon, createNewConvoIcon, createMenuIcon } from './icons.js';
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
+import { computeLayoutMD5 } from './md5.js';
+
+/* Minimal on-screen debug tracer */
+function debugTrace(label, data) {
+  try { console.warn(label, data); } catch (_) {}
+  try {
+    const doc = document;
+    if (!doc || !doc.body) return;
+    let pane = doc.getElementById('__debugPane');
+    if (!pane) {
+      pane = doc.createElement('pre');
+      pane.id = '__debugPane';
+      pane.style.cssText = 'position:fixed;bottom:0;left:0;max-height:40vh;max-width:60vw;overflow:auto;background:rgba(0,0,0,.75);color:#9f9;padding:6px 8px;margin:0;font:12px/1.2 monospace;z-index:99999;white-space:pre-wrap;pointer-events:auto;border-top-right-radius:6px;';
+      pane.title = 'Debug output (click to clear)';
+      pane.addEventListener('click', () => { pane.textContent = ''; });
+      doc.body.appendChild(pane);
+    }
+    let json;
+    try { json = typeof data === 'string' ? data : JSON.stringify(data); } catch { json = String(data); }
+    pane.textContent += '[' + new Date().toLocaleTimeString() + '] ' + label + ' ' + json + '\n';
+  } catch (_) {}
+}
 
 /*
  ==============================================================================
@@ -428,6 +450,9 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   if (!grid) return;
   mutatingLayout = true;
   try {
+    try {
+      debugTrace('[rebuildFromLayout] start', { mode: getCurrentMode(), md5: (Array.isArray(layout) ? computeLayoutMD5(layout) : 'n/a'), layout });
+    } catch (_) {}
 
   const desiredFloat = (typeof float === 'boolean') ? !!float : !!floatEnabled;
   if (typeof grid.float === 'function') {
@@ -499,7 +524,7 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
     }));
     const diff = { desired: desiredNodes, actualBefore: actual, actualAfter };
     window.__lastLayoutDiff = diff;
-    console.warn('[layout:rebuild] enforced positions', { mode: getCurrentMode(), float: desiredFloat, diff });
+    debugTrace('[layout:rebuild] enforced positions', { mode: getCurrentMode(), float: desiredFloat, diff });
   } catch (e) {
     console.warn('[layout:rebuild] enforcement failed', e);
   }
@@ -543,6 +568,8 @@ function applySettingsForMode(mode) {
     showToolPills = on;
     renderChatFromHistory();
   }
+
+  try { debugTrace('[applySettingsForMode] using', { mode, md5: computeLayoutMD5(settings.layout), float: settings.float, layout: settings.layout }); } catch (_) {}
 
   rebuildFromLayout(settings.layout, settings.float, {
     includeVoice: !!settings.voice,
@@ -2599,7 +2626,7 @@ function stopWaveform() {
  */
 let pc = null;
 let dc = null;
-let isPaused = false;
+let isPaused = true;
 let audioTrack = null;
 let audioSender = null;
 let audioEl = null;
@@ -2853,7 +2880,7 @@ function applyLayout(payload) {
   if (!grid || !payload || !Array.isArray(payload.layout)) return;
   mutatingLayout = true;
   try {
-
+    try { debugTrace('[applyLayout] start', { mode: getCurrentMode(), md5: Array.isArray(payload.layout) ? computeLayoutMD5(payload.layout) : 'n/a', float: (typeof payload.float === 'boolean') ? !!payload.float : !!floatEnabled, layout: payload.layout }); } catch (_) {}
 
   // Respect float setting
   const desiredFloat = (typeof payload.float === 'boolean') ? !!payload.float : !!floatEnabled;
@@ -2944,7 +2971,7 @@ function applyLayout(payload) {
     }));
     const diff = { desired: desiredNodes, actualBefore: actual, actualAfter };
     window.__lastLayoutDiff = diff;
-    console.warn('[layout:apply] enforced positions', { mode: getCurrentMode(), float: desiredFloat, diff });
+    debugTrace('[layout:apply] enforced positions', { mode: getCurrentMode(), float: desiredFloat, diff });
   } catch (e) {
     console.warn('[layout:apply] enforcement failed', e);
   }
