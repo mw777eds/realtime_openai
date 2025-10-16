@@ -50,6 +50,12 @@ const sessionHistory = [];
 let showToolPills = false;
 let prefsReady = false;
 let applyingFromFM = false;
+let mutatingLayout = false;
+let layoutSaveTimer = null;
+function scheduleSaveSettings(delay = 400) {
+  if (layoutSaveTimer) { try { clearTimeout(layoutSaveTimer); } catch (_) {} }
+  layoutSaveTimer = setTimeout(() => { try { saveSession({ settings: true }); } catch (_) {} }, Math.max(0, delay));
+}
 
 /* ================================ */
 /* Sessions and Sidebar             */
@@ -426,6 +432,8 @@ const DEFAULT_POS = Object.freeze({
 /* Rebuild grid from a layout array (+ float), respecting current dock state for convo */
 function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   if (!grid) return;
+  mutatingLayout = true;
+  try {
 
   if (typeof float === 'boolean' && typeof grid.float === 'function') {
     floatEnabled = float;
@@ -462,6 +470,10 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   layout.forEach(n => {
     addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h }, flags);
   });
+  } finally {
+    mutatingLayout = false;
+    if (prefsReady) scheduleSaveSettings(250);
+  }
 }
 
 /* Apply settings for a given mode (docked/undocked): set toggles, float, and rebuild layout */
@@ -2796,6 +2808,8 @@ function loadLayoutForCurrentMode() {
  */
 function applyLayout(payload) {
   if (!grid || !payload || !Array.isArray(payload.layout)) return;
+  mutatingLayout = true;
+  try {
 
 
   // Respect float setting
@@ -2850,6 +2864,10 @@ function applyLayout(payload) {
     const on = !!toastsWidgetEl;
     btnToasts.classList.toggle('active', on);
     btnToasts.setAttribute('aria-pressed', String(on));
+  }
+  } finally {
+    mutatingLayout = false;
+    if (prefsReady) scheduleSaveSettings(250);
   }
 }
 
@@ -2973,8 +2991,8 @@ function getCurrentToggleSettings() {
 
 function savePreferences() {
   if (!prefsReady || applyingFromFM) return;
-  // Save only settings into the unified session JSON
-  saveSession({ settings: true });
+  // Debounce settings save to reduce redundant calls during UI toggles
+  scheduleSaveSettings(0);
 }
 
 
@@ -3108,7 +3126,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Persist layout changes on drag/resize stop (and generic 'change')
   function __handleGridNodesChanged(evt, movedNodes) {
-    if (applyingFromFM) return;
+    if (applyingFromFM || mutatingLayout) return;
     const mode = getCurrentMode();
     const nodes = Array.isArray(movedNodes) ? movedNodes : (evt && Array.isArray(evt.nodes) ? evt.nodes : []);
     if (!nodes || nodes.length === 0) return;
@@ -3129,8 +3147,8 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     } catch (_) {}
     if (touched && prefsReady) {
-      // Save updated settings snapshot to the current session
-      saveSession({ settings: true });
+      // Debounce settings save to reduce FM round-trips during programmatic layout changes
+      scheduleSaveSettings(400);
     }
   }
   try {
