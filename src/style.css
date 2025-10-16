@@ -714,3 +714,11 @@ button {
   border-color: #006690;
   color: #fff;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast.fade-out,
+  .icon {
+    transition: none !important;
+  }
+}

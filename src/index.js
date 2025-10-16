@@ -2,7 +2,25 @@ import { showIcon, createAnchorIcon, createNewConvoIcon, createMenuIcon } from '
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 
- // FM callback stubs now live in index.html (inline script before module load).
+/*
+ ==============================================================================
+ File: src/index.js
+
+ Organization (no logic change):
+ - State and constants
+ - Sessions and Sidebar
+ - Canonical History and Rendering
+ - Text Chat
+ - Toasts
+ - Grid/Layout and Settings
+ - Realtime/WebRTC (including image send and tools)
+ - Bootstrap and DOMContentLoaded (last)
+
+ Notes:
+ - Function declarations are used to preserve hoisting.
+ - FileMaker callbacks are stubbed in index.html before module load.
+ ==============================================================================
+*/
 
 /* 
  * Canvas-related variables for the audio waveform visualization
@@ -33,6 +51,9 @@ let showToolPills = false;
 let prefsReady = false;
 let applyingFromFM = false;
 
+/* ================================ */
+/* Sessions and Sidebar             */
+/* ================================ */
 /* Sessions list (for sidebar and undocked Conversations widget) */
 window.__sessions = window.__sessions || []; // [{id, title}]
 function setSessionList(list) {
@@ -1063,9 +1084,9 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
  * @param {string} toolResponse - JSON string containing the tool response data
  */
 function sendToolResponse(toolResponse) {
-  toolResponse = JSON.parse(toolResponse);
+  const tr = (typeof toolResponse === 'string') ? JSON.parse(toolResponse) : toolResponse;
 
-  if (!toolResponse.call_id) {
+  if (!tr || !tr.call_id) {
     console.error("Missing call_id in toolResponse");
     return;
   }
@@ -1075,15 +1096,15 @@ function sendToolResponse(toolResponse) {
       type: "conversation.item.create",
       item: {
         type: "function_call_output",
-        call_id: toolResponse.call_id,
-        output: JSON.stringify(toolResponse.output)
+        call_id: tr.call_id,
+        output: JSON.stringify(tr.output)
       }
     };
 
     dcSendJSONSafe(response);
     // Append tool_result to canonical history
     try {
-      appendToolResult(toolResponse.call_id, toolResponse.output, 'success');
+      appendToolResult(tr.call_id, tr.output, 'success');
       if (showToolPills) {
         renderChatFromHistory();
       }
@@ -2570,11 +2591,13 @@ function checkAudioActivity() {
 
     if (hasAudio && !isPaused) {
       startWaveform();
-      iconOverlay.style.display = 'none';
+      if (iconOverlay) iconOverlay.style.display = 'none';
     } else {
       stopWaveform();
       if (!isPaused) {
-        iconOverlay.style.display = 'flex';
+        if (iconOverlay) {
+          iconOverlay.style.display = 'flex';
+        }
         showIcon('ear');
       }
     }

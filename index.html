@@ -14,16 +14,16 @@
         <div class="app-controls">
           <div class="menu">
             <button id="menu-toggle" class="menu-toggle" aria-expanded="false" aria-haspopup="true" title="Menu"></button>
-            <div id="menu-panel" class="menu-panel" hidden>
-              <button id="btn-voice" class="menu-item toggle active" aria-pressed="true">Voice</button>
-              <button id="btn-text" class="menu-item toggle" aria-pressed="false">Text</button>
-              <button id="btn-toasts" class="menu-item toggle active" aria-pressed="true">Toasts</button>
+            <div id="menu-panel" class="menu-panel" hidden role="menu" aria-label="Main menu">
+              <button id="btn-voice" class="menu-item toggle active" aria-pressed="true" role="menuitem">Voice</button>
+              <button id="btn-text" class="menu-item toggle" aria-pressed="false" role="menuitem">Text</button>
+              <button id="btn-toasts" class="menu-item toggle active" aria-pressed="true" role="menuitem">Toasts</button>
               <hr />
-              <button id="btn-tool-calls" class="menu-item toggle" aria-pressed="false">Show Tool Calls</button>
-              <button id="btn-copy-minified" class="menu-item">Copy Test Payload</button>
-              <button id="btn-toggle-float" class="menu-item">Float On</button>
-              <button id="btn-save-layout" class="menu-item">Save Layout</button>
-              <button id="btn-restore-layout" class="menu-item">Restore Default Layout</button>
+              <button id="btn-tool-calls" class="menu-item toggle" aria-pressed="false" role="menuitem">Show Tool Calls</button>
+              <button id="btn-copy-minified" class="menu-item" role="menuitem">Copy Test Payload</button>
+              <button id="btn-toggle-float" class="menu-item" role="menuitem">Float On</button>
+              <button id="btn-save-layout" class="menu-item" role="menuitem">Save Layout</button>
+              <button id="btn-restore-layout" class="menu-item" role="menuitem">Restore Default Layout</button>
             </div>
           </div>
         </div>
