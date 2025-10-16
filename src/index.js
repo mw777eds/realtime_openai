@@ -1679,7 +1679,6 @@ function chatHistoryToText() {
  */
 function logChatHistory() {
   const text = chatHistoryToText();
-  // Use a single console.log to keep it easy to copy
   return text;
 }
 
