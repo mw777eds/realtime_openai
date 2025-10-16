@@ -1474,8 +1474,12 @@ async function stopAudioTransmission() {
  * when the application is closed.
  */
 function cleanupWebRTC() {
-  // Defensive flush so Realtime transcripts aren’t lost
-  try { if (Array.isArray(sessionHistory) && sessionHistory.length > 0) saveSession({ history: true }); } catch (_) {}
+  // Defensive flush only when not applying from FileMaker/layout rebuild to avoid spurious saves
+  try {
+    if (!applyingFromFM && !mutatingLayout && Array.isArray(sessionHistory) && sessionHistory.length > 0) {
+      saveSession({ history: true });
+    }
+  } catch (_) {}
   /* Clear active response ID when cleaning up */
   window.activeResponseId = null;
   currentSessionConfig = null;
@@ -2163,12 +2167,16 @@ function bootstrapApp(payload) {
       const incoming = [];
       const bufferMsgs = [];
       for (const m of data.history) {
-        const ts = (m && typeof m.ts === 'number') ? m.ts : Date.now();
+        const ts =
+          (m && m.ts !== undefined) ? m.ts
+          : (m && m.timestamp !== undefined) ? m.timestamp
+          : (m && m.time !== undefined) ? m.time
+          : Date.now();
 
         // Canonical tool_call
         if (m && m.type === 'tool_call') {
           incoming.push({
-            id: (typeof m.id === 'string' && m.id.trim()) ? m.id : createId('tc'),
+            id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('tc'),
             ts,
             role: 'tool',
             type: 'tool_call',
@@ -2188,7 +2196,7 @@ function bootstrapApp(payload) {
         // Canonical tool_result
         if (m && m.type === 'tool_result') {
           incoming.push({
-            id: (typeof m.id === 'string' && m.id.trim()) ? m.id : createId('tr'),
+            id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('tr'),
             ts,
             role: 'tool',
             type: 'tool_result',
@@ -2208,7 +2216,7 @@ function bootstrapApp(payload) {
           : (typeof m?.text === 'string' ? m.text : '');
 
         incoming.push({
-          id: (typeof m.id === 'string' && m.id.trim()) ? m.id : createId('m'),
+          id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('m'),
           ts,
           role,
           type: 'message',
