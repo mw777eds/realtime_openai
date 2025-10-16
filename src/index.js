@@ -2567,6 +2567,8 @@ let audioAnalyser = null;
 let audioDataArray = null;
 let audioLevelInterval = null;
 
+/* initializeWebRTC moved above DOMContentLoaded */
+
 /* 
  * Function to initialize the audio analyzer
  * 
@@ -2691,8 +2693,8 @@ function setUISettings(updateParamsJson) {
     }
 
     // Apply changes
-    if (typeof syncWidgets === 'function') {
-      syncWidgets();
+    if (typeof window.__syncWidgets === 'function') {
+      window.__syncWidgets();
     }
     return true;
   } catch (e) {
@@ -3102,6 +3104,12 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   document.addEventListener('click', () => {
     if (!menuPanel?.hidden) {
+      menuPanel.hidden = true;
+      menuToggle?.setAttribute('aria-expanded', 'false');
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !menuPanel?.hidden) {
       menuPanel.hidden = true;
       menuToggle?.setAttribute('aria-expanded', 'false');
     }

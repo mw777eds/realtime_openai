@@ -9,7 +9,7 @@ Use this checklist to perform safe, incremental refactors. Keep behavior identic
 - [x] Step 4: Consolidate widget add/remove dispatch into small dispatcher maps (voice/toasts/text/convo) to replace repeated switch statements.
 - [x] Step 5: Centralize default widget rects (DEFAULT_POS) used by add*Widget functions.
 - [ ] Step 6: Reorder functions by module sections (utilities → FM bridge → sessions → history → text chat → toasts → grid/layout → realtime → bootstrap) without changing any logic.
-- [ ] Step 6a: Move initializeWebRTC above DOMContentLoaded so DOMContentLoaded is last.
+- [x] Step 6a: Move initializeWebRTC above DOMContentLoaded so DOMContentLoaded is last.
 - [x] Step 6b: Remove redundant applySettingsForMode call during init to avoid double rebuild.
 - [x] Step 7: Extract safeStr and readFileAsDataUrl into Utilities section (pure helpers only).
 - [x] Step 8: Normalize save/build settings paths to use a single function for current settings bundle where possible (no behavior change).
@@ -69,7 +69,7 @@ Use this checklist to perform safe, incremental refactors. Keep behavior identic
 
 ### Bootstrap and Wiring
 - [x] Keep bootstrapApp near bottom but above DOMContentLoaded wiring.
-- [ ] Keep DOMContentLoaded handler last to wire grid init, widgets, menu, and mount according to persisted/boot settings.
+- [x] Keep DOMContentLoaded handler last to wire grid init, widgets, menu, and mount according to persisted/boot settings.
 - [x] Keep pagehide handler to flush history.
 
 ## Gotchas and Warnings (do not break these)
