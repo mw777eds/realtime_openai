@@ -68,9 +68,9 @@ Use this checklist to perform safe, incremental refactors. Keep behavior identic
 - [x] Ensure cleanupWebRTC resets defaults and clears intervals; stop and null audioTrack.
 
 ### Bootstrap and Wiring
-- [ ] Keep bootstrapApp near bottom but above DOMContentLoaded wiring.
+- [x] Keep bootstrapApp near bottom but above DOMContentLoaded wiring.
 - [ ] Keep DOMContentLoaded handler last to wire grid init, widgets, menu, and mount according to persisted/boot settings.
-- [ ] Keep pagehide handler to flush history.
+- [x] Keep pagehide handler to flush history.
 
 ## Gotchas and Warnings (do not break these)
 - Keep function declarations (not const/arrow) so hoisting preserves call sites above definitions.
