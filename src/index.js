@@ -1314,17 +1314,13 @@ function sendResponseCancel() {
      * Check if there's an active response by checking if audio is playing
      * and if we have an active response ID 
      */
-    // console.log("sendResponseCancel called, activeResponseId:", window.activeResponseId);
-
     if (window.activeResponseId) {
       const cancelEvent = {
         type: "response.cancel"
       };
       dc.send(JSON.stringify(cancelEvent));
-      // console.log("Sent response.cancel event to interrupt model's speech");
       return true;
     } else {
-      // console.log("No active response ID found - skipping cancel event");
       return false;
     }
   } else {
@@ -1344,12 +1340,6 @@ function sendResponseCancel() {
 function hasActiveResponse() {
   /* Check if audio is currently playing */
   const isPlaying = audioEl && audioEl.srcObject && !audioEl.paused;
-  // console.log("hasActiveResponse check:", {
-  //   audioEl: !!audioEl,
-  //   srcObject: !!(audioEl && audioEl.srcObject),
-  //   notPaused: !!(audioEl && !audioEl.paused),
-  //   isPlaying: isPlaying
-  // });
   return isPlaying;
 }
 
@@ -2603,36 +2593,26 @@ function checkAudioActivity() {
  * the existing connection or reinitializes WebRTC if needed.
  */
 async function toggleAudioTransmission() {
-  // console.log('Toggle clicked. Current isPaused:', isPaused);
   isPaused = !isPaused;
-  // console.log('New isPaused state:', isPaused);
-
-  const iconOverlay = document.getElementById('iconOverlay');
-  // console.log('Icon overlay display:', iconOverlay.style.display);
 
   if (isPaused) {
-    // console.log('Pausing audio transmission');
     await stopAudioTransmission();
 
     /* Only attempt to cancel if we have an active response ID */
-    // console.log('Checking for active response before canceling, activeResponseId:', window.activeResponseId);
     if (window.activeResponseId) {
       sendResponseCancel();
     }
 
     showIcon('sleep');
   } else {
-    // console.log('Resuming audio transmission');
     if (!dc || dc.readyState !== "open") {
-      // console.log("Data channel not ready, reinitializing WebRTC");
       /* Reset the paused state since we're reinitializing */
       isPaused = false;
       showIcon('ear');
       cleanupWebRTC(); /* Clean up old connection */
       /* Trigger reinitialization from FileMaker */
       if (window.FileMaker) {
-        /* This needs to be looked at this script should not be used */
-        //window.FileMaker.PerformScript("SendToOpenAI", "");
+        // intentionally left blank: legacy script is disabled
       }
     } else {
       await startAudioTransmission();
@@ -3622,15 +3602,11 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
     dc.addEventListener("message", async (e) => {
       // Realtime server events appear here!
       const realtimeEvent = JSON.parse(e.data);
-      // console.log(`[${new Date().toISOString()}] Type:`, realtimeEvent.type);
-      // console.log(`[${new Date().toISOString()}] Event:`, realtimeEvent);
 
       // Track response state for debugging
       if (realtimeEvent.type === "response.created") {
-        // console.log("Response created, setting activeResponseId:", realtimeEvent.response.id);
         window.activeResponseId = realtimeEvent.response.id;
       } else if (realtimeEvent.type === "response.done") {
-        // console.log("Response done, clearing activeResponseId");
         window.activeResponseId = null;
       }
 
