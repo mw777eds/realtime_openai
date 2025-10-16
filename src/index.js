@@ -457,8 +457,9 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
     cleanupWebRTC();
   }
 
-  // Remove all existing widgets
+  // Remove all existing widgets (batched to prevent reflow/pack during teardown)
   const existing = [...(grid.engine?.nodes || [])];
+  grid.batchUpdate();
   existing.forEach(n => n?.el && grid.removeWidget(n.el));
   realtimeWidgetEl = null;
   toastsWidgetEl = null;
@@ -467,9 +468,12 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
 
   // Add widgets back based on layout (respect toggles) via dispatcher
   const flags = { includeVoice, includeText, includeToasts };
-  layout.forEach(n => {
-    addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h }, flags);
+  const nodesToAdd = Array.isArray(layout) ? [...layout] : [];
+  nodesToAdd.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  nodesToAdd.forEach(n => {
+    addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h, autoPosition: false }, flags);
   });
+  grid.commit();
   } finally {
     mutatingLayout = false;
     if (prefsReady) scheduleSaveSettings(250);
@@ -2822,8 +2826,9 @@ function applyLayout(payload) {
 
   // Conversations docked state is determined by the current mode key; no adjustment here.
 
-  // Remove all existing widgets
+  // Remove all existing widgets (batched to prevent reflow/pack during teardown)
   const existing = [...(grid.engine?.nodes || [])];
+  grid.batchUpdate();
   existing.forEach(n => n?.el && grid.removeWidget(n.el));
   realtimeWidgetEl = null;
   toastsWidgetEl = null;
@@ -2838,9 +2843,12 @@ function applyLayout(payload) {
 
   // Rebuild via dispatcher
   const flags = { includeVoice, includeText, includeToasts };
-  payload.layout.forEach(n => {
-    addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h }, flags);
+  const nodesToAdd = Array.isArray(payload.layout) ? [...payload.layout] : [];
+  nodesToAdd.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  nodesToAdd.forEach(n => {
+    addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h, autoPosition: false }, flags);
   });
+  grid.commit();
 
   // Ensure Conversations widget appears when undocked even if omitted
   if (!isConvosDocked && !convosWidgetEl) {
@@ -3170,7 +3178,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const mode = getCurrentMode();
     const saved = !pos ? getSavedWidgetRect('voice', mode) : null;
     const p = pos || saved || DEFAULT_POS.voice;
-    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
+    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h, autoPosition: p?.autoPosition === false ? false : !!p?.autoPosition });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="realtime-widget">
@@ -3232,7 +3240,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const mode = getCurrentMode();
     const saved = !pos ? getSavedWidgetRect('toasts', mode) : null;
     const p = pos || saved || DEFAULT_POS.toasts;
-    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
+    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h, autoPosition: p?.autoPosition === false ? false : !!p?.autoPosition });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="toasts-widget">
@@ -3272,7 +3280,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const mode = getCurrentMode();
     const saved = !pos ? getSavedWidgetRect('convo', mode) : null;
     const p = pos || saved || DEFAULT_POS.convo;
-    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
+    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h, autoPosition: p?.autoPosition === false ? false : !!p?.autoPosition });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
       <div class="conversations-widget">
@@ -3381,7 +3389,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const mode = getCurrentMode();
     const saved = !pos ? getSavedWidgetRect('text', mode) : null;
     const p = pos || saved || DEFAULT_POS.text;
-    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h });
+    const el = grid.addWidget({ x: p.x, y: p.y, w: p.w, h: p.h, autoPosition: p?.autoPosition === false ? false : !!p?.autoPosition });
     const contentEl = el.querySelector('.grid-stack-item-content') || el;
     contentEl.innerHTML = `
         <div class="text-widget">
