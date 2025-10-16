@@ -465,13 +465,43 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   const flags = { includeVoice, includeText, includeToasts };
   const nodesToAdd = Array.isArray(layout) ? [...layout] : [];
   nodesToAdd.sort((a, b) => (a.y - b.y) || (a.x - b.x));
-  nodesToAdd.forEach(n => {
+  const desiredNodes = nodesToAdd.map(n => ({
+    widget: String(n.widget),
+    x: Number(n.x), y: Number(n.y), w: Number(n.w), h: Number(n.h)
+  }));
+  desiredNodes.forEach(n => {
     addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h, autoPosition: false }, flags);
   });
   grid.commit();
   if (typeof grid.float === 'function') {
     floatEnabled = desiredFloat;
     grid.float(desiredFloat);
+  }
+  // Enforce final positions post-commit and log actual vs desired for diagnostics
+  try {
+    const actual = (grid.engine?.nodes || []).map(n => ({
+      widget: n?.el?.dataset?.widget || null, x: n.x, y: n.y, w: n.w, h: n.h
+    }));
+    const elByType = {
+      voice: realtimeWidgetEl,
+      toasts: toastsWidgetEl,
+      text: textWidgetEl,
+      convo: convosWidgetEl
+    };
+    desiredNodes.forEach(n => {
+      const el = elByType[n.widget];
+      if (el && el.gridstackNode && (el.gridstackNode.x !== n.x || el.gridstackNode.y !== n.y || el.gridstackNode.w !== n.w || el.gridstackNode.h !== n.h)) {
+        grid.update(el, { x: n.x, y: n.y, w: n.w, h: n.h });
+      }
+    });
+    const actualAfter = (grid.engine?.nodes || []).map(n => ({
+      widget: n?.el?.dataset?.widget || null, x: n.x, y: n.y, w: n.w, h: n.h
+    }));
+    const diff = { desired: desiredNodes, actualBefore: actual, actualAfter };
+    window.__lastLayoutDiff = diff;
+    console.warn('[layout:rebuild] enforced positions', { mode: getCurrentMode(), float: desiredFloat, diff });
+  } catch (e) {
+    console.warn('[layout:rebuild] enforcement failed', e);
   }
   } finally {
     mutatingLayout = false;
@@ -2845,13 +2875,70 @@ function applyLayout(payload) {
   const flags = { includeVoice, includeText, includeToasts };
   const nodesToAdd = Array.isArray(payload.layout) ? [...payload.layout] : [];
   nodesToAdd.sort((a, b) => (a.y - b.y) || (a.x - b.x));
-  nodesToAdd.forEach(n => {
+  const desiredNodes = nodesToAdd.map(n => ({
+    widget: String(n.widget),
+    x: Number(n.x), y: Number(n.y), w: Number(n.w), h: Number(n.h)
+  }));
+  desiredNodes.forEach(n => {
     addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h, autoPosition: false }, flags);
   });
   grid.commit();
   if (typeof grid.float === 'function') {
     floatEnabled = desiredFloat;
     grid.float(desiredFloat);
+  }
+
+  // Ensure Conversations widget appears when undocked only if a saved rect exists
+  if (!isConvosDocked && !convosWidgetEl) {
+    const saved = getSavedWidgetRect('convo', getCurrentMode());
+    if (saved) { window.__addConversationsWidget && window.__addConversationsWidget(saved); }
+  }
+
+  // Update menu button states to reflect presence
+  const btnVoice = document.getElementById('btn-voice');
+  const btnText = document.getElementById('btn-text');
+  const btnToasts = document.getElementById('btn-toasts');
+  if (btnVoice) {
+    const on = !!realtimeWidgetEl;
+    btnVoice.classList.toggle('active', on);
+    btnVoice.setAttribute('aria-pressed', String(on));
+  }
+  if (btnText) {
+    const on = !!textWidgetEl;
+    btnText.classList.toggle('active', on);
+    btnText.setAttribute('aria-pressed', String(on));
+  }
+  if (btnToasts) {
+    const on = !!toastsWidgetEl;
+    btnToasts.classList.toggle('active', on);
+    btnToasts.setAttribute('aria-pressed', String(on));
+  }
+
+  // Enforce final positions post-commit and log actual vs desired for diagnostics
+  try {
+    const actual = (grid.engine?.nodes || []).map(n => ({
+      widget: n?.el?.dataset?.widget || null, x: n.x, y: n.y, w: n.w, h: n.h
+    }));
+    const elByType = {
+      voice: realtimeWidgetEl,
+      toasts: toastsWidgetEl,
+      text: textWidgetEl,
+      convo: convosWidgetEl
+    };
+    desiredNodes.forEach(n => {
+      const el = elByType[n.widget];
+      if (el && el.gridstackNode && (el.gridstackNode.x !== n.x || el.gridstackNode.y !== n.y || el.gridstackNode.w !== n.w || el.gridstackNode.h !== n.h)) {
+        grid.update(el, { x: n.x, y: n.y, w: n.w, h: n.h });
+      }
+    });
+    const actualAfter = (grid.engine?.nodes || []).map(n => ({
+      widget: n?.el?.dataset?.widget || null, x: n.x, y: n.y, w: n.w, h: n.h
+    }));
+    const diff = { desired: desiredNodes, actualBefore: actual, actualAfter };
+    window.__lastLayoutDiff = diff;
+    console.warn('[layout:apply] enforced positions', { mode: getCurrentMode(), float: desiredFloat, diff });
+  } catch (e) {
+    console.warn('[layout:apply] enforcement failed', e);
   }
 
   // Ensure Conversations widget appears when undocked only if a saved rect exists
@@ -3199,7 +3286,7 @@ document.addEventListener("DOMContentLoaded", () => {
     el.dataset.widget = 'voice';
     // Cache position and presence for this mode
     const node = el.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === el);
-    updateSavedWidgetRect('voice', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode);
+    if (!mutatingLayout) { updateSavedWidgetRect('voice', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode); }
     ensureModeSettings(mode); 
     persistedSettings[mode].voice = true;
     persistModeSettings(mode);
@@ -3259,7 +3346,7 @@ document.addEventListener("DOMContentLoaded", () => {
     el.dataset.widget = 'toasts';
     // Cache position and presence for this mode
     const node = el.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === el);
-    updateSavedWidgetRect('toasts', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode);
+    if (!mutatingLayout) { updateSavedWidgetRect('toasts', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode); }
     ensureModeSettings(mode);
     persistedSettings[mode].toasts = true;
     persistModeSettings(mode);
@@ -3310,7 +3397,7 @@ document.addEventListener("DOMContentLoaded", () => {
     el.dataset.widget = 'convo';
     // Cache position for this mode
     const node = el.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === el);
-    updateSavedWidgetRect('convo', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode);
+    if (!mutatingLayout) { updateSavedWidgetRect('convo', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode); }
     // prevent drag from inner content
     const listEl = contentEl.querySelector('.conversation-list');
     const btnEl = contentEl.querySelector('.new-convo-btn');
@@ -3418,7 +3505,7 @@ document.addEventListener("DOMContentLoaded", () => {
     el.dataset.widget = 'text';
     // Cache position and presence for this mode
     const node = el.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === el);
-    updateSavedWidgetRect('text', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode);
+    if (!mutatingLayout) { updateSavedWidgetRect('text', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode); }
     ensureModeSettings(mode);
     persistedSettings[mode].text = true;
     persistModeSettings(mode);
