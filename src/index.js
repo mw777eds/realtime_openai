@@ -415,15 +415,6 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   const includeText = options.includeText !== undefined ? !!options.includeText : true;
   const includeToasts = options.includeToasts !== undefined ? !!options.includeToasts : true;
 
-  try {
-    console.log('[rebuildFromLayout]', {
-      mode: getCurrentMode(),
-      includeVoice, includeText, includeToasts,
-      float: !!floatEnabled,
-      layoutCount: Array.isArray(layout) ? layout.length : 0,
-      md5: computeLayoutMD5(layout)
-    });
-  } catch (_) {}
 
   // If tearing down existing voice widget, silence/cleanup Realtime to preserve mute across rebuilds
   if (realtimeWidgetEl) {
@@ -457,21 +448,6 @@ function applySettingsForMode(mode) {
   const settings = persistedSettings[mode];
   if (!settings || !Array.isArray(settings.layout)) return false;
 
-  try {
-    console.log('[applySettingsForMode]', {
-      mode,
-      source: settings.__source || 'unknown',
-      sessionId: settings.__sessionId || null,
-      columns: settings.columns,
-      float: !!settings.float,
-      voice: !!settings.voice,
-      text: !!settings.text,
-      toasts: !!settings.toasts,
-      showToolCalls: !!settings.showToolCalls,
-      layoutCount: settings.layout.length,
-      md5: computeLayoutMD5(settings.layout)
-    });
-  } catch (_) {}
 
   // Apply grid sizing options before rebuilding
   if (typeof settings.columns === 'number' && grid && typeof grid.column === 'function') {
@@ -654,158 +630,6 @@ function safeStr(v, max = 800) {
   }
 }
 
-/* Minimal MD5 implementation for debug hashing (hex string output) */
-/* Based on public-domain/established snippets */
-function md5cycle(x, k) {
-  let [a, b, c, d] = x;
-
-  a = ff(a, b, c, d, k[0], 7, -680876936);
-  d = ff(d, a, b, c, k[1], 12, -389564586);
-  c = ff(c, d, a, b, k[2], 17,  606105819);
-  b = ff(b, c, d, a, k[3], 22, -1044525330);
-  a = ff(a, b, c, d, k[4], 7, -176418897);
-  d = ff(d, a, b, c, k[5], 12,  1200080426);
-  c = ff(c, d, a, b, k[6], 17, -1473231341);
-  b = ff(b, c, d, a, k[7], 22, -45705983);
-  a = ff(a, b, c, d, k[8], 7,  1770035416);
-  d = ff(d, a, b, c, k[9], 12, -1958414417);
-  c = ff(c, d, a, b, k[10], 17, -42063);
-  b = ff(b, c, d, a, k[11], 22, -1990404162);
-  a = ff(a, b, c, d, k[12], 7,  1804603682);
-  d = ff(d, a, b, c, k[13], 12, -40341101);
-  c = ff(c, d, a, b, k[14], 17, -1502002290);
-  b = ff(b, c, d, a, k[15], 22,  1236535329);
-
-  a = gg(a, b, c, d, k[1], 5, -165796510);
-  d = gg(d, a, b, c, k[6], 9, -1069501632);
-  c = gg(c, d, a, b, k[11], 14,  643717713);
-  b = gg(b, c, d, a, k[0], 20, -373897302);
-  a = gg(a, b, c, d, k[5], 5, -701558691);
-  d = gg(d, a, b, c, k[10], 9,  38016083);
-  c = gg(c, d, a, b, k[15], 14, -660478335);
-  b = gg(b, c, d, a, k[4], 20, -405537848);
-  a = gg(a, b, c, d, k[9], 5,  568446438);
-  d = gg(d, a, b, c, k[14], 9, -1019803690);
-  c = gg(c, d, a, b, k[3], 14, -187363961);
-  b = gg(b, c, d, a, k[8], 20,  1163531501);
-  a = gg(a, b, c, d, k[13], 5, -1444681467);
-  d = gg(d, a, b, c, k[2], 9, -51403784);
-  c = gg(c, d, a, b, k[7], 14,  1735328473);
-  b = gg(b, c, d, a, k[12], 20, -1926607734);
-
-  a = hh(a, b, c, d, k[5], 4, -378558);
-  d = hh(d, a, b, c, k[8], 11, -2022574463);
-  c = hh(c, d, a, b, k[11], 16,  1839030562);
-  b = hh(b, c, d, a, k[14], 23, -35309556);
-  a = hh(a, b, c, d, k[1], 4, -1530992060);
-  d = hh(d, a, b, c, k[4], 11,  1272893353);
-  c = hh(c, d, a, b, k[7], 16, -155497632);
-  b = hh(b, c, d, a, k[10], 23, -1094730640);
-  a = hh(a, b, c, d, k[13], 4,  681279174);
-  d = hh(d, a, b, c, k[0], 11, -358537222);
-  c = hh(c, d, a, b, k[3], 16, -722521979);
-  b = hh(b, c, d, a, k[6], 23,  76029189);
-  a = hh(a, b, c, d, k[9], 4, -640364487);
-  d = hh(d, a, b, c, k[12], 11, -421815835);
-  c = hh(c, d, a, b, k[15], 16,  530742520);
-  b = hh(b, c, d, a, k[2], 23, -995338651);
-
-  a = ii(a, b, c, d, k[0], 6, -198630844);
-  d = ii(d, a, b, c, k[7], 10,  1126891415);
-  c = ii(c, d, a, b, k[14], 15, -1416354905);
-  b = ii(b, c, d, a, k[5], 21, -57434055);
-  a = ii(a, b, c, d, k[12], 6,  1700485571);
-  d = ii(d, a, b, c, k[3], 10, -1894986606);
-  c = ii(c, d, a, b, k[10], 15, -1051523);
-  b = ii(b, c, d, a, k[1], 21, -2054922799);
-  a = ii(a, b, c, d, k[8], 6,  1873313359);
-  d = ii(d, a, b, c, k[15], 10, -30611744);
-  c = ii(c, d, a, b, k[6], 15, -1560198380);
-  b = ii(b, c, d, a, k[13], 21,  1309151649);
-
-  x[0] = (x[0] + a) | 0;
-  x[1] = (x[1] + b) | 0;
-  x[2] = (x[2] + c) | 0;
-  x[3] = (x[3] + d) | 0;
-}
-function cmn(q, a, b, x, s, t) {
-  a = (a + q + x + t) | 0;
-  return (((a << s) | (a >>> (32 - s))) + b) | 0;
-}
-function ff(a, b, c, d, x, s, t) {
-  return cmn((b & c) | (~b & d), a, b, x, s, t);
-}
-function gg(a, b, c, d, x, s, t) {
-  return cmn((b & d) | (c & ~b), a, b, x, s, t);
-}
-function hh(a, b, c, d, x, s, t) {
-  return cmn(b ^ c ^ d, a, b, x, s, t);
-}
-function ii(a, b, c, d, x, s, t) {
-  return cmn(c ^ (b | ~d), a, b, x, s, t);
-}
-function md51(s) {
-  const n = s.length;
-  const state = [1732584193, -271733879, -1732584194, 271733878];
-  let i;
-  for (i = 64; i <= n; i += 64) {
-    md5cycle(state, md5blk(s.substring(i - 64, i)));
-  }
-  s = s.substring(i - 64);
-  const tail = new Array(16).fill(0);
-  for (i = 0; i < s.length; i++)
-    tail[i >> 2] |= s.charCodeAt(i) << ((i % 4) << 3);
-  tail[s.length >> 2] |= 0x80 << ((s.length % 4) << 3);
-  if (s.length > 55) {
-    md5cycle(state, tail);
-    for (i = 0; i < 16; i++) tail[i] = 0;
-  }
-  tail[14] = n * 8;
-  md5cycle(state, tail);
-  return state;
-}
-function md5blk(s) {
-  const md5blks = [];
-  for (let i = 0; i < 64; i += 4) {
-    md5blks[i >> 2] = s.charCodeAt(i)
-      + (s.charCodeAt(i + 1) << 8)
-      + (s.charCodeAt(i + 2) << 16)
-      + (s.charCodeAt(i + 3) << 24);
-  }
-  return md5blks;
-}
-function rhex(n) {
-  const s = '0123456789abcdef';
-  let j;
-  let out = '';
-  for (j = 0; j < 4; j++) {
-    out += s.charAt((n >> (j * 8 + 4)) & 0x0F) + s.charAt((n >> (j * 8)) & 0x0F);
-  }
-  return out;
-}
-function hex(x) {
-  for (let i = 0; i < x.length; i++) x[i] = rhex(x[i]);
-  return x.join('');
-}
-function md5(str) {
-  return hex(md51(String(str)));
-}
-/* Debug helpers */
-function computeSettingsMD5(obj) {
-  try {
-    const s = typeof obj === 'string' ? obj : JSON.stringify(obj);
-    return md5(s);
-  } catch (_) {
-    return 'md5-error';
-  }
-}
-function computeLayoutMD5(layout) {
-  try {
-    return md5(JSON.stringify(Array.isArray(layout) ? layout : []));
-  } catch (_) {
-    return 'md5-error';
-  }
-}
 
 /**
  * Safely send a JSON event over the RTCDataChannel with basic backpressure handling.
@@ -1179,11 +1003,6 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
 
   // Log concise info for debugging image sends
   {
-    const __b64Len = (processedDataUrl.split(',')[1] || '').length;
-    const __estKB = Math.round(__b64Len * 0.75 / 1024);
-    console.log(`Sending image to Realtime (~${__estKB} KB, resized: ${wasResized ? 'yes' : 'no'}, type: ${normalized.mimeType || 'unknown'})`);
-    console.log('RTC maxMessageSize:', pc?.sctp?.maxMessageSize);
-    console.log('Event JSON size (bytes):', JSON.stringify(conversationEvent).length);
   }
 
   const okImage = dcSendJSONSafe(conversationEvent, { highVolume: true });
@@ -1861,7 +1680,6 @@ function chatHistoryToText() {
 function logChatHistory() {
   const text = chatHistoryToText();
   // Use a single console.log to keep it easy to copy
-  console.log(text);
   return text;
 }
 
@@ -1879,7 +1697,6 @@ function getChatBuffer() {
  */
 function logChatBufferRaw(pretty = true) {
   const out = pretty ? JSON.stringify(getChatBuffer(), null, 2) : JSON.stringify(getChatBuffer());
-  console.log(out);
   return out;
 }
 
@@ -1907,20 +1724,6 @@ function saveSession(opts = {}) {
   const payload = { sessionId: window.__sessionId || "" };
   if (options.settings) {
     payload.settings = buildSessionSettingsBundle();
-    try {
-      const md5All = computeSettingsMD5(payload.settings);
-      const docked = Array.isArray(payload.settings?.layout?.docked) ? payload.settings.layout.docked : [];
-      const undocked = Array.isArray(payload.settings?.layout?.undocked) ? payload.settings.layout.undocked : [];
-      console.log('[Session_SaveState] Upload settings', {
-        sessionId: payload.sessionId,
-        mode: getCurrentMode(),
-        md5_all: md5All,
-        md5_docked: computeLayoutMD5(docked),
-        md5_undocked: computeLayoutMD5(undocked),
-        dockedCount: docked.length,
-        undockedCount: undocked.length
-      });
-    } catch (_) {}
   }
   if (options.history) {
     payload.history = Array.isArray(sessionHistory) ? sessionHistory.slice() : [];
@@ -2223,7 +2026,6 @@ function ensureRealtimeReady() {
       return;
     }
     if (!window.__rtInitNoticeShown) {
-      console.log('FileMaker not available; call applyRealtimeInit(...) manually.');
       window.__rtInitNoticeShown = true;
     }
     __rtState = 'idle';
@@ -2407,15 +2209,6 @@ function bootstrapApp(payload) {
           };
           try {
             localStorage.setItem(`settings:${k}`, JSON.stringify({ key: k, settings: persistedSettings[k] }));
-          } catch (_) {}
-          try {
-            console.log('[bootstrapApp] Seed layout', {
-              key: k,
-              source: persistedSettings[k].__source,
-              sessionId: persistedSettings[k].__sessionId,
-              layoutCount: arr.length,
-              md5: computeLayoutMD5(arr)
-            });
           } catch (_) {}
         }
       });
@@ -2904,14 +2697,6 @@ function saveCurrentLayout() {
     const key = isConvosDocked ? 'docked' : 'undocked';
     const settingsSnapshot = computeCurrentSettingsSnapshot();
 
-    try {
-      console.log('[Grid_SaveLayout] Upload', {
-        key,
-        sessionId: window.__sessionId || null,
-        layoutCount: Array.isArray(settingsSnapshot?.layout) ? settingsSnapshot.layout.length : 0,
-        md5: computeLayoutMD5(settingsSnapshot?.layout)
-      });
-    } catch (_) {}
 
     // Cache in-memory and localStorage for this mode
     persistedSettings[key] = { ...settingsSnapshot, __source: 'session', __sessionId: window.__sessionId || null };
@@ -2980,9 +2765,6 @@ function loadLayoutForCurrentMode() {
         sessionId: window.__sessionId || "",
         key
       };
-      try {
-        console.log('[Grid_LoadLayout] Request', { key, sessionId: payload.sessionId });
-      } catch (_) {}
       callFM(FM_SCRIPTS.GridLoad, payload);
       // FM not wired yet: return false to allow default fallback (syncWidgets) to run
       return false;
@@ -2995,13 +2777,6 @@ function loadLayoutForCurrentMode() {
         const env = JSON.parse(raw);
         if (env && env.settings && Array.isArray(env.settings.layout)) {
           persistedSettings[key] = env.settings;
-          try {
-            console.log('[Grid_LoadLayout] Fallback localStorage', {
-              key,
-              layoutCount: env.settings.layout.length,
-              md5: computeLayoutMD5(env.settings.layout)
-            });
-          } catch (_) {}
         }
       }
     }
@@ -3021,14 +2796,6 @@ function loadLayoutForCurrentMode() {
 function applyLayout(payload) {
   if (!grid || !payload || !Array.isArray(payload.layout)) return;
 
-  try {
-    console.log('[applyLayout]', {
-      mode: getCurrentMode(),
-      float: typeof payload.float === 'boolean' ? !!payload.float : floatEnabled,
-      layoutCount: payload.layout.length,
-      md5: computeLayoutMD5(payload.layout)
-    });
-  } catch (_) {}
 
   // Respect float setting
   if (typeof payload.float === 'boolean' && typeof grid.float === 'function') {
@@ -3124,15 +2891,6 @@ function applySettingsEnvelope(envelope) {
       try {
         localStorage.setItem(`settings:${k}`, JSON.stringify({ key: k, settings: persistedSettings[k] }));
       } catch (_) {}
-      try {
-        console.log('[applySettingsEnvelope]', {
-          key: k,
-          source: persistedSettings[k].__source,
-          sessionId: persistedSettings[k].__sessionId,
-          layoutCount: arr.length,
-          md5: computeLayoutMD5(arr)
-        });
-      } catch (_) {}
     }
   });
 
@@ -3159,11 +2917,6 @@ function applyLoadedLayout(payload) {
 
   // If payload targets a different session → ignore
   if (payloadSessionId && payloadSessionId !== currentSessionId) {
-    try {
-      console.log('[applyLoadedLayout] Ignored: payload for different session', {
-        payloadSessionId, currentSessionId, mode: currentMode
-      });
-    } catch (_) {}
     return false;
   }
 
@@ -3172,22 +2925,11 @@ function applyLoadedLayout(payload) {
 
   // If we already have a session-scoped layout for this session and incoming has no sessionId, ignore machine/default override
   if (!payloadSessionId && currentSource === 'session' && currentHasLayout) {
-    try {
-      console.log('[applyLoadedLayout] Ignored: machine/default envelope would override session-scoped layout', {
-        mode: currentMode, currentSource, currentHasLayout
-      });
-    } catch (_) {}
     return false;
   }
 
   // Full envelope path
   if (obj.settings || obj.key || (obj.layout && typeof obj.layout === 'object' && !Array.isArray(obj.layout))) {
-    try {
-      console.log('[applyLoadedLayout] Applying settings envelope', {
-        mode: currentMode,
-        payloadSessionId: payloadSessionId || null
-      });
-    } catch (_) {}
     return applySettingsEnvelope(obj);
   }
 
@@ -3203,15 +2945,6 @@ function applyLoadedLayout(payload) {
     persistedSettings[currentMode] = s;
     try {
       localStorage.setItem(`settings:${currentMode}`, JSON.stringify({ key: currentMode, settings: s }));
-    } catch (_) {}
-    try {
-      console.log('[applyLoadedLayout] Applied array payload into persistedSettings', {
-        mode: currentMode,
-        source: s.__source,
-        sessionId: s.__sessionId,
-        layoutCount: Array.isArray(s.layout) ? s.layout.length : 0,
-        md5: computeLayoutMD5(s.layout)
-      });
     } catch (_) {}
 
     applySettingsForMode(currentMode);
@@ -3379,13 +3112,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const nodes = Array.isArray(movedNodes) ? movedNodes : (evt && Array.isArray(evt.nodes) ? evt.nodes : []);
     if (!nodes || nodes.length === 0) return;
 
-    try {
-      console.log('[Grid change]', {
-        event: evt?.type || 'change',
-        mode,
-        count: nodes.length
-      });
-    } catch (_) {}
 
     if (!prefsReady) {
       // Mark pending so we can flush once ready (covers first move/resize before init completes)
@@ -3802,9 +3528,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   prefsReady = true;
   if (window.__pendingLayoutDirty) {
-    try {
-      console.log('[init] Flushing pending layout changes after ready');
-    } catch (_) {}
     saveSession({ settings: true });
     window.__pendingLayoutDirty = false;
   }
@@ -4007,23 +3730,6 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
         }
         // If a recent image was uploaded, log a concise result from the model's output
         if (window.__lastImageSendAt && Date.now() - window.__lastImageSendAt < 15000) {
-          try {
-            const out = realtimeEvent.response.output || [];
-            let resultText = null;
-            for (const it of out) {
-              const parts = Array.isArray(it.content) ? it.content : [];
-              for (const part of parts) {
-                if (typeof part?.text === 'string' && part.text) { resultText = part.text; break; }
-                if (typeof part?.transcript === 'string' && part.transcript) { resultText = part.transcript; break; }
-              }
-              if (resultText) break;
-            }
-            if (resultText) {
-              console.log('Image response:', resultText);
-            } else {
-              console.log('Image response: (no text content returned)');
-            }
-          } catch (_) {}
           window.__lastImageSendAt = 0;
         }
       }
