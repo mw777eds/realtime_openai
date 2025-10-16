@@ -435,9 +435,10 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   mutatingLayout = true;
   try {
 
-  if (typeof float === 'boolean' && typeof grid.float === 'function') {
-    floatEnabled = float;
-    grid.float(floatEnabled);
+  const desiredFloat = (typeof float === 'boolean') ? !!float : !!floatEnabled;
+  if (typeof grid.float === 'function') {
+    // Prevent intermediate repack while removing/adding nodes
+    grid.float(false);
   }
 
   const includeVoice = options.includeVoice !== undefined ? !!options.includeVoice : true;
@@ -474,6 +475,10 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
     addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h, autoPosition: false }, flags);
   });
   grid.commit();
+  if (typeof grid.float === 'function') {
+    floatEnabled = desiredFloat;
+    grid.float(desiredFloat);
+  }
   } finally {
     mutatingLayout = false;
     if (prefsReady) scheduleSaveSettings(250);
@@ -2819,9 +2824,10 @@ function applyLayout(payload) {
 
 
   // Respect float setting
-  if (typeof payload.float === 'boolean' && typeof grid.float === 'function') {
-    floatEnabled = payload.float;
-    grid.float(floatEnabled);
+  const desiredFloat = (typeof payload.float === 'boolean') ? !!payload.float : !!floatEnabled;
+  if (typeof grid.float === 'function') {
+    // Prevent intermediate repack while removing/adding nodes
+    grid.float(false);
   }
 
   // Conversations docked state is determined by the current mode key; no adjustment here.
@@ -2849,6 +2855,10 @@ function applyLayout(payload) {
     addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h, autoPosition: false }, flags);
   });
   grid.commit();
+  if (typeof grid.float === 'function') {
+    floatEnabled = desiredFloat;
+    grid.float(desiredFloat);
+  }
 
   // Ensure Conversations widget appears when undocked even if omitted
   if (!isConvosDocked && !convosWidgetEl) {
@@ -3135,7 +3145,8 @@ document.addEventListener("DOMContentLoaded", () => {
       margin: 6,
       dragHandle: '.gs-handle',
       draggable: { handle: '.gs-handle' },
-      resizable: { handles: 'e,se,s,sw,w' }
+      resizable: { handles: 'e,se,s,sw,w' },
+      disableOneColumnMode: true
     },
     '#appGrid'
   );
@@ -3192,7 +3203,8 @@ document.addEventListener("DOMContentLoaded", () => {
     realtimeWidgetEl = el;
     el.dataset.widget = 'voice';
     // Cache position and presence for this mode
-    updateSavedWidgetRect('voice', p, mode);
+    const node = el.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === el);
+    updateSavedWidgetRect('voice', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode);
     ensureModeSettings(mode); 
     persistedSettings[mode].voice = true;
     persistModeSettings(mode);
@@ -3250,7 +3262,8 @@ document.addEventListener("DOMContentLoaded", () => {
     toastsWidgetEl = el;
     el.dataset.widget = 'toasts';
     // Cache position and presence for this mode
-    updateSavedWidgetRect('toasts', p, mode);
+    const node = el.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === el);
+    updateSavedWidgetRect('toasts', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode);
     ensureModeSettings(mode);
     persistedSettings[mode].toasts = true;
     persistModeSettings(mode);
@@ -3299,7 +3312,8 @@ document.addEventListener("DOMContentLoaded", () => {
     convosWidgetEl = el;
     el.dataset.widget = 'convo';
     // Cache position for this mode
-    updateSavedWidgetRect('convo', p, mode);
+    const node = el.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === el);
+    updateSavedWidgetRect('convo', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode);
     // prevent drag from inner content
     const listEl = contentEl.querySelector('.conversation-list');
     const btnEl = contentEl.querySelector('.new-convo-btn');
@@ -3405,7 +3419,8 @@ document.addEventListener("DOMContentLoaded", () => {
     textWidgetEl = el;
     el.dataset.widget = 'text';
     // Cache position and presence for this mode
-    updateSavedWidgetRect('text', p, mode);
+    const node = el.gridstackNode || (grid.engine?.nodes || []).find(n => n.el === el);
+    updateSavedWidgetRect('text', node ? { x: node.x, y: node.y, w: node.w, h: node.h } : p, mode);
     ensureModeSettings(mode);
     persistedSettings[mode].text = true;
     persistModeSettings(mode);
