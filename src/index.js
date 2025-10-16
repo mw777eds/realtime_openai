@@ -2940,32 +2940,6 @@ function applyLayout(payload) {
   } catch (e) {
     console.warn('[layout:apply] enforcement failed', e);
   }
-
-  // Ensure Conversations widget appears when undocked only if a saved rect exists
-  if (!isConvosDocked && !convosWidgetEl) {
-    const saved = getSavedWidgetRect('convo', getCurrentMode());
-    if (saved) { window.__addConversationsWidget && window.__addConversationsWidget(saved); }
-  }
-
-  // Update menu button states to reflect presence
-  const btnVoice = document.getElementById('btn-voice');
-  const btnText = document.getElementById('btn-text');
-  const btnToasts = document.getElementById('btn-toasts');
-  if (btnVoice) {
-    const on = !!realtimeWidgetEl;
-    btnVoice.classList.toggle('active', on);
-    btnVoice.setAttribute('aria-pressed', String(on));
-  }
-  if (btnText) {
-    const on = !!textWidgetEl;
-    btnText.classList.toggle('active', on);
-    btnText.setAttribute('aria-pressed', String(on));
-  }
-  if (btnToasts) {
-    const on = !!toastsWidgetEl;
-    btnToasts.classList.toggle('active', on);
-    btnToasts.setAttribute('aria-pressed', String(on));
-  }
   } finally {
     mutatingLayout = false;
     if (prefsReady && !applyingFromFM) scheduleSaveSettings(250);
