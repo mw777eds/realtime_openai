@@ -13,7 +13,9 @@
     "generate-script-steps": "node ./scripts/generate-script-steps",
     "reset-dev": "npm run clear-cache && npm run start",
     "start-fm-dev": "node ./scripts/start-fm-dev",
-    "open-dev-browser": "open http://localhost:1234"
+    "open-dev-browser": "open http://localhost:1234",
+    "lint": "eslint src --ext .js",
+    "lint:fix": "eslint src --ext .js --fix"
   },
   "type": "module",
   "browserslist": "> 0.5%, last 2 versions, not dead",

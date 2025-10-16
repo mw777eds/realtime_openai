@@ -12,5 +12,6 @@ module.exports = {
     "no-var": "warn",
     "no-undef": "off",
     "no-unused-vars": "warn",
+    "no-console": ["warn", { "allow": ["warn", "error"] }],
   },
 };

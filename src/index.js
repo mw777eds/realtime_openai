@@ -1011,7 +1011,7 @@ async function sendContainerImageToRealtime(imagePayload, requestResponse = true
     showToast("Failed to send image to assistant. Try again.", "tool-error", "left", null, 6);
     return false;
   }
-  console.log("Image message sent to Realtime");
+  
 
   // Defer tool enabling slightly to avoid backpressure after large image payload
   setTimeout(() => {
@@ -1909,7 +1909,6 @@ function copyMinifiedHistory() {
     try { document.execCommand('copy'); showToast('Copied test payload to clipboard', 'agent', 'right', null, 4); } catch (_) {}
     document.body.removeChild(ta);
   }
-  console.log(text);
   return text;
 }
 
@@ -2713,7 +2712,7 @@ function saveCurrentLayout() {
       settings: settingsSnapshot
     };
     if (!callFM(FM_SCRIPTS.GridSave, envelope)) {
-      console.log('Layout envelope:', envelope);
+      console.warn('FileMaker not available; Layout envelope:', envelope);
     }
 
     return true;
