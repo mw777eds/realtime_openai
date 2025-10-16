@@ -9,15 +9,76 @@ function debugTrace(label, data) {
   try {
     const doc = document;
     if (!doc || !doc.body) return;
+
+    let wrap = doc.getElementById('__debugWrap');
     let pane = doc.getElementById('__debugPane');
-    if (!pane) {
+
+    if (!wrap) {
+      // Wrapper
+      wrap = doc.createElement('div');
+      wrap.id = '__debugWrap';
+      wrap.style.cssText =
+        'position:fixed;bottom:0;left:0;max-height:45vh;max-width:70vw;background:rgba(0,0,0,.8);color:#9f9;margin:0;z-index:99999;border-top-right-radius:6px;display:flex;flex-direction:column;pointer-events:auto;';
+
+      // Toolbar
+      const bar = doc.createElement('div');
+      bar.id = '__debugBar';
+      bar.style.cssText =
+        'display:flex;gap:6px;align-items:center;justify-content:flex-end;padding:4px 6px;border-bottom:1px solid rgba(255,255,255,.2);';
+
+      const title = doc.createElement('div');
+      title.textContent = 'On-screen Debugging';
+      title.style.cssText = 'margin-right:auto;color:#fff;font:12px/1.2 monospace;';
+
+      const mkBtn = (txt) => {
+        const b = doc.createElement('button');
+        b.textContent = txt;
+        b.style.cssText =
+          'background:#1f2937;color:#fff;border:1px solid #4b5563;border-radius:4px;padding:2px 6px;font:12px/1.2 monospace;cursor:pointer;';
+        return b;
+      };
+
+      const copyBtn = mkBtn('Copy');
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        try {
+          const txt = (pane && pane.textContent) ? pane.textContent : '';
+          if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(txt);
+          } else {
+            const ta = doc.createElement('textarea');
+            ta.value = txt;
+            doc.body.appendChild(ta);
+            ta.select();
+            try { doc.execCommand('copy'); } catch (_) {}
+            doc.body.removeChild(ta);
+          }
+        } catch (_) {}
+      });
+
+      const clearBtn = mkBtn('Clear');
+      clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (pane) pane.textContent = '';
+      });
+
+      bar.appendChild(title);
+      bar.appendChild(copyBtn);
+      bar.appendChild(clearBtn);
+
+      // Log pane
       pane = doc.createElement('pre');
       pane.id = '__debugPane';
-      pane.style.cssText = 'position:fixed;bottom:0;left:0;max-height:40vh;max-width:60vw;overflow:auto;background:rgba(0,0,0,.75);color:#9f9;padding:6px 8px;margin:0;font:12px/1.2 monospace;z-index:99999;white-space:pre-wrap;pointer-events:auto;border-top-right-radius:6px;';
-      pane.title = 'Debug output (click to clear)';
-      pane.addEventListener('click', () => { pane.textContent = ''; });
-      doc.body.appendChild(pane);
+      pane.style.cssText =
+        'margin:0;padding:6px 8px;max-height:40vh;max-width:70vw;overflow:auto;white-space:pre-wrap;font:12px/1.2 monospace;';
+
+      wrap.appendChild(bar);
+      wrap.appendChild(pane);
+      doc.body.appendChild(wrap);
     }
+
+    if (!pane) pane = doc.getElementById('__debugPane');
+
     let json;
     try { json = typeof data === 'string' ? data : JSON.stringify(data); } catch { json = String(data); }
     pane.textContent += '[' + new Date().toLocaleTimeString() + '] ' + label + ' ' + json + '\n';
