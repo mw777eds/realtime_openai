@@ -85,6 +85,34 @@ function debugTrace(label, data) {
   } catch (_) {}
 }
 
+/* Snapshot current mode, persisted layout, and live grid nodes for diagnostics */
+function __snapshotLayoutState() {
+  let mode = 'docked';
+  try { mode = getCurrentMode(); } catch (_) {}
+  const persisted = (persistedSettings && persistedSettings[mode]) ? persistedSettings[mode] : null;
+  const persistedLayout = (persisted && Array.isArray(persisted.layout)) ? persisted.layout : [];
+  const md5 = (typeof computeLayoutMD5 === 'function') ? computeLayoutMD5(persistedLayout) : null;
+  const nodes = (grid && grid.engine && Array.isArray(grid.engine.nodes))
+    ? grid.engine.nodes.map(n => ({ widget: n?.el?.dataset?.widget || null, x: n.x, y: n.y, w: n.w, h: n.h }))
+    : [];
+  return {
+    mode,
+    float: !!floatEnabled,
+    persisted: { md5, layout: persistedLayout },
+    grid: { nodes }
+  };
+}
+
+/* Convenience wrapper to log with a trigger/cause and include a snapshot */
+function logWithSnapshot(trigger, details = {}) {
+  try {
+    const snap = __snapshotLayoutState();
+    debugTrace(trigger, { ...details, snapshot: snap });
+  } catch (_) {
+    try { debugTrace(trigger, details); } catch (__){}
+  }
+}
+ 
 /*
  ==============================================================================
  File: src/index.js
@@ -194,6 +222,7 @@ function switchSession(newSessionId) {
   const current = window.__sessionId || '';
   if (!newSessionId || newSessionId === current) return false;
 
+  logWithSnapshot('[ui] switchSession:pre', { from: current, to: String(newSessionId) });
   try { saveSession({ history: true }); } catch (_) {}
   window.__sessionId = newSessionId;
   highlightActiveSession(newSessionId);
@@ -203,6 +232,7 @@ function switchSession(newSessionId) {
     if (list) list.innerHTML = '';
   } catch (_) {}
   requestSessionState(newSessionId);
+  logWithSnapshot('[ui] switchSession:post', { to: String(newSessionId) });
   return true;
 }
 
@@ -2807,6 +2837,7 @@ async function toggleAudioTransmission() {
 function setUISettings(updateParamsJson) {
   try {
     const settings = typeof updateParamsJson === 'string' ? JSON.parse(updateParamsJson) : (updateParamsJson || {});
+    logWithSnapshot('[api] setUISettings', { payload: settings });
     const voice = settings.voice ?? settings.realtime ?? settings.audio;
     const text = settings.text ?? settings.chat;
     const convos = settings.convos ?? settings.conversations ?? settings.sidebar;
@@ -2854,6 +2885,7 @@ function saveCurrentLayout() {
     const key = isConvosDocked ? 'docked' : 'undocked';
     const settingsSnapshot = computeCurrentSettingsSnapshot();
 
+    logWithSnapshot('[layout] saveCurrentLayout', { key, md5: computeLayoutMD5(settingsSnapshot?.layout || []) });
 
     // Cache in-memory and localStorage for this mode
     persistedSettings[key] = { ...settingsSnapshot, __source: 'session', __sessionId: window.__sessionId || null };
@@ -2922,6 +2954,7 @@ function loadLayoutForCurrentMode() {
         sessionId: window.__sessionId || "",
         key
       };
+      logWithSnapshot('[layout] request load', { key });
       callFM(FM_SCRIPTS.GridLoad, payload);
       // FM not wired yet: return false to allow default fallback (syncWidgets) to run
       return false;
@@ -3683,44 +3716,54 @@ document.addEventListener("DOMContentLoaded", () => {
   // Toggle buttons
   btnVoice?.addEventListener('click', (e) => {
     e.stopPropagation();
+    logWithSnapshot('[ui] click', { trigger: 'btn-voice:pre' });
     const on = !btnVoice.classList.contains('active');
     setPressed(btnVoice, on);
     syncWidgets();
     savePreferences();
+    logWithSnapshot('[ui] click', { trigger: 'btn-voice:post' });
   });
   btnText?.addEventListener('click', (e) => {
     e.stopPropagation();
+    logWithSnapshot('[ui] click', { trigger: 'btn-text:pre' });
     const on = !btnText.classList.contains('active');
     setPressed(btnText, on);
     syncWidgets();
     savePreferences();
+    logWithSnapshot('[ui] click', { trigger: 'btn-text:post' });
   });
   btnToasts?.addEventListener('click', (e) => {
     e.stopPropagation();
+    logWithSnapshot('[ui] click', { trigger: 'btn-toasts:pre' });
     const on = !btnToasts.classList.contains('active');
     setPressed(btnToasts, on);
     syncWidgets();
     savePreferences();
+    logWithSnapshot('[ui] click', { trigger: 'btn-toasts:post' });
   });
   // Show Tool Calls toggle
   btnToolCalls?.addEventListener('click', (e) => {
     e.stopPropagation();
+    logWithSnapshot('[ui] click', { trigger: 'btn-tool-calls:pre' });
     const on = !btnToolCalls.classList.contains('active');
     setPressed(btnToolCalls, on);
     showToolPills = on;
     renderChatFromHistory();
     savePreferences();
+    logWithSnapshot('[ui] click', { trigger: 'btn-tool-calls:post' });
   });
 
   // Copy Test Payload button
   btnCopyMinified?.addEventListener('click', (e) => {
     e.stopPropagation();
+    logWithSnapshot('[ui] click', { trigger: 'btn-copy-minified' });
     copyMinifiedHistory();
   });
 
   // Float toggle
   btnToggleFloat?.addEventListener('click', (e) => {
     e.stopPropagation();
+    logWithSnapshot('[ui] click', { trigger: 'btn-toggle-float:pre' });
     floatEnabled = !floatEnabled;
     if (typeof grid.float === 'function') {
       grid.float(floatEnabled);
@@ -3730,14 +3773,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     btnToggleFloat.textContent = floatEnabled ? 'Float On' : 'Float Off';
     savePreferences();
+    logWithSnapshot('[ui] click', { trigger: 'btn-toggle-float:post' });
   });
 
   // Save/Restore
-  btnSaveLayout?.addEventListener('click', (e) => { e.stopPropagation(); saveCurrentLayout(); });
-  btnRestoreLayout?.addEventListener('click', (e) => { e.stopPropagation(); restoreDefaultLayout(); });
+  btnSaveLayout?.addEventListener('click', (e) => { e.stopPropagation(); logWithSnapshot('[ui] click', { trigger: 'btn-save-layout' }); saveCurrentLayout(); });
+  btnRestoreLayout?.addEventListener('click', (e) => { e.stopPropagation(); logWithSnapshot('[ui] click', { trigger: 'btn-restore-layout' }); restoreDefaultLayout(); });
 
   document.getElementById('dock-convos-btn')?.addEventListener('click', (e) => {
     e.stopPropagation();
+    logWithSnapshot('[ui] click', { trigger: 'dock-convos-btn' });
     if (isConvosDocked) undockConvos(); else dockConvos();
   });
 
