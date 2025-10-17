@@ -162,10 +162,15 @@ let showToolPills = false;
 let prefsReady = false;
 let applyingFromFM = false;
 let mutatingLayout = false;
+let settingsSaveTimer = null;
 let layoutSaveTimer = null;
 function scheduleSaveSettings(delay = 400) {
+  if (settingsSaveTimer) { try { clearTimeout(settingsSaveTimer); } catch (_) {} }
+  settingsSaveTimer = setTimeout(() => { try { saveSession({ settings: true }); } catch (_) {} }, Math.max(0, delay));
+}
+function scheduleSaveLayout(delay = 400) {
   if (layoutSaveTimer) { try { clearTimeout(layoutSaveTimer); } catch (_) {} }
-  layoutSaveTimer = setTimeout(() => { try { saveSession({ settings: true }); } catch (_) {} }, Math.max(0, delay));
+  layoutSaveTimer = setTimeout(() => { try { saveSession({ layout: true }); } catch (_) {} }, Math.max(0, delay));
 }
 
 /* ================================ */
@@ -174,11 +179,24 @@ function scheduleSaveSettings(delay = 400) {
 /* Sessions list (for sidebar and undocked Conversations widget) */
 window.__sessions = window.__sessions || []; // [{id, title}]
 function setSessionList(list) {
-  if (!Array.isArray(list)) return;
-  window.__sessions = list.map(it => ({
-    id: String(it.id || it.sessionId || ''),
-    title: String(it.title || it.name || it.id || '')
-  })).filter(it => it.id);
+  if (!Array.isArray(list)) {
+    try { showToast('Invalid sessions list: expected an array', 'tool-error', 'left', null, 6); } catch (_) {}
+    return;
+  }
+  let warned = false;
+  window.__sessions = list.map(it => {
+    const sid = (it && typeof it.sessionId === 'string') ? it.sessionId
+      : (it && typeof it.id === 'string') ? it.id
+      : '';
+    const title = (it && typeof it.title === 'string') ? it.title
+      : (it && typeof it.name === 'string') ? it.name
+      : (sid || '');
+    if ((!it || typeof it.sessionId !== 'string' || typeof it.title !== 'string') && !warned) {
+      warned = true;
+      try { showToast('Sessions should use {sessionId, title}. Falling back on legacy keys.', 'tool-error', 'left', null, 6); } catch (_) {}
+    }
+    return { id: String(sid), title: String(title) };
+  }).filter(it => it.id);
   renderSessionList();
 }
 
@@ -621,7 +639,7 @@ function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
   }
   } finally {
     mutatingLayout = false;
-    if (prefsReady && !applyingFromFM) scheduleSaveSettings(250);
+    if (prefsReady && !applyingFromFM) scheduleSaveLayout(250);
   }
 }
 
@@ -1901,6 +1919,13 @@ function saveSession(opts = {}) {
   const payload = { sessionId: window.__sessionId || "" };
   if (options.settings) {
     payload.settings = buildSessionSettingsBundle();
+    // Guardrail: settings should not include layout anymore
+    if (payload.settings && Object.prototype.hasOwnProperty.call(payload.settings, 'layout')) {
+      try { delete payload.settings.layout; showToast('Removed settings.layout; layout must be sent at root-level.', 'tool-error', 'left', null, 6); } catch (_) {}
+    }
+  }
+  if (options.layout) {
+    payload.layout = buildSessionLayoutBundle();
   }
   if (options.history) {
     payload.history = Array.isArray(sessionHistory) ? sessionHistory.slice() : [];
@@ -1949,7 +1974,7 @@ function computeCurrentSettingsSnapshot() {
  */
 function buildSessionSettingsBundle() {
   const toggles = getCurrentToggleSettings();
-  const base = {
+  return {
     version: 1,
     columns: grid?.engine?.column || grid?.opts?.column || 12,
     cellHeight: undefined,
@@ -1959,7 +1984,12 @@ function buildSessionSettingsBundle() {
     toasts: !!toggles.toasts,
     showToolCalls: !!toggles.showToolCalls
   };
+}
 
+/**
+ * Build a root-level layout bundle per mode.
+ */
+function buildSessionLayoutBundle() {
   const currentSnapshot = computeCurrentSettingsSnapshot();
   const currentMode = getCurrentMode();
 
@@ -1972,11 +2002,8 @@ function buildSessionSettingsBundle() {
     : (currentMode === 'undocked' ? (currentSnapshot?.layout || []) : []);
 
   return {
-    ...base,
-    layout: {
-      docked: dockedLayout,
-      undocked: undockedLayout
-    }
+    docked: dockedLayout,
+    undocked: undockedLayout
   };
 }
 
@@ -2364,10 +2391,13 @@ function bootstrapApp(payload) {
     // Cache per-mode settings (normalize debug -> toasts)
     const s = data.settings || {};
     const toasts = (s.toasts !== undefined) ? !!s.toasts : !!s.debug;
-    // Accept top-level layout {docked:[], undocked:[]} or legacy settings.layout
+    // Accept layout only at root-level
     const layoutObj = (data.layout && typeof data.layout === 'object' && !Array.isArray(data.layout))
       ? data.layout
-      : (s.layout && typeof s.layout === 'object' && !Array.isArray(s.layout) ? s.layout : null);
+      : null;
+    if (!layoutObj && s && typeof s.layout === 'object' && !Array.isArray(s.layout)) {
+      try { showToast('[bootstrapApp] Ignored settings.layout; layout must be at the root level.', 'tool-error', 'left', null, 6); } catch (_) {}
+    }
 
     if (layoutObj) {
       ['docked', 'undocked'].forEach((k) => {
@@ -3107,7 +3137,7 @@ function applyLayout(payload) {
   }
   } finally {
     mutatingLayout = false;
-    if (prefsReady && !applyingFromFM) scheduleSaveSettings(250);
+    if (prefsReady && !applyingFromFM) scheduleSaveLayout(250);
   }
 }
 
@@ -3117,10 +3147,13 @@ function applySettingsEnvelope(envelope) {
   if (!env) return false;
 
   const S = env.settings || {};
-  // Accept layout at top-level (preferred) or legacy settings.layout
+  // Accept layout only at root-level
   const L = (env.layout && typeof env.layout === 'object' && !Array.isArray(env.layout))
     ? env.layout
-    : (S.layout && typeof S.layout === 'object' && !Array.isArray(S.layout) ? S.layout : null);
+    : null;
+  if (!L && S && typeof S.layout === 'object' && !Array.isArray(S.layout)) {
+    try { showToast('applySettingsEnvelope: Ignored settings.layout; use root-level "layout".', 'tool-error', 'left', null, 6); } catch (_) {}
+  }
 
   if (!L) return false;
 
@@ -3405,8 +3438,8 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     } catch (_) {}
     if (touched && prefsReady) {
-      // Debounce settings save to reduce FM round-trips during programmatic layout changes
-      scheduleSaveSettings(400);
+      // Debounce layout save to reduce FM round-trips during programmatic layout changes
+      scheduleSaveLayout(400);
     }
   }
   try {
