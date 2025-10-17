@@ -2344,6 +2344,16 @@ function bootstrapApp(payload) {
         const arr = layoutObj[k];
         if (Array.isArray(arr)) {
           const prev = persistedSettings[k] || {};
+          // Normalize numeric fields to ensure GridStack honors coordinates exactly
+          const normalizedArr = Array.isArray(arr)
+            ? arr.map(n => ({
+                widget: String(n.widget),
+                x: Number(n.x),
+                y: Number(n.y),
+                w: Number(n.w),
+                h: Number(n.h)
+              }))
+            : [];
           persistedSettings[k] = {
             version: s.version || prev.version || 1,
             columns: s.columns || prev.columns || 12,
@@ -2353,12 +2363,15 @@ function bootstrapApp(payload) {
             text: (s.text !== undefined) ? !!s.text : !!prev.text,
             toasts,
             showToolCalls: (typeof s.showToolCalls === 'boolean') ? !!s.showToolCalls : prev.showToolCalls,
-            layout: arr,
+            layout: normalizedArr,
             __source: data.sessionId ? 'session' : 'machine',
             __sessionId: data.sessionId || null
           };
           try {
             localStorage.setItem(`settings:${k}`, JSON.stringify({ key: k, settings: persistedSettings[k] }));
+          } catch (_) {}
+          try {
+            debugTrace('[bootstrapApp] cached', { key: k, md5: computeLayoutMD5(normalizedArr), layout: normalizedArr });
           } catch (_) {}
         }
       });
@@ -3065,6 +3078,16 @@ function applySettingsEnvelope(envelope) {
     if (Array.isArray(arr)) {
       const prev = persistedSettings[k] || {};
       const toasts = (S.toasts !== undefined) ? !!S.toasts : (prev.toasts ?? !!S.debug);
+      // Normalize numeric fields to ensure GridStack honors coordinates exactly
+      const normalizedArr = Array.isArray(arr)
+        ? arr.map(n => ({
+            widget: String(n.widget),
+            x: Number(n.x),
+            y: Number(n.y),
+            w: Number(n.w),
+            h: Number(n.h)
+          }))
+        : [];
       persistedSettings[k] = {
         version: S.version || prev.version || 1,
         columns: S.columns || prev.columns || 12,
@@ -3074,13 +3097,14 @@ function applySettingsEnvelope(envelope) {
         text: (S.text !== undefined) ? !!S.text : !!prev.text,
         toasts,
         showToolCalls: (typeof S.showToolCalls === 'boolean') ? !!S.showToolCalls : prev.showToolCalls,
-        layout: arr,
+        layout: normalizedArr,
         __source: payloadSessionId ? 'session' : 'machine',
         __sessionId: payloadSessionId || null
       };
       try {
         localStorage.setItem(`settings:${k}`, JSON.stringify({ key: k, settings: persistedSettings[k] }));
       } catch (_) {}
+      try { debugTrace('[applySettingsEnvelope] cached', { key: k, md5: computeLayoutMD5(normalizedArr), layout: normalizedArr }); } catch (_) {}
     }
   });
 
