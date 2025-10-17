@@ -2273,7 +2273,7 @@ function bootstrapApp(payload) {
       console.error('bootstrapApp failed: App_Init returned success=false or invalid payload');
       return false;
     }
-    const mode = data.key || data.mode || 'docked';
+    const mode = data.key || data.mode || (data.settings && (data.settings.key || data.settings.mode)) || 'docked';
 
     // Seed sessions list (sidebar and undocked widget)
     if (Array.isArray(data.sessions)) {
@@ -2384,6 +2384,18 @@ function bootstrapApp(payload) {
                 h: Number(n.h)
               }))
             : [];
+
+          const incomingSource = data.sessionId ? 'session' : 'machine';
+          const incomingSessionId = data.sessionId || null;
+          const existingSource = prev.__source || null;
+          const existingSessionId = prev.__sessionId || null;
+
+          // Do not let a machine/default payload overwrite an existing session-scoped cache
+          if (existingSource === 'session' && existingSessionId && incomingSource === 'machine') {
+            try { debugTrace('[bootstrapApp] skip machine override', { key: k }); } catch (_) {}
+            return;
+          }
+
           persistedSettings[k] = {
             version: s.version || prev.version || 1,
             columns: s.columns || prev.columns || 12,
@@ -2394,8 +2406,8 @@ function bootstrapApp(payload) {
             toasts,
             showToolCalls: (typeof s.showToolCalls === 'boolean') ? !!s.showToolCalls : prev.showToolCalls,
             layout: normalizedArr,
-            __source: data.sessionId ? 'session' : 'machine',
-            __sessionId: data.sessionId || null
+            __source: incomingSource,
+            __sessionId: incomingSessionId
           };
           try {
             localStorage.setItem(`settings:${k}`, JSON.stringify({ key: k, settings: persistedSettings[k] }));
@@ -2426,7 +2438,18 @@ function bootstrapApp(payload) {
         } else {
           if (isConvosDocked && window.__undockConvos) window.__undockConvos();
         }
-        const applied = applySettingsForMode(mode);
+
+        // Only apply cached settings if they are session-scoped for this session; otherwise request from FM
+        const haveSessionScoped =
+          persistedSettings[mode]
+          && persistedSettings[mode].__source === 'session'
+          && (persistedSettings[mode].__sessionId === (data.sessionId || window.__sessionId || null));
+
+        let applied = false;
+        if (haveSessionScoped) {
+          applied = applySettingsForMode(mode);
+        }
+
         if (!applied) {
           const loaded = loadLayoutForCurrentMode();
           if (!loaded && typeof window.__syncWidgets === 'function') {
