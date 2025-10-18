@@ -3801,6 +3801,8 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
   /* Initialize activeResponseId tracking */
   window.activeResponseId = null;
 
+  console.log('[realtime] initializeWebRTC instructions:', instructions);
+
   try {
     const preparedConfig = prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfig);
     const resolvedSessionConfig = preparedConfig.sessionConfig;
