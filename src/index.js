@@ -2193,6 +2193,7 @@ function applyRealtimeInit(payload) {
       return false;
     }
 
+    console.log('[applyRealtimeInit] Full system prompt being sent to model:', instructions);
     __rtState = 'connecting';
     initializeWebRTC(
       key,
