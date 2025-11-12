@@ -214,13 +214,19 @@ function trimHistory() {
 
 function appendCanonicalMessage(role, text, metadata = {}) {
   if (!text) return null;
+  
+  // Normalize metadata to always use 'api' field
+  const normalizedMetadata = {
+    api: metadata.api || metadata.source || null
+  };
+  
   const item = {
     id: createId('m'),
     ts: Date.now(),
     role,
     type: 'message',
     content: text,
-    metadata
+    metadata: normalizedMetadata
   };
   sessionHistory.push(item);
   // Ensure Conversations widget appears when undocked only if a saved rect exists
@@ -1942,7 +1948,7 @@ function buildMinifiedHistoryFromSession() {
     if (item.type === 'message') {
       out.push({
         role: item.role,
-        source: item.metadata?.api ?? item.metadata?.source ?? null,
+        source: item.metadata?.api ?? null,
         text: item.content ?? '',
         ts: item.ts
       });
@@ -2292,7 +2298,7 @@ function bootstrapApp(payload) {
           role,
           type: 'message',
           content: text,
-          metadata: { source: m?.metadata?.source ?? m?.source ?? null }
+          metadata: { api: m?.metadata?.api ?? m?.metadata?.source ?? m?.source ?? null }
         });
 
         if (text) {
@@ -2300,7 +2306,7 @@ function bootstrapApp(payload) {
             role,
             text,
             ts,
-            source: m?.metadata?.source ?? m?.source ?? null
+            source: m?.metadata?.api ?? m?.metadata?.source ?? m?.source ?? null
           });
         }
       }
