@@ -1,246 +1,789 @@
-******************************
-Script: Session_SaveState [ sessionId ; payloadJSON ]
-Purpose: Upsert the unified session JSON (settings + history) keyed by sessionId. Merge only provided keys.
+# Script: Session_SaveState [ sessionId ; settings ; history ] ➜🌎 
+# Purpose: Upsert the unified session JSON (settings + history) keyed by sessionId. Merge only provided keys.
+// Show Custom Dialog [ Get ( ScriptName ) ; JSONFormatElements ( Get ( ScriptParameter ) ) ]
+# 
+# Parameters (JSON):
+# - { "sessionId":"...", "layout": { ... }, "settings": { ... }, "history":[ ... ] }
+#   - Either key can be present; update only what’s provided.
+# 
+# Required Parameters
+Set Variable [ $sessionId ; Value: Let([ ~key = "sessionId" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+# Optional Parameters
+Set Variable [ $layout ; Value: Let([ ~key = "layout" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+Set Variable [ $settings ; Value: Let([ ~key = "settings" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+Set Variable [ $history ; Value: Let([ ~key = "history" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+# Collaps json for comparison
+Set Variable [ $settings ; Value: If ( not IsEmpty ( $settings ) ; JSONGetElement ( $settings ; "" ) ) ]
+Set Variable [ $history ; Value: If ( not IsEmpty ( $history ) ; JSONGetElement ( $history ; "" ) ) ]
+Set Variable [ $layout ; Value: If ( not IsEmpty ( $layout ) ; JSONGetElement ( $layout ; "" ) ) ]
+# 
+If [ IsEmpty ( $settings & $history & $layout ) ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error" ; "settings and/or history and/or layout keys should be present" ; JSONString ] ) ]
+End If
+# 
+Set Variable [ $tempWindow ; Value: Get ( UUID ) ]
+New Window [ Style: Document ; Name: $tempWindow ; Using layout: “blank_Sessions” (Sessions) ; Height: 100 ; Width: 100 ; Top: -5000 ]
+Enter Find Mode [ Pause: Off ]
+Set Field [ Sessions::SessionId ; "==" & $sessionId ]
+Set Error Capture [ On ]
+Perform Find []
+Set Variable [ $error ; Value: Get ( LastError ) ]
+Set Error Capture [ Off ]
+If [ $error = 401 /* Not found */ ]
+Close Window [ Name: $tempWindow ; Current file ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error" ; "Invalid sessionId" ; JSONString ] ) ]
+End If
+# 
+# Update layout
+If [ not IsEmpty ( $layout ) ]
+Set Variable [ $changed ; Value: Let ([   ~current = JSONGetElement ( Sessions::sessionJSON ; "layout" ) ;   ~current = GetContainerAttribute ( ~current ; "MD5" ) ;   ~new = GetContainerAttribute ( $layout ; "MD5" ) ;   ~changed = not Exact ( ~current ; ~new ) ];   ~changed ) ]
+If [ $changed ]
+// Speak [ "save layout" ]
+Set Field [ Sessions::sessionJSON ; JSONSetElement ( Sessions::sessionJSON ; [ "layout" ; $layout ; JSONObject ] ) ]
+End If
+End If
+# 
+# Update settings
+If [ not IsEmpty ( $settings ) ]
+Set Variable [ $changed ; Value: Let ([   ~current = JSONGetElement ( Sessions::sessionJSON ; "settings" ) ;   ~current = GetContainerAttribute ( ~current ; "MD5" ) ;   ~new = GetContainerAttribute ( $settings ; "MD5" ) ;   $$settingsMD5_SAVE = ~new ;   ~changed = not Exact ( ~current … ]
+If [ $changed ]
+// Speak [ "save settings" ]
+Set Variable [ $$SETTINGS ; Value: $settings ]
+Set Field [ Sessions::sessionJSON ; JSONSetElement ( Sessions::sessionJSON ; [ "settings" ; $settings ; JSONObject ] ) ]
+End If
+End If
+# 
+# Update chat history
+If [ not IsEmpty ( $history ) ]
+Set Variable [ $changed ; Value: Let ([   ~current = JSONGetElement ( Sessions::sessionJSON ; "history" ) ;   ~current = GetContainerAttribute ( ~current ; "MD5" ) ;   ~new = GetContainerAttribute ( $history ; "MD5" ) ;   ~changed = not Exact ( ~current ; ~new ) ];   ~changed ) ]
+If [ $changed ]
+// Speak [ "save history" ]
+Set Field [ Sessions::sessionJSON ; JSONSetElement ( Sessions::sessionJSON ; [ "history" ; $history ; JSONArray ] ) ]
+End If
+End If
+# 
+Commit Records/Requests [ With dialog: Off ]
+# 
+Close Window [ Name: $tempWindow ; Current file ]
+# 
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; True ; JSONBoolean ] ) ]
+# 
+# 
 
-Parameters (JSON):
-- { "sessionId":"...", "settings": { ... }, "history":[ ... ] }
-  - Either key can be present; update only what’s provided.
 
-Pseudo-steps:
-1) Set Variable [ $raw = Get ( ScriptParameter ) ]
-2) If [ IsEmpty ( $raw ) ] Exit Script [ Result: "ERROR:EMPTY_PARAM" ]
-3) Set Variable [ $json = JSONFormatElements ( $raw ) ]
-4) Set Variable [ $sessionId = JSONGetElement ( $json ; "sessionId" ) ]
-5) If [ IsEmpty ( $sessionId ) ] Set Variable [ $sessionId = $$SessionId ]
-6) If [ IsEmpty ( $sessionId ) ] Exit Script [ Result: "ERROR:MISSING_SESSION" ]
-7) Go to Layout [ “Sessions” (Sessions) ]
-8) Enter Find Mode [ Pause: Off ]
-9) Set Field [ Sessions::SessionId ; $sessionId ]
-10) Perform Find
-11) If [ Get ( FoundCount ) = 0 ]
-      New Record/Request
-      Set Field [ Sessions::SessionId ; $sessionId ]
-    End If
-12) Set Variable [ $current = Sessions::SessionJSON ]
-13) If [ IsEmpty ( $current ) ] Set Variable [ $current = "{}" ]
-14) If [ not IsEmpty ( JSONGetElement ( $json ; "settings" ) ) ]
-      Set Variable [ $current = JSONSetElement ( $current ; "settings" ; JSONGetElement ( $json ; "settings" ) ; JSONRaw ) ]
-    End If
-15) If [ not IsEmpty ( JSONGetElement ( $json ; "history" ) ) ]
-      Set Variable [ $current = JSONSetElement ( $current ; "history" ; JSONGetElement ( $json ; "history" ) ; JSONRaw ) ]
-    End If
-16) Set Field [ Sessions::SessionJSON ; $current ]
-17) Set Field [ Sessions::UpdatedAt ; Get ( CurrentTimestamp ) ]
-18) Commit Records/Requests [ No dialog ]
-19) Exit Script [ Result: "{\"success\":true}" ]
+# Script: Session_GetState [ sessionId ] ➜🌎 
+# Purpose: Return the unified session JSON (settings + history) for the given sessionId.
+// Show Custom Dialog [ Get ( ScriptName ) ; JSONFormatElements ( Get ( ScriptParameter ) ) ]
+# 
+# Required Parameters
+Set Variable [ $sessionId ; Value: Let([ ~key = "sessionId" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+If [ IsEmpty ( $sessionId ) ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error" ; "Missing parameter. sessionId is required." ; JSONString ] ) ]
+End If
+# 
+Set Variable [ $tempWindow ; Value: Get ( UUID ) ]
+New Window [ Style: Document ; Name: $tempWindow ; Using layout: “blank_Sessions” (Sessions) ; Height: 100 ; Width: 100 ; Top: -5000 ]
+Enter Find Mode [ Pause: Off ]
+Set Field [ Sessions::SessionId ; "==" & $sessionId ]
+Set Error Capture [ On ]
+Perform Find []
+Set Variable [ $error ; Value: Get ( LastError ) ]
+Set Error Capture [ Off ]
+If [ $error = 401 /* Not found */ ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error" ; "Invalid sessionId" ; JSONString ] ) ]
+End If
+# 
+Set Variable [ $result ; Value: Sessions::sessionJSONComplete_c ]
+Set Variable [ $$settingsMD5_LOAD ; Value: GetContainerAttribute ( JSONGetElement ( Sessions::sessionJSONComplete_c ; "settings" ) ; "MD5" ) ]
+Commit Records/Requests [ With dialog: Off ]
+# 
+Close Window [ Name: $tempWindow ; Current file ]
+// Speak [ "load state" ]
+Perform JavaScript in Web Viewer [ Object Name: "web" ; Function Name: "applySessionState" ; Parameters: $result ]
+# 
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; True ; JSONBoolean ] ) ]
+# 
+# 
 
-******************************
-Script: Session_GetState [ sessionId ]
-Purpose: Return the unified session JSON (settings + history) for the given sessionId.
 
-Parameters (JSON):
-- { "sessionId":"..." } (if omitted, use $$SessionId)
+# Script: Session_New ➜🌎 
+# Purpose: Create a new session for the current user and activate it
+# 
+# 
+# Optional Parameters
+Set Variable [ $username ; Value: Let([ ~key = "username" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+Perform Script [ “CreateSession” ; Specified: From list ; Parameter:    ]
+Set Variable [ $sessionId ; Value: Let([ ~key = "sessionId" ;   ~default = "" ;   ~param = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+Perform Script [ “Session_GetState” ; Specified: From list ; Parameter: JSONSetElement ( "" ; [ "sessionId" ; $sessionId ; JSONString ] ) ]
+# 
+# 
 
-Pseudo-steps:
-1) Set Variable [ $raw = Get ( ScriptParameter ) ]
-2) If [ IsEmpty ( $raw ) ] Exit Script [ Result: "{\"success\":false,\"error\":\"EMPTY_PARAM\"}" ]
-3) Set Variable [ $json = JSONFormatElements ( $raw ) ]
-4) Set Variable [ $sessionId = JSONGetElement ( $json ; "sessionId" ) ]
-5) If [ IsEmpty ( $sessionId ) ] Set Variable [ $sessionId = $$SessionId ]
-6) If [ IsEmpty ( $sessionId ) ] Exit Script [ Result: "{\"success\":false,\"error\":\"MISSING_SESSION\"}" ]
-7) Go to Layout [ “Sessions” (Sessions) ]
-8) Enter Find Mode [ Pause: Off ]
-9) Set Field [ Sessions::SessionId ; $sessionId ]
-10) Perform Find
-11) If [ Get ( FoundCount ) = 0 ]
-      Exit Script [ Result: "{\"success\":true,\"result\":{\"sessionId\":\"" & $sessionId & "\",\"settings\":{},\"history\":[]}}" ]
-    End If
-12) Set Variable [ $out = JSONSetElement ( "{}" ;
-      [ "success" ; 1 ; JSONBoolean ] ;
-      [ "result.sessionId" ; $sessionId ; JSONString ] ;
-      [ "result" ; Sessions::SessionJSON ; JSONRaw ]
-    ) ]
-13) Exit Script [ Result: $out ]
 
-******************************
-Script: Grid_SaveLayout [ sessionId ; payloadJSON ]
-Purpose: Save the current mode’s user default layout (per user, not per session). Accepts one mode at a time.
+NOTE: Grid_SaveLayout is incomplete mostly comments
+# Script: Grid_SaveLayout [ sessionId ; payloadJSON ] ➜🌎 
+# Purpose: Save current mode’s layout for a session (scope:"session") or update machine defaults (scope:"machine").
+Show Custom Dialog [ Get ( ScriptName ) ; JSONFormatElements ( Get ( ScriptParameter ) ) ]
+# 
+# Parameters:
+# - ScriptParameter is a JSON string with envelope:
+#   { key, sessionId, settings{ version, columns, cellHeight?, float, voice, text, toasts, layout[] } }
+# 
+# Required Parameters
+Set Variable [ $key ; Value: Let([ ~key = "key" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+Set Variable [ $sessionId ; Value: Let([ ~key = "sessionId" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+Set Variable [ $settings ; Value: Let([ ~key = "settings" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+# Parse $settings
+# Devleoper's Note: $version - Future proof to allow us to change this after roll out and know that we need to parse historical records
+Set Variable [ $version ; Value: Let([ ~key = "version" ;   ~default = "" ;   ~param = $settings ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+# 6) If [ IsEmpty ( $key ) ] Set Variable [ $key = "docked" ]
+# 7) Set Variable [ $sessionId =
+#       Case(
+#         not IsEmpty ( JSONGetElement ( $json ; "sessionId" ) ) ; JSONGetElement ( $json ; "sessionId" ) ;
+#         not IsEmpty ( $$SessionId ) ; $$SessionId ;
+#         Get ( UUID )
+#       )
+#    ]
+# 8) Set Variable [ $machineId =
+#       Case(
+#         not IsEmpty ( JSONGetElement ( $json ; "machineId" ) ) ; JSONGetElement ( $json ; "machineId" ) ;
+#         $$MachineId
+#       )
+#    ]
+# 9) Set Variable [ $float = JSONGetElement ( $json ; "settings.float" ) ]
+# 10) Go to Layout [ “GridLayouts” (GridLayouts) ]
+# 11) Enter Find Mode [ Pause: Off ]
+# 12) If [ $scope = "machine" ]
+#       Set Field [ GridLayouts::MachineId ; $machineId ]
+#       Set Field [ GridLayouts::SessionId ; "" ]
+#       Set Field [ GridLayouts::Key ; $key ]
+#     Else
+#       Set Field [ GridLayouts::SessionId ; $sessionId ]
+#       Set Field [ GridLayouts::MachineId ; $machineId ] // optional but useful
+#       Set Field [ GridLayouts::Key ; $key ]
+#     End If
+# 13) Perform Find
+# 14) If [ Get ( FoundCount ) = 0 ]
+#       New Record/Request
+#       Set Field [ GridLayouts::Key ; $key ]
+#       If [ $scope = "machine" ]
+#         Set Field [ GridLayouts::MachineId ; $machineId ]
+#         Set Field [ GridLayouts::SessionId ; "" ]
+#       Else
+#         Set Field [ GridLayouts::SessionId ; $sessionId ]
+#         Set Field [ GridLayouts::MachineId ; $machineId ]
+#       End If
+#     End If
+# 15) Set Field [ GridLayouts::Payload ; $json ]
+# 16) Set Field [ GridLayouts::Float ; Case ( $float ; 1 ; 0 ) ]
+# 17) Set Field [ GridLayouts::UpdatedAt ; Get ( CurrentTimestamp ) ]
+# 18) Commit Records/Requests [ No dialog ]
+# 19) Exit Script [ Result: "OK" ]
+# 
 
-Parameters (JSON):
-- { "key":"docked"|"undocked", "sessionId":"...", "settings": { version, columns, cellHeight?, float, voice, text, toasts|debug, showToolCalls?, layout:[ {x,y,w,h,widget}, ... ] } }
 
-Behavior:
-- Upsert per-user defaults for the provided key (AccountName + Key).
-- Store the provided settings and layout array for that key. Other key remains unchanged.
+NOTE: same is true with Grid_LoadLayout mostly comments.  I need to find out if these two scripts are actually needed
+# Script: Grid_LoadLayout [ sessionId ; key ] ➜🌎 
+# Purpose: Return the saved layout envelope for the requested scope and key to the Web Viewer.
+Show Custom Dialog [ Get ( ScriptName ) ; JSONFormatElements ( Get ( ScriptParameter ) ) ]
+# 
+# Parameters (JSON preferred):
+# - { "scope":"session"|"user", "sessionId":"...", "key":"docked" }
+# - If scope omitted:
+#   - If sessionId present → load session scope (SessionId + Key).
+#   - Else → load user scope (AccountName + Key).
+# 
+# Pseudo-steps:
+# 1) Set Variable [ $raw = Get ( ScriptParameter ) ]
+# 2) Set Variable [ $key =
+#       Case(
+#         PatternCount ( $raw ; "{" ) ;
+#           JSONGetElement ( $raw ; "key" ) ;
+#         not PatternCount ( $raw ; "{" ) ;
+#           $raw ;
+#         "" )
+#    ]
+# 3) If [ IsEmpty ( $key ) ] Set Variable [ $key = "docked" ]
+# 4) Set Variable [ $scope = Lower ( JSONGetElement ( $raw ; "scope" ) ) ]
+# 5) Set Variable [ $sessionId =
+#       Case(
+#         PatternCount ( $raw ; "{" ) ;
+#           JSONGetElement ( $raw ; "sessionId" ) ;
+#         not PatternCount ( $raw ; "{" ) and not IsEmpty ( $$SessionId ) ;
+#           $$SessionId ;
+#         ""
+#       )
+#    ]
+# 6) Set Variable [ $machineId =
+#       Case(
+#         PatternCount ( $raw ; "{" ) ;
+#           JSONGetElement ( $raw ; "machineId" ) ;
+#         not PatternCount ( $raw ; "{" ) and not IsEmpty ( $$MachineId ) ;
+#           $$MachineId
+#       )
+#    ]
+# 7) If [ IsEmpty ( $scope ) ]
+#       If [ not IsEmpty ( $sessionId ) ]
+#         Set Variable [ $scope = "session" ]
+#       Else
+#         Set Variable [ $scope = "machine" ]
+#       End If
+#    End If
+# 8) Go to Layout [ “GridLayouts” (GridLayouts) ]
+# 9) Enter Find Mode [ Pause: Off ]
+# 10) If [ $scope = "machine" ]
+#       Set Field [ GridLayouts::MachineId ; $machineId ]
+#       Set Field [ GridLayouts::SessionId ; "" ]
+#       Set Field [ GridLayouts::Key ; $key ]
+#     Else
+#       Set Field [ GridLayouts::SessionId ; $sessionId ]
+#       Set Field [ GridLayouts::Key ; $key ]
+#     End If
+# 11) Perform Find
+# 12) If [ Get ( FoundCount ) = 0 ]
+#       Exit Script [ Result: "" ] // none saved
+#     End If
+# 13) Set Variable [ $payload = GridLayouts::Payload ]
+# 14) Exit Script [ Result: $payload ]
 
-Return:
-- "{\"success\":true}"
 
-******************************
-Script: Grid_LoadLayout [ sessionId ; key ]
-Purpose: Return the saved layout envelope (prefer session state if you maintain it; otherwise user defaults) for the requested key.
+NOTE:  Also not populated other than comments
+# Script: Grid_RestoreDefaultLayout [ sessionId ; key ] ➜🌎 
+# Purpose: Return a default layout envelope for given mode; Web applies it as a reset.
+Show Custom Dialog [ Get ( ScriptName ) ; JSONFormatElements ( Get ( ScriptParameter ) ) ]
+# 
+# Parameters:
+# - Similar to Grid_LoadLayout; determine $key and $sessionId the same way.
+# 
+# Pseudo-steps:
+# 1) Determine $key (default "docked")
+# 2) Compute $payload:
+# 3) Exit Script [ Result: $payload ]
+# 
+# Updated persistence: per-user (same script names)
 
-Parameters (JSON):
-- { "sessionId":"...", "key":"docked"|"undocked" }
 
-Behavior:
-- Look up per-session state first if you maintain session layouts; else skip.
-- Fallback to per-user defaults by AccountName + Key.
-- Return an envelope shaped as:
-  {
-    "key": "docked"|"undocked",
-    "settings": {
-      "version": 1,
-      "columns": 12,
-      "cellHeight": 8,
-      "float": true,
-      "voice": true,
-      "text": true,
-      "toasts": true,
-      "showToolCalls": true,
-      "layout": {
-        "docked": [ ...optional... ],
-        "undocked": [ ...optional... ]
-      }
-    }
-  }
-- It is OK to include only the requested key inside settings.layout.
 
-Return:
-- The JSON envelope above, or "" if none.
+# Script: Realtime_Init ➜🌎 
+# Purpose: Start the Realtime API interaction with the primary agent
+# 
+# Required Parameters
+#     None
+// Speak [ "Init Realtime" ]
+# 
+# Developer Note:  The repo for the realtime api code that is used here can be found on github at:
+# https://github.com/mw777eds/realtime_openai.git ➜🌎 
+# 
+# Optional Parameters
+Set Variable [ $agent ; Value: Let([ ~key = "agent" ;   ~default = GetPreference ( Preferences::Primary Agent ) ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ;… ]
+Set Variable [ $voice ; Value: Let([ ~key = "voice" ;   ~default = GetPreference ( Preferences::Voice ) ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~defaul… ]
+# 
+If [ IsEmpty ( $agent ) ]
+Show Custom Dialog [ "Realtime Model is Required" ; "You must select a model to continue." ]
+Perform Script [ “Primary Navigation” ; Specified: From list ; Parameter: JSONSetElement ( "" ; [ "layout" ; "Preferences" ; JSONString ] ) ]
+Go to Field [ Preferences::Model Realtime ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ] ) ]
+End If
+# 
+If [ IsEmpty ( $voice ) ]
+Show Custom Dialog [ "Realtime Voice is Required" ; "You must select a voice to continue." ]
+Perform Script [ “Primary Navigation” ; Specified: From list ; Parameter: JSONSetElement ( "" ; [ "layout" ; "Preferences" ; JSONString ] ) ]
+Go to Field [ Preferences::Voice ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ] ) ]
+End If
+# 
+# 
+Perform Script [ “GetAPIKey” ; Specified: From list ; Parameter:    ]
+Set Variable [ $success ; Value: Let([ ~key = "success" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+If [ not $success ]
+Exit Script [ Text Result: Get ( ScriptResult ) ]
+End If
+Set Variable [ $apiKey ; Value: Let([ ~key = "apiKey" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+# 
+# Get Agent Information - Load from memory if possible.
+If [ SettingsGet ( "current.agent.name" ) = $agent ]
+Set Variable [ $agentObject ; Value: SettingsGet ( "current.agent.object" ) ]
+Else
+Set Variable [ $agentObject ; Value: GetColumnWhere ( Agents::AgentJSON_c ; Agents::AgentName ; $agent ) ]
+# 
+Set Variable [ $~ ; Value: SettingsSet ( "current.agent.name" ; $agent ) & SettingsSet ( "current.agent.object" ; $agentObject ) ]
+End If
+# 
+Set Variable [ $model ; Value: JSONGetElement ( $agentObject ; "model" ) ]
+# 
+# Set up variables
+Set Variable [ $url ; Value: "https://api.openai.com/v1/realtime/sessions" ]
+# 
+# Prepare the JSON payload
+Set Variable [ $jsonPayload ; Value: JSONSetElement ( "{}" ;     ["model" ; $model ; JSONString ] ;     ["voice" ; $voice ; JSONString ] ) ]
+Set Variable [ $curlOptions ; Value: "-X POST -H \"Content-Type: application/json\" -H \"Authorization: Bearer " & $apiKey & "\" -d @$jsonPayload --dump-header $header" ]
+# 
+# Configure the "Insert from URL" step
+Insert from URL [ Select ; With dialog: Off ; Target: $$RESULT ; $url ; cURL options: $curlOptions ]
+# @var		$header - set in previous step
+Set Variable [ $$RESULT_VOICE_INIT ; Value: $$RESULT ]
+Set Variable [ $$RESPONSE_HEADER ; Value: $header ]
+# 
+Set Variable [ $~ ; Value: SettingsSet ( "Realtime.activeObject" ; $$RESULT ) ]
+# 
+Set Variable [ $ephemeralKey ; Value: SettingsGet ( "Realtime.activeObject.client_secret.value" ) ]
+Set Variable [ $instructions ; Value: List ( SettingsGet ( "Realtime.activeObject.instructions" ) ; JSONGetElement ( $agentObject ; "systemPrompt" ) ) ]
+Set Variable [ $tools ; Value: While ([   /* initialVariable */   ~json = JSONGetElement ( $agentObject ; "tools" ) ;   ~list = JSONListKeys ( ~json ; "" ) ;   ~count = ValueCount ( ~list ) ;   ~counter = 0 ;   ~result = "[]"   ];   /* condition */   ~counter < ~count ;   [   /* logic… ]
+Set Variable [ $toolChoice ; Value: "auto" ]
+# 
+// # Clear chat history
+// Set Variable [ $~ ; Value: SettingsSet ( "Realtime.chat" ; "[]" ) ]
+# 
+// Perform Script [ “Load Widget” ; Specified: From list ; Parameter: JSONSetElement ( "" ; [ "name" ; "realtime" ; JSONString ] ) ]
+# 
+// Move/Resize Window [ Current Window ; Height: 1000 ; Width: 1000 ]
+# 
+// Pause/Resume Script [ Duration (seconds): 1 ]
+# 
+If [ not ValueExists ( "Realtime" ; WindowNames ) ]
+Perform Script [ “New Start” ; Specified: From list ; Parameter:    ]
+Pause/Resume Script [ Duration (seconds): .3 ]
+Else If [ Get ( WindowName ) <> "Realtime" ]
+Select Window [ Name: "Realtime" ; Current file ]
+End If
+# 
+Set Variable [ $params ; Value: JSONSetElement ( "" ; [ "success" ; True ; JSONBoolean ] ; [ "result.ephemeralKey" ; $ephemeralKey ; JSONString ] ; [ "result.model" ; $model ; JSONString ] ; [ "result.instructions" ; $instructions ; JSONString ] ; [ "result.tools" ; $tools ; JSONAr… ]
+Set Variable [ $$INIT_PARAMS_applyRealtimeInit ; Value: $params ]
+Perform JavaScript in Web Viewer [ Object Name: "web" ; Function Name: "applyRealtimeInit" ; Parameters: $params ]
+// Perform JavaScript in Web Viewer [ Object Name: "web" ; Function Name: "initializeWebRTC" ; Parameters: $ephemeralKey, $model, $instructions, $tools, $toolChoice ]
+# 
+// Pause/Resume Script [ Duration (seconds): 2 ]
+# If enabled then show the toast for the tool call
+Set Variable [ $toastParameter ; Value: JSONSetElement ( "" ; [ "message" ; "Agent: " & $agent ; JSONString ] ;[ "type" ; "agent" ; JSONString ] ;[ "side" ; "left" ; JSONString ] ) ]
+Perform Script [ “ShowToolToast” ; Specified: From list ; Parameter: $toastParameter ]
+# 
 
-******************************
-Script: Grid_RestoreDefaultLayout [ sessionId ; key ]
-Purpose: Return a default layout envelope for the given mode key. Web will apply it as a reset.
 
-Parameters (JSON):
-- { "sessionId":"...", "key":"docked"|"undocked" }
+# Script: Chat_TextRequest ➜🌎 
+# Purpose: Call the CallAgent script with prompt and appropriate agentName
+# Required Parameters
+Set Variable [ $sessionId ; Value: Let([ ~key = "sessionId" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+Set Variable [ $prompt ; Value: Let([ ~key = "prompt" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+If [ IsEmpty ( $sessionId ) or IsEmpty ( $prompt ) ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error" ; "Missing parameter. Both $sessionId and $prompt are required." ; JSONString ] ) ]
+End If
+# 
+Set Variable [ $param ; Value: Let([   ~param = Get ( ScriptParameter ) ;   ~settings = JSONGetElement ( GetPreference ( Preferences::chatSettingsJSON ) ; Get ( UserName ) ) ;   ~agentName = JSONGetElement ( ~settings ; "settings.activeAgent.text" ) ];   JSONSetElement ( ~param ; [ "a… ]
+Perform Script [ “CallAgent” ; Specified: From list ; Parameter: $param ]
+Set Variable [ $success ; Value: Let([ ~key = "success" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+If [ not $success ]
+Exit Script [ Text Result: Get ( ScriptResult ) ]
+End If
+# 
+Set Variable [ $result ; Value: Let([ ~key = "result" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+Set Variable [ $payload ; Value: Let([   ~chatResult = JSONSetElement ( ""     ; [ "role" ; JSONGetElement ( $$RESULT ; "choices[0].message.role" ) ; JSONString ]     ; [ "content" ; JSONGetElement ( $$RESULT ; "choices[0].message.content" ) ; JSONString ]     ; [ "id" ; JSONGetEleme… ]
+# 
+If [ Get ( WindowName ) <> "realtime" ]
+Select Window [ Name: "realtime" ; Current file ]
+End If
+# 
+Perform JavaScript in Web Viewer [ Object Name: "web" ; Function Name: "applySessionState" ; Parameters: $payload ]
 
-Behavior:
-- Build and return an envelope with settings.layout containing only that key’s default nodes.
-- Include default toggle values (voice/text/toasts/float) as you prefer.
 
-Return:
-- The JSON envelope.
 
-******************************
-Script: Realtime_Init [ sessionId ]
-Purpose: Generate an ephemeral OpenAI token and return WebRTC session config to the Web Viewer. FileMaker chooses agent/config (no agentName from JS).
+NOTE: I don't know that CallTools is used.  I use CallAgent_CallTools from within CallAgent.
+# Script: Handle calling tools and returning the result ➜🌎 
+# Purpose: Perform scripts that are tool calls and then return the result (This version is specific to the Realtime version)
+# 
+# Required Parameters
+Set Variable [ $toolCalls ; Value: Let([ ~key = "toolCalls" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+# Optional Parameters
+#    None
+# 
+If [ IsEmpty ( $toolCalls ) ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error_message" ; "Missing parameter - toolCall" ; JSONString ] ) ]
+End If
+# 
+Set Variable [ $validTools ; Value: JSON.GetValuesAtPath ( GetColumnWhere ( Agents::ToolsJSON_c ; Agents::AgentName ; "EmpoweredCore" ) ; "function.name" ) ]
+# 
+# Log Tool Call in Array in Settings
+Set Variable [ $~ ; Value: SettingsSet ( "ToolCalls[+]" ; $toolCalls ) ]
+# 
+Set Variable [ $count ; Value: ValueCount ( JSONListKeys ( $toolCalls ; "" ) ) ]
+Set Variable [ $counter ; Value: 0 ]
+Loop [ Flush: Always ]
+Set Variable [ $counter ; Value: $counter + 1 ]
+Exit Loop If [ $counter > $count ]
+Set Variable [ $toolCall ; Value: JSONGetElement ( $toolCalls ; $counter  - 1 ) ]
+Set Variable [ $toolName ; Value: JSONGetElement ( $toolCall ; "name" ) ]
+# 
+# If enabled then show the toast for the tool call
+Set Variable [ $toastParameter ; Value: JSONSetElement ( "" ; [ "message" ; "Tool Call: " & $toolName ; JSONString ] ;[ "type" ; "tool-call" ; JSONString ] ;[ "side" ; "left" ; JSONString ] ;[ "jsonData" ; JSONSetElement ( "" ; [ "toolCall" ; $toolCall ; JSONObject ] ) ; JSONObject ] ) ]
+Perform Script [ “ShowToolToast” ; Specified: From list ; Parameter: $toastParameter ]
+# 
+# Validate the tool name is valid before trying to validate the parameter (i.e. prevent halucinated tools)
+Set Variable [ $validTool ; Value: ValueExists ( $toolName ; $validTools ) ]
+# 
+If [ $validTool ]
+Perform Script [ “VerifyJSON” ; Specified: From list ; Parameter: JSONSetElement ( "" ; [ "toolCall" ; $toolCall ; JSONObject ] ) ]
+Set Variable [ $validation ; Value: Let([ ~key = "validation" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+Set Variable [ $valid ; Value: Let([ ~key = "valid" ;   ~result = $validation ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+Else
+Set Variable [ $valid ; Value: False ]
+Set Variable [ $validation ; Value: JSONSetElement ( "" ; [ "errors" ; "Invalid Tool Name." ; JSONString ] ) ]
+# If enabled then show the toast for the error
+Set Variable [ $toastParameter ; Value: JSONSetElement ( "" ; [ "message" ; "Tool Error: " & $toolName ; JSONString ] ;[ "type" ; "tool-error" ; JSONString ] ;[ "side" ; "right" ; JSONString ] ;[ "jsonData" ; JSONSetElement ( "" ; [ "toolCall" ; $toolCall ; JSONObject ]; [ "error" ; JSONGetE… ]
+Perform Script [ “ShowToolToast” ; Specified: From list ; Parameter: $toastParameter ]
+End If
+# 
+If [ $validTool and $valid ]
+Set Variable [ $tool ; Value: Let([ ~key = "tool" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+Perform Script [ Specified: By name ; JSONGetElement ( $toolCall ; "name" ) ; Parameter: JSONGetElement ( $toolCall ; "arguments" ) ]
+Set Variable [ $result ; Value: JSONSetElement ( "" ; [ "call_id" ; JSONGetElement ( $toolCall ; "call_id" ) ; JSONString ]; [ "output" ; Get ( ScriptResult ) ; JSONObject ] ) ]
+# 
+# If enabled then show the toast for the success or error
+Set Variable [ $toastParameter ; Value: JSONSetElement ( "" ; [ "message" ; "Tool Result: " & $toolName ; JSONString ] ;[ "type" ; "tool-response" ; JSONString ] ;[ "side" ; "right" ; JSONString ] ;[ "jsonData" ; JSONSetElement ( "" ; [ "toolResponse" ; $result ; JSONObject ] ) ; JSONObject … ]
+Perform Script [ “ShowToolToast” ; Specified: From list ; Parameter: $toastParameter ]
+# 
+Else
+Set Variable [ $errors ; Value: Let([ ~key = "errors" ;   ~result = $validation ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+Set Variable [ $result ; Value: JSONSetElement ( "" ; [ "output.success" ; False ; JSONBoolean ]; [ "output.errors" ; $errors ; JSONArray ]; [ "call_id" ; JSONGetElement ( $toolCall ; "call_id" ) ; JSONString ] ) ]
+# If enabled then show the toast for the error
+Set Variable [ $toastParameter ; Value: JSONSetElement ( "" ; [ "message" ; "Tool Error: " & $toolName ; JSONString ] ;[ "type" ; "tool-error" ; JSONString ] ;[ "side" ; "right" ; JSONString ] ;[ "jsonData" ; JSONSetElement ( "" ; [ "toolCall" ; $toolCall ; JSONObject ]; [ "error" ; $errors … ]
+Perform Script [ “ShowToolToast” ; Specified: From list ; Parameter: $toastParameter ]
+# 
+End If
+# 
+# Log Tool Call Response in Array in Settings
+Set Variable [ $~ ; Value: SettingsSet ( "ToolCalls[+]" ; $result ) ]
+# 
+# Return response from tool
+If [ Get ( WindowName ) <> "realtime" ]
+Select Window [ Name: "realtime" ; Current file ]
+End If
+Perform JavaScript in Web Viewer [ Object Name: "web" ; Function Name: "sendToolResponse" ; Parameters: $result ]
+# 
+End Loop
+# 
+# After all tools have been processed then trigger the llm to take over again
+If [ Get ( WindowName ) <> "realtime" ]
+Select Window [ Name: "realtime" ; Current file ]
+End If
+Perform JavaScript in Web Viewer [ Object Name: "web" ; Function Name: "createModelResponse" ]
+# 
 
-Parameters (JSON):
-- { "sessionId":"..." }
 
-Behavior:
-- Resolve model, instructions, tools, and session configuration.
-- Call JavaScript in Web Viewer: window.applyRealtimeInit(JSON) with:
-  {
-    "success": true,
-    "result": {
-      "ephemeralKey": "...",
-      "model": "gpt-4o-realtime-preview",
-      "instructions": "You are a helpful AI assistant.",
-      "tools": [],
-      "toolChoice": "auto",
-      "sessionConfig": {
-        "modalities": ["text","audio"],
-        "voice": "verse"
-      }
-    }
-  }
+# Script: Handle calling tools and returning the result ➜🌎 
+# Purpose: Perform scripts that are tool calls and then return the result
+# 
+# Required Parameters
+Set Variable [ $toolCalls ; Value: Let([ ~key = "toolCalls" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+Set Variable [ $validTools ; Value: Let([ ~key = "validTools" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+# Optional Parameters
+#    None
+# 
+If [ IsEmpty ( $toolCalls ) ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error_message" ; "Missing parameter - toolCall" ; JSONString ] ) ]
+End If
+# 
+Set Variable [ $toolCallResults ; Value: "[]" ]
+# 
+Set Variable [ $count ; Value: ValueCount ( JSONListKeys ( $toolCalls ; "" ) ) ]
+Set Variable [ $counter ; Value: 0 ]
+Loop [ Flush: Always ]
+Set Variable [ $counter ; Value: $counter + 1 ]
+Exit Loop If [ $counter > $count ]
+Set Variable [ $toolCall ; Value: JSONGetElement ( $toolCalls ; $counter  - 1 ) ]
+Set Variable [ $toolCall ; Value: /* Transform to match the format of toolcalls in the realtime api */ Let([   ~tool = $toolCall ;   ~arguments = JSONGetElement ( ~tool ; "function.arguments" ) ;   ~name = JSONGetElement ( ~tool ; "function.name" ) ;   ~id = JSONGetElement ( ~tool ; "id… ]
+Set Variable [ $toolName ; Value: JSONGetElement ( $toolCall ; "name" ) ]
+# 
+# If enabled then show the toast for the tool call
+Set Variable [ $toastParameter ; Value: JSONSetElement ( "" ; [ "message" ; "Tool Call: " & $toolName ; JSONString ] ;[ "type" ; "tool-call" ; JSONString ] ;[ "side" ; "left" ; JSONString ] ;[ "jsonData" ; JSONSetElement ( "" ; [ "toolCall" ; $toolCall ; JSONObject ] ) ; JSONObject ] ) ]
+Perform Script [ “ShowToolToast” ; Specified: From list ; Parameter: $toastParameter ]
+# 
+# Validate the tool name is valid before trying to validate the parameter (i.e. prevent halucinated tools)
+Set Variable [ $validTool ; Value: ValueExists ( $toolName ; $validTools ) ]
+# 
+If [ $validTool ]
+Perform Script [ “VerifyJSON” ; Specified: From list ; Parameter: JSONSetElement ( "" ; [ "toolCall" ; $toolCall ; JSONObject ] ) ]
+Set Variable [ $validation ; Value: Let([ ~key = "validation" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+Set Variable [ $valid ; Value: Let([ ~key = "valid" ;   ~result = $validation ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+Else
+Set Variable [ $valid ; Value: False ]
+Set Variable [ $validation ; Value: JSONSetElement ( "" ; [ "errors" ; "Invalid Tool Name." ; JSONString ] ) ]
+# If enabled then show the toast for the error
+Set Variable [ $toastParameter ; Value: JSONSetElement ( "" ; [ "message" ; "Tool Error: " & $toolName ; JSONString ] ;[ "type" ; "tool-error" ; JSONString ] ;[ "side" ; "right" ; JSONString ] ;[ "jsonData" ; JSONSetElement ( "" ; [ "toolCall" ; $toolCall ; JSONObject ]; [ "error" ; JSONGetE… ]
+Perform Script [ “ShowToolToast” ; Specified: From list ; Parameter: $toastParameter ]
+End If
+# 
+If [ $validTool and $valid ]
+Set Variable [ $tool ; Value: Let([ ~key = "tool" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+Set Error Capture [ On ]
+Perform Script [ Specified: By name ; JSONGetElement ( $toolCall ; "name" ) ; Parameter: JSONGetElement ( $toolCall ; "arguments" ) ]
+Set Variable [ $error ; Value: Get ( LastError ) ]
+Set Error Capture [ Off ]
+If [ $error ]
+Show Custom Dialog [ $error ; ErrorToEnglish ( $error ) & ¶ & $toolName & ¶ & $tool ]
+End If
+Set Variable [ $result ; Value: JSONSetElement ( "" ; [ "role" ; "tool" ; JSONString ] ; [ "name" ; JSONGetElement ( $toolCall ; "name" ) ; JSONString ] ; [ "tool_call_id" ; JSONGetElement ( $toolCall ; "call_id" ) ; JSONString ] ; [ "content.success" ; JSONGetElement ( Get ( ScriptRe… ]
+# 
+# If enabled then show the toast for the success or error
+Set Variable [ $toastParameter ; Value: JSONSetElement ( "" ; [ "message" ; "Tool Result: " & $toolName ; JSONString ] ;[ "type" ; "tool-response" ; JSONString ] ;[ "side" ; "right" ; JSONString ] ;[ "jsonData" ; JSONSetElement ( "" ; [ "toolResponse" ; $result ; JSONObject ] ) ; JSONObject … ]
+Perform Script [ “ShowToolToast” ; Specified: From list ; Parameter: $toastParameter ]
+# 
+Else
+Set Variable [ $errors ; Value: Let([ ~key = "errors" ;   ~result = $validation ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+Set Variable [ $result ; Value: JSONSetElement ( "" ; [ "role" ; "tool" ; JSONString ] ; [ "name" ; JSONGetElement ( $toolCall ; "name" ) ; JSONString ] ; [ "tool_call_id" ; JSONGetElement ( $toolCall ; "call_id" ) ; JSONString ] ; [ "content.success" ; False ; JSONBoolean ] ; [ "cont… ]
+# If enabled then show the toast for the error
+Set Variable [ $toastParameter ; Value: JSONSetElement ( "" ; [ "message" ; "Tool Error: " & $toolName ; JSONString ] ;[ "type" ; "tool-error" ; JSONString ] ;[ "side" ; "right" ; JSONString ] ;[ "jsonData" ; JSONSetElement ( "" ; [ "toolCall" ; $toolCall ; JSONObject ]; [ "error" ; $errors … ]
+Perform Script [ “ShowToolToast” ; Specified: From list ; Parameter: $toastParameter ]
+# 
+End If
+# 
+Set Variable [ $toolCallResults ; Value: /* Flatten content to text instead of object and add to $toolResults */ Let([   ~content = JSONGetElement ( $result ; "content" ) ;   ~result = JSONSetElement ( $result ; "content" ; ~content ; JSONString ) ];   JSONSetElement ( $toolCallResults ; "[+]"… ]
+# 
+End Loop
+# 
+# After all tools have been processed then return results back up the chain
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "toolCallResults" ; $toolCallResults ; JSONArray ] ) ]
+# 
 
-Return:
-- "{\"success\":true}" (optional; primary handoff is via JS callback)
 
-******************************
-Script: Chat_TextRequest [ sessionId ; payloadJSON ]
-Purpose: Wrapper for text messages when Realtime is inactive. Chooses the agent in FileMaker, loads history, calls CallAgent, and persists updates.
 
-Parameters (JSON):
-- { "sessionId":"...", "message":"..." }
+# Script: HandleAPIError ➜🌎 
+# Purpose: This script handles errors from API calls. It checks the HTTP status code and the API response for errors, logs them, provides user feedback, and gracefully exits the calling script if necessary.
+# 
+Set Variable [ $script ; Value: Let([ ~key = "script" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+Set Variable [ $silent ; Value: Let([ ~key = "silent" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+# Developer Note: This script expects global variables to be set.
+# @var		$$RESULT
+# @var		$$API_HEADER
+Set Error Capture [ On ]
+# 
+# Extract HTTP Status Code
+Set Variable [ $httpStatus ; Value: GetValue ( $$HEADER; 1 ) ]
+# 
+# Check for successful response
+If [ PatternCount ( $httpStatus ; "200" ) = 1 ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; True ; JSONBoolean ] ) ]
+Else If [ PatternCount ( $httpStatus ; "201" ) = 1 ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; True ; JSONBoolean ] ) ]
+Else If [ PatternCount ( $httpStatus ; "202" ) = 1 ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; True ; JSONBoolean ] ) ]
+Else If [ PatternCount ( $httpStatus ; "100" ) = 1 and PatternCount ( $$API.HEADER ; "200 OK" ) > 0 ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; True ; JSONBoolean ] ) ]
+End If
+# 
+# User Feedback
+If [ not $silent ]
+Show Custom Dialog [ "Error" ; "There was an error processing your request.  Check the $$API.RESPONSE and the $$API.HEADER variabl…" ]
+End If
+# 
+# Exit with Error
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error" ; $$API.RESPONSE ; JSONString ] ) ]
+# 
 
-Pseudo-steps:
-1) Parse params → $sessionId, $message; validate both.
-2) Perform Script [ Session_GetState ; JSONSetElement ( "{}" ; [ "sessionId" ; $sessionId ; JSONString ] ) ] → parse result.result.history.
-3) Determine agentName (e.g., from user/session prefs).
-4) Perform Script [ CallAgent ; JSONSetElement ( "{}" ; 
-      [ "sessionId" ; $sessionId ; JSONString ] ;
-      [ "agentName" ; agentName ; JSONString ] ;
-      [ "message" ; $message ; JSONString ] ) ].
-5) If CallAgent did not persist, Perform Script [ Session_SaveState ; JSONSetElement ( "{}" ; [ "sessionId" ; $sessionId ; JSONString ] ; [ "history" ; updatedHistory ; JSONRaw ] ) ].
-6) Optionally Perform JavaScript in Web Viewer to echo assistant text immediately.
 
-Return:
-- "{\"success\":true}"
 
-******************************
-Script: CallTools [ sessionId ; toolCallsJSON ]
-Purpose: Execute tool calls emitted by the model and return outputs to the Web Viewer.
+# Script: LogMessage ➜🌎 
+# Purpose: Log chat messages in global settings
+# 
+// Speak [ "log message" ]
+# Required Parameters
+Set Variable [ $role ; Value: Let([ ~key = "role" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+Set Variable [ $message ; Value: Let([ ~key = "message" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+# Optional Parameters
+#    None
+# 
+If [ IsEmpty ( $role ) ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error_message" ; "Missing parameter - role" ; JSONString ] ) ]
+End If
+# 
+If [ IsEmpty ( $message ) ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error_message" ; "Missing parameter - message" ; JSONString ] ) ]
+End If
+# 
+Set Variable [ $~ ; Value: Let([   $message = If ( Right ( $message ; 2 ) = "/r" ; Left ( $message ; Length ( $message ) - 2 ) ; $message ) ];   SettingsSet ( "Realtime.chat[+]role" ; $role ) &   SettingsSet ( "Realtime.chat[:]message" ; $message ) &   SettingsSet ( "Realtime.cha… ]
+# 
+If [ /* We started showing the chat (window name exists) and that window is still open */ not IsEmpty ( SettingsGet ( "Realtime.chatWindow" ) ) and ValueExists ( SettingsGet ( "Realtime.chatWindow" ) ; WindowNames ) ]
+Select Window [ Name: SettingsGet ( "Realtime.chatWindow" ) ; Current file ]
+Perform JavaScript in Web Viewer [ Object Name: "web" ; Function Name: "refreshChat" ]
+End If
+# 
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; True ; JSONBoolean ] ) ]
 
-Parameters (JSON):
-- { "toolCalls":[ { "name":"...", "call_id":"...", "arguments":{...} }, ... ] }
 
-Behavior:
-- For each tool call, run the corresponding FileMaker script/workflow.
-- Use "Perform JavaScript in Web Viewer" to call:
-  - window.sendToolResponse(JSON.stringify({ call_id:"...", output:{...} }))
-  - After the last tool response, call window.createModelResponse()
 
-Return:
-- "{\"success\":true}"
 
-******************************
-Script: LogMessage [ sessionId ; messageJSON ]
-Purpose: Persist a single message line (for audit/logging or simple transcripts).
+# Script: App_Init [ sessionId ; machineId ] ➜🌎 
+# Purpose: Return initialization bundle for the WebView.
+# 
+# Returns (JSON):
+# {
+#   "user": "...",
+#   "sessionId": "...",
+#   "settings": { "voice": false, "text": true, "toasts": true, "float": true, "mode": "docked" },
+#   "layout": { ...payload from Grid_LoadLayout... } | "",
+#   "history": [ ...canonical messages... ]              // optional, may be empty array if none
+# }
+# 
+# Optional Params
+Set Variable [ $sessionId ; Value: Let([ ~key = "sessionId" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+Set Variable [ $user ; Value: Let([ ~key = "user" ;   ~default = Get ( UserName ) ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+# Load preferences from Preferences by username
+Set Variable [ $settings ; Value: JSONGetElement ( GetPreference ( Preferences::chatSettingsJSON ) ; Get ( UserName ) ) ]
+# 
+If [ IsEmpty ( $settings ) ]
+Set Variable [ $tempWindow ; Value: Get ( UUID ) ]
+New Window [ Style: Document ; Name: $tempWindow ; Using layout: “blank_Preferences” (Preferences) ; Height: 100 ; Width: 100 ; Top: -5000 ]
+Set Variable [ $settings ; Value: JSONGetElement( Preferences::chatSettingsJSON; "<BASE_SETTINGS>" ) ]
+Set Field [ Preferences::chatSettingsJSON ; JSONSetElement( 	Preferences::chatSettingsJSON; 	Get( UserName ); 	$settings; 	JSONObject ) ]
+Close Window [ Name: $tempWindow ; Current file ]
+End If
+# 
+# Sanity checks around the sessionId
+# 
+# Get list of sessions for the current user to validate or choose session
+Set Variable [ $sessions ; Value: Let ( [   ~userParam = Get ( UserName ) ;   ~qt = Char ( 34 ) ;   /* derive table & field names (no hardcoding) */   ~table = GetValue ( Substitute ( GetFieldName ( Sessions::SessionId ) ; "::" ; ¶ ) ; 1 ) ;   ~field_SessionId = GetValue ( Substitute (… ]
+# 
+Set Variable [ $sessionId ; Value: Let([   ~lastSession = JSONGetElement ( $settings ; "lastSessionId" ) ;   ~passedSession = $sessionId ;   ~passedPassed = $sessions and ValueExists ( ~passedSession ; $sessions ) ;   ~lastPassed = $sessions and ValueExists ( ~lastSession ; $sessions ) ; … ]
+# @var		$updateLastSession - Set in previous set variable step
+# 
+# 
+# Check to see if the last session id was set
+If [ IsEmpty ( $sessionId ) or ( Left ( $sessionId ; 1 ) = "?" ) ]
+# Create new session
+Perform Script [ “CreateSession” ; Specified: From list ; Parameter:    ]
+Set Variable [ $success ; Value: Let([ ~key = "success" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+If [ not $success ]
+Exit Script [ Text Result: Get ( ScriptResult ) ]
+End If
+Set Variable [ $sessionId ; Value: Let([ ~key = "sessionId" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+End If
+# 
+# 
+If [ $updateLastSession ]
+Set Variable [ $tempWindow ; Value: Get ( UUID ) ]
+New Window [ Style: Document ; Name: $tempWindow ; Using layout: “blank_Preferences” (Preferences) ; Height: 100 ; Width: 100 ; Top: -5000 ]
+Set Variable [ $settings ; Value: JSONSetElement ( $settings ; "lastSessionId" ; $sessionId ; JSONString ) ]
+Set Field [ Preferences::chatSettingsJSON ; JSONSetElement( 	Preferences::chatSettingsJSON; 	Get( UserName ); 	$settings; 	JSONObject ) ]
+Close Window [ Name: $tempWindow ; Current file ]
+End If
+# 
+# 
+Set Variable [ $result ; Value: GetColumnWhere ( Sessions::sessionJSONComplete_c ; Sessions::SessionId ; $sessionId ) ]
+# 
+// Insert Text [ Select ; Target: $history ; “[{"role":"user","source":"realtime","text":"Open the Preferences window.","ts":1760133359211},{"args":{"agentName":"NavigationHandler","prompt":"Open the Preferences window."},"call_id":"call_JSV9sE8qWpSwEHnH","name":"CallAgent","ts":1760133359573,"type":"tool_call"},{"call_id":"call_JSV9sE8qWpSwEHnH","output":{"result":"The Preferences window has been opened for you. If you need to view or switch to another window, just let me know!","success":true},"status":"success","ts":1760133363642,"type":"tool_result"},{"role":"assistant","source":"realtime","text":"Done.","ts":1760133364161}]” ]
+// Set Variable [ $result ; Value: Let ([   ~sessionId = Get ( UUID ) ]; JSONSetElement ( "" ; [ "user" ; Get ( AccountName ) ; JSONString ] ; [ "sessionId" ; ~sessionId ; JSONString ] ; [ "key" ; "docked" ; JSONString ] ; [ "sessions[+].sessionId" ; ~sessionId ; JSONString ] ; [ "session… ]
+# 
+Set Variable [ $$INIT_DATA ; Value: $result ]
+Set Variable [ $$settingsMD5_INIT ; Value: GetContainerAttribute ( JSONGetElement ( $$INIT_DATA ; "settings" ) ; "MD5" ) ]
+# 
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; True ; JSONBoolean ]; [ "result" ; $result ; JSONObject ] ) ]
+# 
 
-Parameters (JSON):
-- { "role":"user"|"assistant", "message":"..." }
 
-Behavior:
-- Append to a log table or write into Sessions::SessionJSON.history if you prefer.
-- Optional: also echo to a UI log window.
+# Controller Script: EmpoweredCore ➜🌎 
+# Input: JSON containing user input, conversation context, and any additional LLM instructions
+# 
+# Required Parameters
+Set Variable [ $agentName ; Value: Let([ ~key = "agentName" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+Set Variable [ $prompt ; Value: Let([ ~key = "prompt" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+# Optional Parameters
+# Session ID is used to get the chat history if provided
+Set Variable [ $sessionId ; Value: Let([ ~key = "sessionId" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+# 
+# If enabled then show the toast for the tool call
+Set Variable [ $toastParameter ; Value: JSONSetElement ( "" ; [ "message" ; "Agent: " & $agentName ; JSONString ] ;[ "type" ; "agent" ; JSONString ] ;[ "side" ; "left" ; JSONString ] ;[ "jsonData" ; JSONSetElement ( "" ; [ "prompt" ; $prompt ; JSONString ] ) ; JSONObject ] ) ]
+Perform Script [ “ShowToolToast” ; Specified: From list ; Parameter: $toastParameter ]
+# 
+# #####           GET AGENT           #####
+Perform Script [ “CallAgent_Subscript” ; Specified: From list ; Parameter: JSONSetElement ( "" ; [ "action" ; "Get Agent" ; JSONString ]; [ "agentName" ; $agentName ; JSONString ] ) ]
+Set Variable [ $success ; Value: Let([ ~key = "success" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+If [ not $success ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; $success ; JSONBoolean]; [ "error" ; "Agent definition is missing." ; JSONString ]  ) ]
+End If
+Set Variable [ $agentJSON ; Value: Let([ ~key = "agentJSON" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+# 
+Set Variable [ $model ; Value: Let([   ~modelOverride = JSONGetElement ( $agentJSON ; "modelOverride" ) ];   If ( not IsEmpty ( ~modelOverride ) ; ~modelOverride ; GetPreference ( Preferences::Model Chat ) ) ) ]
+If [ IsEmpty ( $model ) ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error" ; "No model selected for agent." ; JSONString ] ) ]
+End If
+# 
+# 
+# #####           GET MODEL INFO          #####
+Set Variable [ $model ; Value: Let([   ~override = JSONGetElement ( $agentJSON ; "modelOverride" ) ];   If ( not IsEmpty ( ~override ) ;      ~override ;   /* Otherwise */      GetPreference ( Preferences::Model Chat )   ) ) ]
+Perform Script [ “CallAgent_Subscript” ; Specified: From list ; Parameter: JSONSetElement ( "" ; [ "action" ; "Get Model" ; JSONString ]; [ "model" ; $model ; JSONString ] ) ]
+Set Variable [ $success ; Value: Let([ ~key = "success" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+If [ not $success ]
+Exit Script [ Text Result: Get ( ScriptResult ) ]
+End If
+Set Variable [ $modelJSON ; Value: Let([ ~key = "modelJSON" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+# 
+# Get API Key
+Perform Script [ “GetAPIKey” ; Specified: From list ; Parameter:    ]
+Set Variable [ $success ; Value: Let([ ~key = "success" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+If [ not $success ]
+Exit Script [ Text Result: Get ( ScriptResult ) ]
+End If
+Set Variable [ $apiKey ; Value: Let([ ~key = "apiKey" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+# 
+# 
+# Set up variables
+Set Variable [ $url ; Value: "https://api.openai.com/v1/chat/completions" ]
+Set Variable [ $curlOptions ; Value: "-X POST -H \"Content-Type: application/json\" -H \"Authorization: Bearer " & $apiKey & "\" -d @$jsonPayload --dump-header $header" ]
+# 
+# Get the session to add history to the payload
+If [ not IsEmpty ( $sessionId ) ]
+Set Variable [ $session ; Value: GetColumnWhere ( Sessions::sessionJSON ; Sessions::SessionId ; $sessionId ) ]
+End If
+# Prepare the initial JSON payload - Adjusted to include jsonschema for structured output
+Set Variable [ $messages ; Value: If( 	IsEmpty( $sessionId );     // Simple original structure.  Just pass system prompt and new prompt 	Let( 		[ 			~systemRole = If( 				PatternCount( $model; "o1" ) or PatternCount( $model; "o3" ); 				"user"; 				"system" 			) 		]; 		JSONSetElement( … ]
+Set Variable [ $jsonPayload ; Value: Let([   ~structuredOutput = GetAsBoolean ( Agents::flag_structureedOutput ) ;   ~agentName = Filter ( $agentName ; "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" ) ;   ~max_key = JSONGetElement ( $modelJSON ; "max_key" ) ;   ~temp = … ]
+Set Variable [ $$JSON.PAYLOAD ; Value: $jsonPayload ]
+# 
+# Loop to call LLM as many times as needed until we get the output we need. 
+Loop [ Flush: Always ]
+Insert from URL [ Select ; With dialog: Off ; Target: $$RESULT ; $url ; cURL options: $curlOptions ]
+# @var		$header - set in previous step
+# 
+Set Variable [ $$RESPONSE_HEADER ; Value: $header ]
+# 
+# choices[0]message.tool_calls
+If [ ValueExists ( "tool_calls" ; JSONListKeys ( $$RESULT ; "choices[0]message" ) ) ]
+# Add the tool calls to the history
+Set Variable [ $resultJSON ; Value: JSONGetElement ( $$RESULT ; "choices[0]message" ) ]
+Set Variable [ $jsonPayload ; Value: JSONSetElement ( $jsonPayload ; "messages[+]" ; $resultJSON ; JSONObject ) ]
+# 
+# TODO - Call applySessionState JS function
+Perform Script [ “Chat_UpdateFromToolCall” ; Specified: From list ; Parameter: JSONSetElement ( "" ; [ "result" ; $resultJSON ; JSONObject ] ) ]
+# 
+Perform Script [ “CallAgent_CallTools” ; Specified: From list ; Parameter: JSONSetElement ( "" ; [ "toolCalls"  ; JSONGetElement (  $resultJSON ; "tool_calls" ) ; JSONArray ] ; [ "validTools" ; JSON.GetValuesAtPath ( JSONGetElement ( $agentJSON ; "toolsArray" ) ; "function.name" ) ; JSONString ] ) ]
+# 
+# Add the tool call results to the history
+Set Variable [ $toolCallResults ; Value: Let([ ~key = "toolCallResults" ;   ~result = Get ( ScriptResult ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~result ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~result ; ~key ) ) ) ]
+Set Variable [ $jsonPayload ; Value: While ([   /* initialVariable */   ~json = $toolCallResults ;   ~list = JSONListKeys ( ~json ; "" ) ;   ~count = ValueCount ( ~list ) ;   ~counter = 0 ;   ~result = $jsonPayload   ];   /* condition */   ~counter < ~count ;   [   /* logic */   ~toolResult… ]
+Else
+Set Variable [ $resultJSON ; Value: JSONGetElement ( $$RESULT ; "choices[0]message" ) ]
+Set Variable [ $resultText ; Value: JSONGetElement ( $resultJSON ; "content" ) ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; True ; JSONBoolean ]; [ "result" ; $resultText ; JSONString ] ) ]
+End If
+# 
+# 
+End Loop
+# 
 
-Return:
-- "{\"success\":true}"
 
-******************************
-Script: Chat_SendMessage [ sessionId ; messageJSON ]
-Purpose: Text-mode fallback when Realtime is not connected.
 
-Parameters (JSON):
-- { "role":"user", "message":"..." }
 
-Behavior:
-- Append user message to canonical history (Sessions::SessionJSON.history).
-- Call OpenAI Chat Completions; append assistant message and any tool events.
-- Optionally call "Perform JavaScript in Web Viewer" to stream or to render final assistant text.
 
-Return:
-- "{\"success\":true}"
 
-******************************
-Script: ShowJSON [ jsonString ]
-Purpose: Developer utility to show JSON in a pretty viewer.
 
-Parameters:
-- Plain JSON string
-
-Behavior:
-- Show a custom dialog / card window with the JSON formatted.
-
-Return:
-- "{\"success\":true}"
-
-******************************
-Script: HandleAPIError [ errorJSON ]
-Purpose: Centralized error handler for API failures (quota, network, etc).
-
-Parameters (JSON):
-- { "code":"...", "message":"...", "type":"..." }
-
-Behavior:
-- Log error details.
-- Show a user-friendly dialog.
-- Optionally tag the current session with the error.
-
-Return:
-- "{\"success\":true}"
