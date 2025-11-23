@@ -190,10 +190,102 @@ function startNewSession(title = null) {
 /* FM callback to apply a session bundle returned by Session_GetState */
 function applySessionState(payload) {
   try {
-    // Expect same shape we already use in bootstrapApp: { history, layout?, settings?, key?, sessionId? }
-    bootstrapApp(payload);
+    // History-only fast path: if payload only carries { sessionId?, history[] }
+    const raw = typeof payload === 'string' ? JSON.parse(payload) : (payload || {});
+    const data = (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'success'))
+      ? (raw.success ? (raw.result || {}) : null)
+      : raw;
+
+    if (data && Array.isArray(data.history) && !data.layout && !data.settings) {
+      if (typeof data.sessionId === 'string' && data.sessionId) {
+        window.__sessionId = data.sessionId;
+      }
+
+      // Normalize incoming items into canonical sessionHistory and buffered text view
+      const incoming = [];
+      const bufferMsgs = [];
+
+      for (const m of data.history) {
+        const ts =
+          (m && m.ts !== undefined) ? m.ts
+          : (m && m.timestamp !== undefined) ? m.timestamp
+          : (m && m.time !== undefined) ? m.time
+          : Date.now();
+
+        if (m && m.type === 'tool_call') {
+          incoming.push({
+            id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('tc'),
+            ts,
+            role: 'tool',
+            type: 'tool_call',
+            content: null,
+            metadata: {
+              responseId: m.responseId || null,
+              call_id: m.call_id || m.id || null,
+              tool: {
+                name: m.name || m?.tool?.name || 'unknown',
+                arguments: (m?.args ?? m?.arguments ?? m?.tool?.arguments) ?? null
+              }
+            }
+          });
+          continue;
+        }
+
+        if (m && m.type === 'tool_result') {
+          incoming.push({
+            id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('tr'),
+            ts,
+            role: 'tool',
+            type: 'tool_result',
+            content: (m.output ?? m.content) ?? null,
+            metadata: {
+              call_id: m.call_id || null,
+              status: m.status || null
+            }
+          });
+          continue;
+        }
+
+        // Message-like
+        const role = m?.role || 'system';
+        const text = typeof m?.content === 'string'
+          ? m.content
+          : (typeof m?.text === 'string' ? m.text : '');
+
+        const item = {
+          id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('m'),
+          ts,
+          role,
+          type: 'message',
+          content: text,
+          metadata: { api: m?.metadata?.api ?? m?.metadata?.source ?? m?.source ?? null }
+        };
+        incoming.push(item);
+
+        if (text) {
+          bufferMsgs.push({
+            role,
+            text,
+            ts,
+            source: item.metadata?.api || null
+          });
+        }
+      }
+
+      sessionHistory.splice(0, sessionHistory.length, ...incoming);
+      trimHistory();
+      // Rebuild the lightweight text buffer used by the Text widget
+      chatBuffer.splice(0, chatBuffer.length, ...bufferMsgs);
+
+      renderChatFromHistory();
+      highlightActiveSession(window.__sessionId || '');
+      return true;
+    }
+
+    // Fallback: full bootstrap for envelopes that include settings/layout/other keys
+    const ok = bootstrapApp(payload);
     highlightActiveSession(window.__sessionId || '');
-    return true;
+    return !!ok;
   } catch (e) {
     console.error('applySessionState failed', e);
     return false;
