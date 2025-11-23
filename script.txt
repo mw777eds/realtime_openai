@@ -1,5 +1,7 @@
 # Script: Session_SaveState [ sessionId ; settings ; history ] ➜🌎 
 # Purpose: Upsert the unified session JSON (settings + history) keyed by sessionId. Merge only provided keys.
+# STATUS: REQUIRED (JS calls Session_SaveState).
+# IMPORTANT: Do NOT embed settings.layout; layout must be sent at root-level key "layout" (JS ignores settings.layout).
 // Show Custom Dialog [ Get ( ScriptName ) ; JSONFormatElements ( Get ( ScriptParameter ) ) ]
 # 
 # Parameters (JSON):
@@ -124,7 +126,11 @@ Perform Script [ “Session_GetState” ; Specified: From list ; Parameter: JSON
 # 
 
 
-NOTE: Grid_SaveLayout is incomplete mostly comments
+NOTE: STATUS: Optional but recommended
+# Grid_SaveLayout is used when the user clicks “Save Layout” in the web UI.
+# ACTION: Implement per-user storage of the provided envelope:
+#   { key, sessionId, settings:{ version, columns, cellHeight?, float, voice, text, toasts, showToolCalls?, layout:[ {widget,x,y,w,h}... ] } }
+# If left unimplemented, the app will keep working using localStorage only; layouts won’t persist in FileMaker and “Restore Default Layout” will be limited.
 # Script: Grid_SaveLayout [ sessionId ; payloadJSON ] ➜🌎 
 # Purpose: Save current mode’s layout for a session (scope:"session") or update machine defaults (scope:"machine").
 Show Custom Dialog [ Get ( ScriptName ) ; JSONFormatElements ( Get ( ScriptParameter ) ) ]
@@ -188,7 +194,11 @@ Set Variable [ $version ; Value: Let([ ~key = "version" ;   ~default = "" ;   ~p
 # 
 
 
-NOTE: same is true with Grid_LoadLayout mostly comments.  I need to find out if these two scripts are actually needed
+NOTE: STATUS: Optional but recommended
+# Grid_LoadLayout is invoked by the web UI on mode changes (docked/undocked) to fetch a saved layout.
+# ACTION: Implement a lookup that prefers session-scoped layout (SessionId+Key), else per-user defaults (AccountName+Key),
+# and then call: Perform JavaScript in Web Viewer [ "web" ; "applyLoadedLayout" ; $payloadEnvelope ].
+# If not implemented, the app will still render using cached localStorage or app defaults, but you won’t get server-side persistence.
 # Script: Grid_LoadLayout [ sessionId ; key ] ➜🌎 
 # Purpose: Return the saved layout envelope for the requested scope and key to the Web Viewer.
 Show Custom Dialog [ Get ( ScriptName ) ; JSONFormatElements ( Get ( ScriptParameter ) ) ]
@@ -253,7 +263,10 @@ Show Custom Dialog [ Get ( ScriptName ) ; JSONFormatElements ( Get ( ScriptParam
 # 14) Exit Script [ Result: $payload ]
 
 
-NOTE:  Also not populated other than comments
+NOTE: STATUS: Recommended
+# Grid_RestoreDefaultLayout is used by the “Restore Default Layout” button.
+# ACTION: Return a default payload envelope for the requested key (docked/undocked) and call applyLoadedLayout.
+# If you skip this, the fallback resets only locally; having a server default makes resets consistent for users.
 # Script: Grid_RestoreDefaultLayout [ sessionId ; key ] ➜🌎 
 # Purpose: Return a default layout envelope for given mode; Web applies it as a reset.
 Show Custom Dialog [ Get ( ScriptName ) ; JSONFormatElements ( Get ( ScriptParameter ) ) ]
@@ -369,11 +382,27 @@ Perform Script [ “ShowToolToast” ; Specified: From list ; Parameter: $toastP
 # Purpose: Call the CallAgent script with prompt and appropriate agentName
 # Required Parameters
 Set Variable [ $sessionId ; Value: Let([ ~key = "sessionId" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
-Set Variable [ $prompt ; Value: Let([ ~key = "prompt" ;   ~default = "" ;   ~param = Get ( ScriptParameter ) ;   ~exists = not IsEmpty ( FilterValues ( JSONListKeys ( ~param ; "" ) ; ~key ) ) ];  If ( ~exists ; JSONGetElement ( ~param ; ~key ) ; ~default ) ) ]
+Set Variable [ $message ; Value: Let([ ~param = Get ( ScriptParameter ) ; ~msg = JSONGetElement ( ~param ; "message" ) ; ~prompt = JSONGetElement ( ~param ; "prompt" ) ]; If ( not IsEmpty ( ~msg ) ; ~msg ; ~prompt ) ) ]
 # 
-If [ IsEmpty ( $sessionId ) or IsEmpty ( $prompt ) ]
-Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error" ; "Missing parameter. Both $sessionId and $prompt are required." ; JSONString ] ) ]
+If [ IsEmpty ( $sessionId ) or IsEmpty ( $message ) ]
+Exit Script [ Text Result: JSONSetElement ( "" ; [ "success" ; False ; JSONBoolean ]; [ "error" ; "Missing parameter. sessionId and message (or prompt) are required." ; JSONString ] ) ]
 End If
+# 
+# REQUIRED: Echo user message to canonical history now (pre-CallAgent) and refresh Web Viewer.
+# Steps:
+# 1) Set Variable [ $state ; Value: GetColumnWhere ( Sessions::sessionJSON ; Sessions::SessionId ; $sessionId ) ]
+# 2) Set Variable [ $now ; Value: Get ( CurrentTimestamp ) ]
+# 3) Set Variable [ $userItem ; Value: JSONSetElement ( "" ; 
+#        [ "id" ; Get ( UUID ) ; JSONString ] ;
+#        [ "ts" ; $now ; JSONString ] ;
+#        [ "role" ; "user" ; JSONString ] ;
+#        [ "type" ; "message" ; JSONString ] ;
+#        [ "content" ; $message ; JSONString ] ;
+#        [ "metadata.api" ; "chat_completions" ; JSONString ] ) ]
+# 4) Set Variable [ $newHistory ; Value: JSONSetElement ( JSONGetElement ( $state ; "history" ) ; "[+]" ; $userItem ; JSONObject ) ]
+# 5) Set Field [ Sessions::sessionJSON ; JSONSetElement ( $state ; [ "history" ; $newHistory ; JSONArray ] ) ]
+# 6) Perform JavaScript in Web Viewer [ Object Name: "web" ; Function Name: "applySessionState" ; Parameters: JSONSetElement ( "" ; [ "sessionId" ; $sessionId ; JSONString ] ; [ "history" ; $newHistory ; JSONArray ] ) ]
+# NOTE: After this echo, proceed to CallAgent. Ensure you pass the normalized $message into your agent pipeline.
 # 
 Set Variable [ $param ; Value: Let([   ~param = Get ( ScriptParameter ) ;   ~settings = JSONGetElement ( GetPreference ( Preferences::chatSettingsJSON ) ; Get ( UserName ) ) ;   ~agentName = JSONGetElement ( ~settings ; "settings.activeAgent.text" ) ];   JSONSetElement ( ~param ; [ "a… ]
 Perform Script [ “CallAgent” ; Specified: From list ; Parameter: $param ]
@@ -393,7 +422,13 @@ Perform JavaScript in Web Viewer [ Object Name: "web" ; Function Name: "applySes
 
 
 
-NOTE: I don't know that CallTools is used.  I use CallAgent_CallTools from within CallAgent.
+NOTE: STATUS: REQUIRED for Realtime
+# The web app calls FM_SCRIPTS.CallTools when Realtime emits function_call(s).
+# ACTION: Keep this “Realtime” CallTools script. It must:
+#  - Validate and run each tool (or show error toasts),
+#  - For each output: Perform JavaScript in Web Viewer [ "web" ; "sendToolResponse" ; $resultJSON ],
+#  - After last tool: Perform JavaScript in Web Viewer [ "web" ; "createModelResponse" ].
+# You can still use CallAgent_CallTools inside your chat completions flow; both can coexist.
 # Script: Handle calling tools and returning the result ➜🌎 
 # Purpose: Perform scripts that are tool calls and then return the result (This version is specific to the Realtime version)
 # 
