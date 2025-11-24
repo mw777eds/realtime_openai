@@ -4104,6 +4104,10 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
           const transcript = realtimeEvent.response.output[0].content?.[0]?.transcript;
           if (transcript) {
             appendChatMessage('assistant', transcript, { source: 'realtime' });
+            // When Show Tool Calls is OFF, re-render to ensure any prior pill disappears if a message now follows.
+            if (!showToolPills) {
+              renderChatFromHistory();
+            }
           }
         }
         // If a recent image was uploaded, log a concise result from the model's output
