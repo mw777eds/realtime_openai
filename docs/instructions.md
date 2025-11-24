@@ -296,3 +296,52 @@ Each item is append-only. Realtime is the authority while active; all modes read
   - switchSession(newSessionId): calls saveSessionState(); loads new session layouts/history; updates in-memory state; re-renders using precedence.
 - Dock/undock behavior:
   - On dock/undock toggle, apply the current session’s layout for that mode if available; otherwise fall back to the user template for that mode; otherwise app defaults. Keep the session layout authoritative and update it on the next flush.
+
+19. History-only applySessionState fast path (safe mid-script UI updates)
+- Contract:
+  - Payload shape: { "sessionId": "S123"?, "history": [ ...canonical items... ] }
+  - No settings/layout keys. When only history is present, JS updates sessionHistory and re-renders without making any JS→FileMaker calls.
+- Use cases:
+  - Chat_TextRequest progress updates from FileMaker: echo the user message, then tool_call pending, tool_result, and final assistant.
+  - Mid-turn status updates where you want the Web Viewer to reflect progress but you must continue in the same FileMaker script.
+- Behavior notes:
+  - FileMaker’s “Perform JavaScript in Web Viewer” does not capture the JS return value; it runs JS and continues.
+  - JS will not call FileMaker back during this fast path, so no scripts are queued. Your current script continues running.
+  - If you include settings or layout keys, JS falls back to full bootstrapApp which may call FileMaker (e.g., Grid_LoadLayout). Avoid that during in-progress turns; send history-only.
+
+20. Text mode turn patterns (exact ordering)
+- Client-authored first (no flicker; no temp IDs needed):
+  1) JS appends the user message to canonical and renders the bubble.
+  2) JS calls Session_SaveState({ history }) so FileMaker has that user message.
+  3) JS calls Chat_TextRequest({ sessionId, message, userItemId? }) to continue the turn (tools/assistant) on FileMaker.
+  4) FileMaker appends tool_call/result and assistant, persists, then calls applySessionState({ history }) as progress/final updates.
+- Server-authored (no local append):
+  1) JS calls Chat_TextRequest({ sessionId, message }).
+  2) FileMaker immediately appends the user message, persists, and calls applySessionState({ history }) so the bubble appears from canonical.
+  3) FileMaker continues with tools/assistant; persists and calls applySessionState as desired.
+
+21. IDs, metadata, and deduplication
+- IDs:
+  - JS-generated ids look like m_<base36Time>_<rand> (createId('m')); tool ids use tc_… and tr_….
+  - FileMaker may generate UUIDs. Keep ids stable across multiple applySessionState updates within the same turn.
+- Deduping user item (if using client-authored flow):
+  - If JS passes userItemId, reuse it server-side or detect that the last history item is already that user message to avoid a duplicate.
+- Metadata:
+  - Use metadata.api = "realtime" for voice/RT events.
+  - Use metadata.api = "chat_completions" for text-mode items.
+  - Do not use metadata.source anymore; normalize to metadata.api.
+
+22. Realtime → Text switch and flush policy
+- On Realtime stop (mute/off/cleanup), flush consolidated history to FileMaker via Session_SaveState({ history:true }) so the next text turn has full context.
+- If you can’t guarantee that flush, add a simple “dirty” check on the web side and pre-flush only once on the first text submit after Realtime.
+- Minimal rule of thumb:
+  - Flush on: response.done (assistant), user transcript commit, tool_call, tool_result, session switch, viewer close.
+  - For text-only turns, don’t pre-flush if nothing is dirty; let FileMaker author the turn (server-authored) or append and save first (client-authored).
+
+23. FileMaker ↔ JavaScript script queueing semantics
+- FileMaker → JS:
+  - Perform JavaScript in Web Viewer runs the JS function and immediately returns to your FileMaker script. There is no return value capture.
+- JS → FileMaker:
+  - Any FileMaker.PerformScript calls made by JS while a script is already running are queued and will run only after the current script finishes.
+- Practical takeaway:
+  - It’s safe to call window.applySessionState multiple times during a FileMaker script. Prefer history-only payloads to avoid any JS-initiated FM calls during that time.
