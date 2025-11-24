@@ -1329,9 +1329,8 @@ function sendToolResponse(toolResponse) {
     // Append tool_result to canonical history
     try {
       appendToolResult(tr.call_id, tr.output, 'success');
-      if (showToolPills) {
-        renderChatFromHistory();
-      }
+      // Re-render regardless of pill toggle; when pills are off, renderChatFromHistory shows only the last pill if it's the final item.
+      renderChatFromHistory();
     } catch (_) {}
   } else {
     console.error("Data channel not ready for tool response. State:", dc ? dc.readyState : "no dc");
@@ -4038,10 +4037,8 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             const call_id = call?.call_id || call?.id || null;
             appendToolCall(name, args, call_id, responseId);
           }
-          // If Text widget is mounted and tool pills are enabled, re-render to show pills
-          if (showToolPills) {
-            renderChatFromHistory();
-          }
+          // Re-render regardless of pill toggle; when pills are off, renderChatFromHistory shows only the last pill if it's the final item.
+          renderChatFromHistory();
         } catch (_) {}
       }
 
