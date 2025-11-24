@@ -418,14 +418,34 @@ function renderChatFromHistory() {
   const list = document.getElementById('chat-messages');
   if (!list) return;
   list.innerHTML = '';
-  for (const item of sessionHistory) {
+
+  const lastIdx = sessionHistory.length - 1;
+
+  for (let i = 0; i < sessionHistory.length; i++) {
+    const item = sessionHistory[i];
+    if (!item) continue;
+
     if (item.type === 'message') {
       renderChatMessage(item.role, item.content, item.id);
-    } else if ((item.type === 'tool_call' || item.type === 'tool_result') && showToolPills) {
-      const label = item.type === 'tool_call'
-        ? `Tool call: ${item?.metadata?.tool?.name || 'unknown'}`
-        : `Tool result: ${item?.metadata?.tool?.name || ''}`.trim();
-      renderToolPill(label, item, item.id);
+      continue;
+    }
+
+    if (item.type === 'tool_call' || item.type === 'tool_result') {
+      if (showToolPills) {
+        const label = item.type === 'tool_call'
+          ? `Tool call: ${item?.metadata?.tool?.name || 'unknown'}`
+          : `Tool result: ${item?.metadata?.tool?.name || ''}`.trim();
+        renderToolPill(label, item, item.id);
+      } else {
+        // Pills OFF: only show a pill if it is the final item in history.
+        // This ensures no pills appear between any chat messages.
+        if (i === lastIdx) {
+          const label = item.type === 'tool_call'
+            ? `Tool call: ${item?.metadata?.tool?.name || 'unknown'}`
+            : `Tool result: ${item?.metadata?.tool?.name || ''}`.trim();
+          renderToolPill(label, item, item.id);
+        }
+      }
     }
   }
 }
