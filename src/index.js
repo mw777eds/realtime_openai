@@ -347,6 +347,18 @@ function appendToolCall(name, args, call_id, responseId) {
 }
 
 function appendToolResult(call_id, output, status = 'success', error = null) {
+  // Derive the tool name from the most recent matching tool_call (by call_id)
+  let toolName = null;
+  try {
+    for (let i = sessionHistory.length - 1; i >= 0; i--) {
+      const it = sessionHistory[i];
+      if (it && it.type === 'tool_call' && (it.metadata?.call_id === call_id || it.metadata?.call_id === (call_id || null))) {
+        toolName = it.metadata?.tool?.name || null;
+        break;
+      }
+    }
+  } catch (_) {}
+
   sessionHistory.push({
     id: createId('tr'),
     ts: Date.now(),
@@ -356,7 +368,8 @@ function appendToolResult(call_id, output, status = 'success', error = null) {
     metadata: {
       call_id: call_id || null,
       status,
-      error
+      error,
+      tool: toolName ? { name: toolName } : undefined
     }
   });
   trimHistory();
