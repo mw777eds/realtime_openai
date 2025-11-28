@@ -143,16 +143,96 @@ function renderSessionList() {
       const row = document.createElement('div');
       row.className = 'conversation-item';
       row.setAttribute('data-session-id', s.id);
-      row.textContent = s.title || s.id;
+      row.style.position = 'relative';
+
+      // Title text
+      const titleEl = document.createElement('span');
+      titleEl.textContent = s.title || s.id;
+      row.appendChild(titleEl);
+
+      // Delete "×" button (shows on hover)
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'session-delete-btn';
+      delBtn.setAttribute('aria-label', 'Delete conversation');
+      delBtn.title = 'Delete this conversation';
+      delBtn.textContent = '×';
+      delBtn.style.position = 'absolute';
+      delBtn.style.right = '6px';
+      delBtn.style.top = '50%';
+      delBtn.style.transform = 'translateY(-50%)';
+      delBtn.style.display = 'none';
+      delBtn.style.border = 'none';
+      delBtn.style.background = 'transparent';
+      delBtn.style.color = 'inherit';
+      delBtn.style.cursor = 'pointer';
+      delBtn.style.fontSize = '16px';
+      delBtn.style.lineHeight = '1';
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteSessionConfirm(s.id);
+      });
+
+      row.addEventListener('mouseenter', () => { delBtn.style.display = 'block'; });
+      row.addEventListener('mouseleave', () => { delBtn.style.display = 'none'; });
+
       row.addEventListener('click', (e) => {
         e.stopPropagation();
         switchSession(s.id);
       });
+
+      row.appendChild(delBtn);
       container.appendChild(row);
     }
   });
 
   highlightActiveSession(window.__sessionId || '');
+}
+
+// Choose the next session to select after deleting one.
+// Assumes window.__sessions is ordered by most-recent first.
+function pickNextSessionAfter(deletedId, prevList) {
+  const remaining = (prevList || []).filter(s => s && s.id !== deletedId);
+  if (remaining.length === 0) return null;
+  return remaining[0];
+}
+
+// Confirm and delete a session with optimistic UI update.
+function deleteSessionConfirm(sessionId) {
+  if (!sessionId) return false;
+  const ok = window.confirm('Permanently delete this conversation? This cannot be undone.');
+  if (!ok) return false;
+
+  const prev = Array.isArray(window.__sessions) ? window.__sessions.slice() : [];
+  const wasCurrent = (window.__sessionId === sessionId);
+
+  // Optimistically remove from list and re-render
+  window.__sessions = prev.filter(s => s && s.id !== sessionId);
+  renderSessionList();
+
+  // If we just deleted the active session, select the next most recent or start a new one
+  if (wasCurrent) {
+    const next = pickNextSessionAfter(sessionId, prev);
+    if (next && next.id) {
+      // Avoid flushing deleted session; do not call switchSession here
+      window.__sessionId = next.id;
+      highlightActiveSession(next.id);
+      try {
+        const list = document.getElementById('chat-messages');
+        if (list) list.innerHTML = '';
+      } catch (_) {}
+      requestSessionState(next.id);
+    } else {
+      // No sessions remain; start a new one without flushing the deleted session
+      window.__sessionId = '';
+      callFM(FM_SCRIPTS.NewSession, {});
+    }
+  }
+
+  // Notify FileMaker to delete the session record
+  callFM(FM_SCRIPTS.DeleteSession, { sessionId });
+
+  return true;
 }
 
 /* Request full session bundle from FileMaker */
@@ -834,7 +914,8 @@ const FM_SCRIPTS = Object.freeze({
   CallTools: 'CallTools',
   HandleAPIError: 'HandleAPIError',
   LogMessage: 'LogMessage',
-  ShowJSON: 'ShowJSON'
+  ShowJSON: 'ShowJSON',
+  DeleteSession: 'DeleteSession'
 });
 
 /**
