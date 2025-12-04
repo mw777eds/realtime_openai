@@ -1052,7 +1052,7 @@ const FM_SCRIPTS = Object.freeze({
   HandleAPIError: 'HandleAPIError',
   LogMessage: 'LogMessage',
   ShowJSON: 'ShowJSON',
-  DeleteSession: 'DeleteSession',
+  DeleteSession: 'Session_Delete',
   RenameSession: 'Session_Rename'
 });
 
