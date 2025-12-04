@@ -162,6 +162,7 @@ Each item is append-only. Realtime is the authority while active; all modes read
 - Rate limits and API errors: surface toast + modal detail; FM HandleAPIError(JSON); retry/backoff policy.
 - Network drops: attempt reconnect; on new session, preload canonical again.
 - Mic permissions: graceful fallback; allow text-only use.
+- Do not use native browser alerts, confirms, or prompts (window.alert/window.confirm/window.prompt). Use in-app modals and toasts instead for a consistent, accessible UX.
 
 12. Acceptance criteria
 - Mode switching and concurrency:

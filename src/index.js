@@ -198,9 +198,13 @@ function pickNextSessionAfter(deletedId, prevList) {
 }
 
 // Confirm and delete a session with optimistic UI update.
-function deleteSessionConfirm(sessionId) {
+async function deleteSessionConfirm(sessionId) {
   if (!sessionId) return false;
-  const ok = window.confirm('Permanently delete this conversation? This cannot be undone.');
+
+  const ok = await showConfirmModal(
+    'Permanently delete this conversation? This cannot be undone.',
+    { title: 'Delete conversation', confirmText: 'Delete', cancelText: 'Cancel', danger: true }
+  );
   if (!ok) return false;
 
   const prev = Array.isArray(window.__sessions) ? window.__sessions.slice() : [];
@@ -591,6 +595,75 @@ function showJsonModal(data) {
 function hideJsonModal() {
   const modal = document.querySelector('.json-modal');
   if (modal) modal.remove();
+}
+
+/**
+ * Generic confirm modal (Promise-based).
+ * Reuses the json-modal styles already present in the app.
+ * Returns a Promise<boolean> that resolves true on confirm, false on cancel/close.
+ */
+function showConfirmModal(message, options = {}) {
+  const opts = {
+    title: options.title || 'Confirm',
+    confirmText: options.confirmText || 'OK',
+    cancelText: options.cancelText || 'Cancel',
+    danger: !!options.danger
+  };
+
+  // Remove any existing modal first
+  const existing = document.querySelector('.json-modal');
+  if (existing) existing.remove();
+
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'json-modal';
+    modal.innerHTML = `
+      <div class="json-modal-content">
+        <div class="json-modal-header">
+          <div class="json-modal-title">${opts.title}</div>
+          <button class="json-modal-close" aria-label="Close">×</button>
+        </div>
+        <div class="json-confirm-message" style="padding: 8px 12px;">
+          ${message}
+        </div>
+        <div class="json-modal-actions" style="display:flex; gap:8px; justify-content:flex-end; padding: 0 12px 12px;">
+          <button class="json-confirm-cancel">${opts.cancelText}</button>
+          <button class="json-confirm-ok${opts.danger ? ' danger' : ''}">${opts.confirmText}</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(modal);
+
+    const btnClose = modal.querySelector('.json-modal-close');
+    const btnCancel = modal.querySelector('.json-confirm-cancel');
+    const btnOk = modal.querySelector('.json-confirm-ok');
+
+    function cleanup(result) {
+      try { modal.remove(); } catch (_) {}
+      resolve(result);
+    }
+
+    btnClose?.addEventListener('click', () => cleanup(false));
+    btnCancel?.addEventListener('click', () => cleanup(false));
+    btnOk?.addEventListener('click', () => cleanup(true));
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) cleanup(false);
+    });
+
+    function onKey(e) {
+      if (e.key === 'Escape') {
+        document.removeEventListener('keydown', onKey);
+        cleanup(false);
+      } else if (e.key === 'Enter') {
+        document.removeEventListener('keydown', onKey);
+        cleanup(true);
+      }
+    }
+    document.addEventListener('keydown', onKey);
+
+    try { btnOk?.focus(); } catch (_) {}
+  });
 }
 
 function getCurrentMode() {
