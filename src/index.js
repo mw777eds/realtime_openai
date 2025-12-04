@@ -133,6 +133,61 @@ function highlightActiveSession(sessionId) {
   });
 }
 
+function beginRenameSessionInline(rowEl, sessionId, currentTitle) {
+  if (!rowEl || !sessionId || rowEl.classList.contains('editing')) return;
+  rowEl.classList.add('editing');
+
+  const titleSpan = rowEl.querySelector('span');
+  const delBtn = rowEl.querySelector('.session-delete-btn');
+  if (delBtn) delBtn.style.display = 'none';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'session-rename-input';
+  input.value = currentTitle || '';
+  input.style.width = 'calc(100% - 24px)';
+  input.style.border = '1px solid rgba(255,255,255,0.3)';
+  input.style.background = 'transparent';
+  input.style.color = 'inherit';
+  input.style.padding = '2px 6px';
+  input.style.borderRadius = '4px';
+
+  if (titleSpan) {
+    titleSpan.replaceWith(input);
+  } else {
+    rowEl.insertBefore(input, delBtn || null);
+  }
+
+  input.focus();
+  try { input.select(); } catch (_) {}
+
+  const original = currentTitle || '';
+
+  function finish(commit) {
+    rowEl.classList.remove('editing');
+    if (!commit) {
+      renderSessionList();
+      return;
+    }
+    const newTitle = (input.value || '').trim();
+    if (!newTitle || newTitle === original) {
+      renderSessionList();
+      return;
+    }
+    window.__sessions = (window.__sessions || []).map(s =>
+      s && s.id === sessionId ? { ...s, title: newTitle } : s
+    );
+    renderSessionList();
+    callFM(FM_SCRIPTS.RenameSession, { sessionId, title: newTitle });
+  }
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+}
+
 function renderSessionList() {
   const containers = document.querySelectorAll('.conversation-list');
   if (!containers || containers.length === 0) return;
@@ -149,6 +204,10 @@ function renderSessionList() {
       const titleEl = document.createElement('span');
       titleEl.textContent = s.title || s.id;
       row.appendChild(titleEl);
+      titleEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        beginRenameSessionInline(row, s.id, titleEl.textContent || s.title || s.id);
+      });
 
       // Delete "×" button (shows on hover)
       const delBtn = document.createElement('button');
@@ -175,9 +234,14 @@ function renderSessionList() {
 
       row.addEventListener('mouseenter', () => { delBtn.style.display = 'block'; });
       row.addEventListener('mouseleave', () => { delBtn.style.display = 'none'; });
+      row.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        beginRenameSessionInline(row, s.id, titleEl.textContent || s.title || s.id);
+      });
 
       row.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (row.classList.contains('editing')) return;
         switchSession(s.id);
       });
 
@@ -988,7 +1052,8 @@ const FM_SCRIPTS = Object.freeze({
   HandleAPIError: 'HandleAPIError',
   LogMessage: 'LogMessage',
   ShowJSON: 'ShowJSON',
-  DeleteSession: 'DeleteSession'
+  DeleteSession: 'DeleteSession',
+  RenameSession: 'Session_Rename'
 });
 
 /**
