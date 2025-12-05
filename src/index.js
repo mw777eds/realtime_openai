@@ -149,6 +149,84 @@ function applySessionTitle(payload) {
   return true;
 }
 
+function getAssistantTurnCount() {
+  try {
+    let count = 0;
+    for (const it of sessionHistory) {
+      if (
+        it &&
+        it.type === 'message' &&
+        it.role === 'assistant' &&
+        typeof it.content === 'string' &&
+        it.content.trim() !== ''
+      ) {
+        count++;
+      }
+    }
+    return count;
+  } catch (_) { return 0; }
+}
+
+function getCurrentSessionTitle() {
+  try {
+    const sid = window.__sessionId || '';
+    if (!sid || !Array.isArray(window.__sessions)) return '';
+    const it = window.__sessions.find(s => s && s.id === sid);
+    return (it && typeof it.title === 'string') ? it.title : '';
+  } catch (_) { return ''; }
+}
+
+function isDefaultSessionTitle(title) {
+  try {
+    return (String(title || '').trim().toLowerCase() === 'new session');
+  } catch (_) { return false; }
+}
+
+/**
+ * Trigger an automatic session title request to FileMaker exactly once per session,
+ * only after the threshold of assistant turns, and only when the current title
+ * is still the default placeholder ("New Session").
+ * FileMaker should compute the title and call window.applySessionTitle({ sessionId, title }).
+ */
+function maybeTriggerAutoSessionTitle(reason = 'auto') {
+  try {
+    const sid = window.__sessionId || '';
+    if (!sid) return false;
+
+    // Ensure one-time per session (in this viewer runtime)
+    if (!window.__autoNameTriggeredSessions) window.__autoNameTriggeredSessions = {};
+    if (window.__autoNameTriggeredSessions[sid]) return false;
+
+    // Only auto-name if current title is the default placeholder
+    const currentTitle = getCurrentSessionTitle();
+    if (!isDefaultSessionTitle(currentTitle)) return false;
+
+    // Default threshold: after first assistant reply
+    const threshold = (typeof window.__autoNameAfterTurns === 'number' && window.__autoNameAfterTurns >= 1)
+      ? window.__autoNameAfterTurns
+      : 1;
+
+    const count = getAssistantTurnCount();
+    if (count < threshold) return false;
+
+    // Mark as triggered for this session id
+    window.__autoNameTriggeredSessions[sid] = true;
+
+    // Ask FileMaker to compute a title; FM should call back window.applySessionTitle
+    callFM(FM_SCRIPTS.RenameSession, {
+      sessionId: sid,
+      auto: true,
+      reason,
+      turnCount: count,
+      onlyIfUntitled: true,
+      notify: 'title'
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 function highlightActiveSession(sessionId) {
   const all = document.querySelectorAll('.conversation-item');
   all.forEach(el => {
@@ -450,6 +528,7 @@ function applySessionState(payload) {
       chatBuffer.splice(0, chatBuffer.length, ...bufferMsgs);
 
       renderChatFromHistory();
+      maybeTriggerAutoSessionTitle('text_turn_end');
       highlightActiveSession(window.__sessionId || '');
       return true;
     }
@@ -4352,6 +4431,8 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             if (!showToolPills) {
               renderChatFromHistory();
             }
+            // After an assistant turn ends in Realtime, consider auto titling
+            maybeTriggerAutoSessionTitle('realtime_turn_end');
           }
         }
         // If a recent image was uploaded, log a concise result from the model's output
