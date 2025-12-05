@@ -5,8 +5,9 @@ import { computeLayoutMD5 } from './md5.js';
 
 /* Minimal on-screen debug tracer (overlay disabled) */
 function debugTrace(label, data) {
+  // Enable by setting window.__debugTrace = true from the console if needed
+  if (!(typeof window !== 'undefined' && window.__debugTrace === true)) return;
   try { console.warn(label, data); } catch (_) {}
-  // On-screen debug overlay disabled
   return;
 }
 
