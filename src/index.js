@@ -446,6 +446,16 @@ function applySessionState(payload) {
     const data = (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'success'))
       ? (raw.success ? (raw.result || {}) : null)
       : raw;
+    try {
+      debugTrace('[applySessionState] received', {
+        typeofPayload: typeof payload,
+        envelopeKeys: raw && typeof raw === 'object' ? Object.keys(raw) : null,
+        dataKeys: data && typeof data === 'object' ? Object.keys(data) : null,
+        hasHistory: !!(data && Array.isArray(data.history)),
+        hasLayout: !!(data && data.layout),
+        hasSettings: !!(data && data.settings)
+      });
+    } catch (_) {}
 
     if (data && Array.isArray(data.history) && !data.layout && !data.settings) {
       if (typeof data.sessionId === 'string' && data.sessionId) {
@@ -527,19 +537,31 @@ function applySessionState(payload) {
       trimHistory();
       // Rebuild the lightweight text buffer used by the Text widget
       chatBuffer.splice(0, chatBuffer.length, ...bufferMsgs);
+      try {
+        debugTrace('[applySessionState] fast-path:applied', {
+          incoming: incoming.length,
+          bufferMsgs: bufferMsgs.length,
+          sessionId: window.__sessionId || '',
+          historyLen: sessionHistory.length
+        });
+      } catch (_) {}
 
       renderChatFromHistory();
-      maybeTriggerAutoSessionTitle('text_turn_end');
+      const auto = maybeTriggerAutoSessionTitle('text_turn_end');
       highlightActiveSession(window.__sessionId || '');
+      try { debugTrace('[applySessionState] fast-path:done', { autoTitleTriggered: !!auto }); } catch (_) {}
       return true;
     }
 
     // Fallback: full bootstrap for envelopes that include settings/layout/other keys
+    try { debugTrace('[applySessionState] fallback->bootstrap', { hasData: !!data }); } catch (_) {}
     const ok = bootstrapApp(payload);
     highlightActiveSession(window.__sessionId || '');
+    try { debugTrace('[applySessionState] fallback:done', { ok: !!ok, sid: window.__sessionId || '' }); } catch (_) {}
     return !!ok;
   } catch (e) {
     console.error('applySessionState failed', e);
+    try { debugTrace('[applySessionState] error', { message: e?.message || String(e), stack: e?.stack || null }); } catch (_){}
     return false;
   }
 }
