@@ -125,6 +125,30 @@ function setSessionList(list) {
   renderSessionList();
 }
 
+function applySessionTitle(payload) {
+  const p = typeof payload === 'string' ? parseJsonSafely(payload, 'applySessionTitle') : (payload || {});
+  const sid = (p && typeof p.sessionId === 'string') ? p.sessionId : '';
+  const title = (p && typeof p.title === 'string') ? p.title : '';
+  if (!sid || !title) return false;
+
+  // Update in-memory sessions list
+  if (Array.isArray(window.__sessions)) {
+    let changed = false;
+    window.__sessions = window.__sessions.map(s => {
+      if (s && s.id === sid && s.title !== title) {
+        changed = true;
+        return { ...s, title };
+      }
+      return s;
+    });
+    if (changed) {
+      renderSessionList();
+      // If current session matches, update any other UI elements that show the title here if needed.
+    }
+  }
+  return true;
+}
+
 function highlightActiveSession(sessionId) {
   const all = document.querySelectorAll('.conversation-item');
   all.forEach(el => {
@@ -1001,6 +1025,7 @@ window.startNewSession = startNewSession;
 window.applySessionState = applySessionState;
 window.requestSessionState = requestSessionState;
 window.setSessionList = setSessionList;
+window.applySessionTitle = applySessionTitle;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
 
