@@ -479,7 +479,7 @@ function applySessionState(payload) {
             ts,
             role: 'tool',
             type: 'tool_call',
-            content: null,
+            content: (typeof m?.content === 'string' ? m.content : null),
             metadata: {
               responseId: m.responseId || null,
               call_id: m.call_id || m.id || null,
@@ -604,13 +604,13 @@ function appendCanonicalMessage(role, text, metadata = {}) {
   return item;
 }
 
-function appendToolCall(name, args, call_id, responseId) {
+function appendToolCall(name, args, call_id, responseId, summary = null) {
   sessionHistory.push({
     id: createId('tc'),
     ts: Date.now(),
     role: 'tool',
     type: 'tool_call',
-    content: null,
+    content: (typeof summary === 'string' && summary.trim() !== '' ? summary.trim() : null),
     metadata: {
       responseId: responseId || null,
       call_id: call_id || null,
@@ -719,17 +719,27 @@ function renderChatFromHistory() {
 
     if (item.type === 'tool_call' || item.type === 'tool_result') {
       if (showToolPills) {
-        const label = item.type === 'tool_call'
-          ? `Tool call: ${item?.metadata?.tool?.name || 'unknown'}`
-          : `Tool result: ${item?.metadata?.tool?.name || ''}`.trim();
+        const name = item?.metadata?.tool?.name || 'unknown';
+        let label;
+        if (item.type === 'tool_call') {
+          const c = (typeof item.content === 'string' ? item.content : '').trim();
+          label = c ? `Tool call: ${name} — ${safeStr(c, 140)}` : `Tool call: ${name}`;
+        } else {
+          label = `Tool result: ${name}`.trim();
+        }
         renderToolPill(label, item, item.id);
       } else {
         // Pills OFF: only show a pill if it is the final item in history.
         // This ensures no pills appear between any chat messages.
         if (i === lastIdx) {
-          const label = item.type === 'tool_call'
-            ? `Tool call: ${item?.metadata?.tool?.name || 'unknown'}`
-            : `Tool result: ${item?.metadata?.tool?.name || ''}`.trim();
+          const name = item?.metadata?.tool?.name || 'unknown';
+          let label;
+          if (item.type === 'tool_call') {
+            const c = (typeof item.content === 'string' ? item.content : '').trim();
+            label = c ? `Tool call: ${name} — ${safeStr(c, 140)}` : `Tool call: ${name}`;
+          } else {
+            label = `Tool result: ${name}`.trim();
+          }
           renderToolPill(label, item, item.id);
         }
       }
@@ -2727,7 +2737,7 @@ function bootstrapApp(payload) {
             ts,
             role: 'tool',
             type: 'tool_call',
-            content: null,
+            content: (typeof m?.content === 'string' ? m.content : null),
             metadata: {
               responseId: m.responseId || null,
               call_id: m.call_id || m.id || null,
@@ -4382,6 +4392,20 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
 
         // Append tool_call items to canonical history
         try {
+          const shortText = (() => {
+            try {
+              const out = realtimeEvent.response?.output || [];
+              for (const item of out) {
+                if (item && item.type === 'message' && item.role === 'assistant' && Array.isArray(item.content)) {
+                  const part = item.content.find(p =>
+                    p && (p.type === 'text' || p.type === 'output_text') && typeof p.text === 'string' && p.text.trim() !== ''
+                  );
+                  if (part) return part.text.trim();
+                }
+              }
+            } catch (_) {}
+            return null;
+          })();
           for (const call of toolCalls) {
             const name = call?.name || call?.tool_name || 'unknown';
             let args = null;
@@ -4394,7 +4418,7 @@ async function initializeWebRTC(ephemeralKey, model, instructions, toolsStr, too
             }
             const responseId = realtimeEvent.response?.id || null;
             const call_id = call?.call_id || call?.id || null;
-            appendToolCall(name, args, call_id, responseId);
+            appendToolCall(name, args, call_id, responseId, shortText);
           }
           // Re-render regardless of pill toggle; when pills are off, renderChatFromHistory shows only the last pill if it's the final item.
           renderChatFromHistory();
