@@ -2,6 +2,34 @@
 
 Use this checklist to perform safe, incremental refactors. Keep behavior identical after each step and test before proceeding.
 
+## Status Update (2026-01-19)
+
+### Completed Tasks ✅
+- **Steps 1-5, 6a-b, 7-9:** All completed and verified
+- Most code organization tasks finished
+- FileMaker bridge abstraction in place (`callFM`, `FM_SCRIPTS`)
+- Widget dispatchers implemented
+- Audio level interval management added
+- Default widget positions centralized
+
+### Remaining Tasks
+- [ ] **Step 6:** Full function reordering by module sections (nice-to-have, not critical)
+- [ ] **Quick tests verification** (see lines 90-96) - manual testing ongoing
+
+### Bugs Status
+- **Resolved:** All bugs 1-8 moved to `bugs/resolved/`
+- **On Hold:** Bug 9 (tool pill) moved to `bugs/on-hold/` for future consideration
+- **Active bugs:** 0
+
+### Next Phase
+Ready for modularization! See root [README.md](../README.md) for Phase 1-4 roadmap:
+1. Phase 1: Extract utilities → `src/utils/`
+2. Phase 2: Extract state → `src/state/`
+3. Phase 3: Extract widgets → `src/widgets/`
+4. Phase 4: Extract Realtime → `src/realtime/`
+
+---
+
 ## Incremental Steps (execute in order)
 - [x] Step 1: Introduce FileMaker wrapper and centralized script-name constants (no behavior change).
 - [x] Step 2: Add audio level interval management (create audioLevelInterval; clear it in cleanupWebRTC and removeRealtimeWidget).

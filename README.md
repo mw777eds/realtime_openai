@@ -1,115 +1,181 @@
-# FileMaker OpenAI Voice Interface                                                   
-                                                                                      
- A WebRTC-based voice interface for FileMaker integration with OpenAI's general-availability real-time API, now including
- container image context support.
-                                                                                      
- ## Features                                                                          
-                                                                                      
- - Real-time voice interaction with OpenAI models                                     
- - Audio level-based animation control                                                
- - Tool calling support for FileMaker integration
- - Share FileMaker container images with the assistant as visual context
- - Mute/unmute functionality with visual feedback
- - Automatic speech detection and response
-                                                                                      
- ## Requirements                                                                      
-                                                                                      
- - FileMaker Pro                                                                      
- - Modern web browser with WebRTC support                                             
- - OpenAI API key with real-time API access                                           
- - HTTPS environment for WebRTC functionality                                         
-                                                                                      
- ## Setup                                                                             
-                                                                                      
- 1. Host these files in a web-accessible location with HTTPS support                  
- 2. Include the web viewer in your FileMaker solution                                 
- 3. Configure your OpenAI API credentials in FileMaker                                
- 4. Set up the required FileMaker scripts:                                            
-    - SendToOpenAI                                                                    
-    - CallTools                                                                       
-    - LogMessage                                                                      
-                                                                                      
- ## File Structure                                                                    
-                                                                                      
- - `index.html` - Main HTML container                                                 
- - `src/index.js` - Core WebRTC, audio, tool calling, and container image handling logic
- - `src/style.css` - Styling for the interface
-                                                                                      
- ## Usage                                                                             
-                                                                                      
- The interface provides:                                                              
- - Click-to-mute functionality on both the logo and speaking indicators               
- - Visual feedback for audio transmission                                             
- - Automatic handling of tool calls between OpenAI and FileMaker                      
- - Message logging for both user and assistant interactions                           
-                                                                                      
- ## FileMaker Integration                                                             
-                                                                                      
- The interface exposes several functions to FileMaker:                                
- - `initializeWebRTC(ephemeralKey, model, instructions, tools, toolChoice, sessionConfig)`
- - `startAudioTransmission()`
- - `stopAudioTransmission()`
- - `cleanupWebRTC()`
- - `sendToolResponse(toolResponse)`
- - `createModelResponse()`
- - `updateSession(updateParamsJson)`
- - `sendContainerImageToRealtime(imagePayload)`
+# FileMaker Realtime Chat Interface
 
-### Real-time session configuration
+A sophisticated voice + text chat interface for FileMaker, powered by OpenAI's Realtime API and Chat Completions API. Features a flexible grid-based widget layout for conversations, voice interaction, text chat, and activity toasts.
 
-- `initializeWebRTC` accepts an optional sixth argument, `sessionConfig`, which should be a JSON string describing additional
-  session options. The default session now targets the generally available realtime stack, enabling
-  `gpt-4o-mini-transcribe` for speech recognition, `voice: "verse"`, and text+audio response modalities.
-- You can include any `session.update` fields supported by OpenAI (e.g. `turn_detection`, `input_audio_format`, `response_format`).
-- To opt out of the automatically injected `request_container_image` tool, set
-  `"disableDefaultContainerImageTool": true` in the `sessionConfig` payload.
-- Example:
+## ✨ Key Features
 
-```json
-{
-  "instructions": "You are assisting with cataloguing product images.",
-  "turn_detection": { "type": "server_vad", "threshold": 0.5 },
-  "modalities": ["text", "audio"],
-  "tools": [
-    { "type": "function", "name": "lookup_item", "description": "Return product metadata", "parameters": { "type": "object" } }
-  ]
-}
+**Voice Interaction:**
+- WebRTC-based real-time voice chat via OpenAI Realtime API
+- Audio waveform visualization with level monitoring
+- Click-to-mute with visual feedback (sleep icon)
+- Server-side voice activity detection (VAD)
+
+**Text Chat:**
+- Parallel text chat using Chat Completions API
+- Image upload support (container images to vision context)
+- Tool call/result visualization with JSON inspection
+- Message history persistence
+
+**Flexible Layout:**
+- GridStack-based draggable/resizable widgets
+- Four widget types: Voice, Text, Toasts, Conversations
+- Per-session layout persistence
+- Docked/undocked conversations sidebar
+
+**Session Management:**
+- Multiple concurrent sessions
+- Quick session switching
+- Inline session renaming
+- Session search/filter
+
+## 🏗️ Architecture
+
+**Deployment:** Single-file HTML bundle deployed to FileMaker container field
+**Build:** Vite 6 with single-file plugin → `dist/index.html` (~189KB)
+**Grid:** GridStack 12.3.3 for widget management
+**Integration:** Bidirectional communication via FileMaker scripts
+
+### FileMaker Integration Points
+
+**JavaScript → FileMaker Scripts:**
+- `Session_SaveState` - Persist session history/settings/layout
+- `Session_GetState` - Load session data
+- `CallTools` - Execute tool calls
+- `Realtime_Init` - Get ephemeral key & config
+- `Chat_TextRequest` - Submit text messages
+
+**FileMaker → JavaScript Functions:**
+- `window.bootstrapApp(payload)` - Initialize with session data
+- `window.initializeWebRTC(...)` - Start Realtime connection
+- `window.sendToolResponse(result)` - Return tool call results
+- `window.setSessionList(sessions)` - Update session list
+
+## 📋 Requirements
+
+- FileMaker Pro (Web Viewer with WebKit/Chrome support)
+- OpenAI API key (Realtime + Chat Completions access)
+- HTTPS development environment for WebRTC (localhost:1234)
+- Self-signed SSL certificates for local dev
+
+## 🚀 Development Setup
+
+### 1. Install Dependencies
+```bash
+npm install
 ```
 
-### Sending container images as context
-
-- Use `sendContainerImageToRealtime(imagePayload)` to pass a FileMaker container image to the realtime conversation.
-  The helper accepts either a JSON string or object with these fields:
-  - `base64` / `imageBase64` / `image_base64`: raw base64 data (without the `data:` prefix)
-  - `dataUrl` / `data_url`: data URL produced by FileMaker (the MIME type is extracted automatically)
-  - `mimeType` (optional): overrides the detected MIME type
-  - `prompt` (optional): short text description sent along with the image
-  - `modalities` (optional): array or JSON string overriding the response modalities for this turn
-  - `requestResponse` (optional, default `true`): whether to immediately request a model response after sending the image
-  - `metadata` (optional): JSON object forwarded with the image content block
-- Example payload from FileMaker:
-
-```json
-{
-  "dataUrl": "data:image/png;base64,iVBORw0KGgoAAAANS...",
-  "prompt": "Here is the front label of the product the customer asked about.",
-  "modalities": ["text"],
-  "metadata": { "source": "inventory_container" }
-}
+### 2. Generate SSL Certificates (required for WebRTC)
+```bash
+cd ..
+openssl req -x509 -newkey rsa:2048 -keyout localhost-key.pem \
+  -out localhost-cert.pem -days 365 -nodes -subj "/CN=localhost"
+cd realtime
 ```
 
-- When the assistant requests visual context it calls the `request_container_image` tool. The interface displays a toast and
-  triggers the `CallTools` FileMaker script with the tool payload so you can fetch the container image and invoke
-  `sendContainerImageToRealtime`.
-- You can disable or replace this default tool at runtime by passing `disableDefaultContainerImageTool` (or the snake_case variant)
-  to either `initializeWebRTC` or `updateSession`. Providing your own `containerImageTool` object in those payloads lets you
-  rename or re-describe the tool while retaining the built-in wiring.
-                                                                                      
- ## License                                                                           
-                                                                                      
- MIT License                                                                          
-                                                                                      
- ## Contributing                                                                      
-                                                                                      
- Pull requests are welcome. For major changes, please open an issue first to discuss  
- what you would like to change. 
+### 3. Start Development Server
+```bash
+npm start
+# Opens https://localhost:1234
+```
+
+### 4. Deploy to FileMaker
+```bash
+npm run deploy-to-fm
+# Builds and uploads to FileMaker via FMP:// protocol
+```
+
+### Configuration
+Edit `widget.config.cjs` to set your FileMaker file and upload script:
+```javascript
+module.exports = {
+  widgetName: 'realtime',
+  fmServer: '$',                    // Local/embedded
+  fmFile: 'Empowered_Documenter',
+  uploadScript: 'UploadToHTML'
+};
+```
+
+## 📁 Project Structure
+
+```
+realtime/
+├── index.html              # Entry point with bootstrap stubs
+├── src/
+│   ├── index.js           # Main application (4,573 lines)
+│   ├── icons.js           # SVG path definitions
+│   ├── style.css          # Styling (724 lines)
+│   └── md5.js             # MD5 hashing for layout tracking
+├── scripts/
+│   ├── upload.cjs         # FileMaker deployment
+│   ├── generate-script-steps.js  # FM script generator
+│   └── start-fm-dev.js    # Launch FileMaker dev environment
+├── docs/
+│   ├── instructions.md           # Comprehensive requirements
+│   ├── functionalDescription.md  # Feature overview
+│   ├── bootstrap-init-flow.txt   # Initialization sequence
+│   └── cleanupTasks.md           # Refactoring checklist
+├── bugs/
+│   ├── on-hold/           # Deferred issues
+│   ├── resolved/          # Completed bug fixes
+│   └── bugxx-template.md  # Bug report template
+├── dist/                  # Build output (git-ignored)
+├── vite.config.js         # Build configuration
+└── widget.config.cjs      # FileMaker widget metadata
+```
+
+## 🧪 Testing
+
+**Manual Test Checklist:**
+See `docs/cleanupTasks.md` for comprehensive test scenarios:
+- Voice/text widget toggle
+- Session switching with layout persistence
+- Dock/undock conversations
+- Tool call visualization
+- Mute/unmute functionality
+
+**Automated Tests:** Not yet implemented (planned)
+
+## 📚 Additional Documentation
+
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Development guide and workflow
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical architecture details
+- **[docs/instructions.md](docs/instructions.md)** - Detailed requirements & specifications
+- **[docs/functionalDescription.md](docs/functionalDescription.md)** - Feature descriptions
+- **[docs/bootstrap-init-flow.txt](docs/bootstrap-init-flow.txt)** - Bootstrap sequence
+- **[docs/cleanupTasks.md](docs/cleanupTasks.md)** - Refactoring tasks
+
+## 🐛 Known Issues
+
+See `bugs/on-hold/` for deferred issues.
+All major bugs (bugs 1-8) have been resolved and archived to `bugs/resolved/`.
+
+## 🤝 Contributing
+
+1. Create a feature branch from `adding-chat-and-artifacts`
+2. Make changes with clear commit messages
+3. Test thoroughly (use manual checklist)
+4. Submit PR with detailed description
+
+**Code Style:**
+- ES modules (no TypeScript)
+- Function declarations for hoisting
+- Preserve FileMaker window API
+- Follow existing patterns
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+## 📄 License
+
+MIT License
+
+## 🙏 Acknowledgments
+
+Built with:
+- OpenAI Realtime API & Chat Completions API
+- GridStack (grid layout)
+- Vite (build tool)
+- FileMaker Pro (container deployment)
+
+---
+
+**Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>**

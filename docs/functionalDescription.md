@@ -1,6 +1,12 @@
 # Empowered Agents Web App — Functional Description (Beginner-Friendly)
 
-This document explains, from the ground up, how the web app works, how it talks to FileMaker, what the “canonical history” is, and which FileMaker scripts are expected. It’s written to be approachable if you’re new to this stack.
+> **Note:** This document describes the core architecture and FileMaker integration patterns.
+> For current features including GridStack widgets, session management, and layout persistence,
+> see [README.md](../README.md) and [instructions.md](instructions.md).
+
+---
+
+This document explains, from the ground up, how the web app works, how it talks to FileMaker, what the "canonical history" is, and which FileMaker scripts are expected. It's written to be approachable if you're new to this stack.
 
 Contents
 - 1) Big Picture
