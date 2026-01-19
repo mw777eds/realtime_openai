@@ -104,13 +104,23 @@ function scheduleSaveLayout(delay = 400) {
 /* ================================ */
 /* Sessions list (for sidebar and undocked Conversations widget) */
 window.__sessions = window.__sessions || []; // [{id, title}]
+/* Track recently deleted sessions to filter them from stale FileMaker responses */
+const __recentlyDeletedSessions = new Set();
+
 function setSessionList(list) {
   if (!Array.isArray(list)) {
     try { showToast('Invalid sessions list: expected an array', 'tool-error', 'left', null, 6); } catch (_) {}
     return;
   }
   let warned = false;
-  window.__sessions = list.map(it => {
+  // Filter out any recently deleted sessions to prevent stale FM data from restoring them
+  const filtered = list.filter(it => {
+    const sid = (it && typeof it.sessionId === 'string') ? it.sessionId
+      : (it && typeof it.id === 'string') ? it.id
+      : '';
+    return !__recentlyDeletedSessions.has(sid);
+  });
+  window.__sessions = filtered.map(it => {
     const sid = (it && typeof it.sessionId === 'string') ? it.sessionId
       : (it && typeof it.id === 'string') ? it.id
       : '';
@@ -368,8 +378,12 @@ function pickNextSessionAfter(deletedId, prevList) {
 async function deleteSessionConfirm(sessionId) {
   if (!sessionId) return false;
 
+  // Find the session title to show in confirmation
+  const session = (window.__sessions || []).find(s => s && s.id === sessionId);
+  const sessionTitle = session ? (session.title || sessionId) : sessionId;
+
   const ok = await showConfirmModal(
-    'Permanently delete this conversation? This cannot be undone.',
+    `Permanently delete "${sessionTitle}"? This cannot be undone.`,
     { title: 'Delete conversation', confirmText: 'Delete', cancelText: 'Cancel', danger: true }
   );
   if (!ok) return false;
@@ -379,6 +393,11 @@ async function deleteSessionConfirm(sessionId) {
 
   // Optimistically remove from list and re-render
   window.__sessions = prev.filter(s => s && s.id !== sessionId);
+
+  // Track this deletion to filter stale FileMaker responses for a few seconds
+  __recentlyDeletedSessions.add(sessionId);
+  setTimeout(() => __recentlyDeletedSessions.delete(sessionId), 5000);
+
   renderSessionList();
 
   // If we just deleted the active session, select the next most recent or start a new one
