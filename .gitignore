@@ -1,8 +1,35 @@
+# Dependencies
 node_modules
-.vscode
+
+# Build output
 dist
-import.log
 .parcel-cache
-.DS_Store'
+
+# Logs
+*.log
+npm-debug.log*
+import.log
+
+# Editor files
+.vscode
+*.swp
+*.swo
+*~
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# AI assistant artifacts
 .aider*
+
+# Environment files
+.env
+.env.local
+
+# Testing
+coverage/
+
+# Assets (if not used)
 assets/
