@@ -1,6 +1,8 @@
 import { showIcon } from './icons.js';
 
-/* 
+/* ── Constants & Global State ─────────────────────────────────── */
+
+/*
  * Canvas-related variables for the audio waveform visualization
  * canvas: The HTML canvas element
  * ctx: The 2D rendering context
@@ -9,25 +11,6 @@ import { showIcon } from './icons.js';
 let canvas;
 let ctx;
 let animationId;
-
-
-/* 
- * Expose functions to FileMaker
- * These functions can be called from FileMaker scripts to control
- * the WebRTC connection and audio transmission
- */
-window.initializeWebRTC = initializeWebRTC;
-window.startAudioTransmission = startAudioTransmission;
-window.stopAudioTransmission = stopAudioTransmission;
-window.sendResponseCancel = sendResponseCancel;
-window.stopLLMGeneration = stopLLMGeneration;
-window.hasActiveResponse = hasActiveResponse;
-window.cleanupWebRTC = cleanupWebRTC;
-window.sendToolResponse = sendToolResponse;
-window.createModelResponse = createModelResponse;
-window.updateSession = updateSession;
-window.showToast = showToast;
-window.sendContainerImageToRealtime = sendContainerImageToRealtime;
 
 const DEFAULT_MODALITIES = ["text", "audio"];
 const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
@@ -48,6 +31,29 @@ const DEFAULT_CONTAINER_IMAGE_TOOL = Object.freeze({
 let defaultResponseModalities = [...DEFAULT_MODALITIES];
 let containerImageToolName = DEFAULT_CONTAINER_IMAGE_TOOL.name;
 let currentSessionConfig = null;
+
+/*
+ * WebRTC and audio processing variables
+ *
+ * pc: RTCPeerConnection for WebRTC
+ * dc: Data channel for sending/receiving events
+ * isPaused: Flag indicating if audio transmission is paused
+ * audioTrack: The microphone audio track
+ * audioEl: Audio element for playing AI responses
+ * audioContext: Web Audio API context
+ * audioAnalyser: Analyser node for processing audio data
+ * audioDataArray: Buffer for audio data
+ */
+let pc = null;
+let dc = null;
+let isPaused = false;
+let audioTrack = null;
+let audioEl = null;
+let audioContext = null;
+let audioAnalyser = null;
+let audioDataArray = null;
+
+/* ── Utilities ────────────────────────────────────────────────── */
 
 function parseJsonSafely(value, label) {
   if (!value) {
@@ -89,98 +95,6 @@ function deepMerge(target = {}, source = {}) {
   });
 
   return output;
-}
-
-function prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfigStr) {
-  let tools = [];
-
-  const parsedTools = parseJsonSafely(toolsStr, 'tools');
-  if (Array.isArray(parsedTools)) {
-    tools = parsedTools;
-  }
-
-  const additionalConfig = parseJsonSafely(sessionConfigStr, 'session configuration') || {};
-
-  let disableContainerImageTool = false;
-  if (typeof additionalConfig.disableDefaultContainerImageTool !== 'undefined') {
-    disableContainerImageTool = Boolean(additionalConfig.disableDefaultContainerImageTool);
-    delete additionalConfig.disableDefaultContainerImageTool;
-  } else if (typeof additionalConfig.disable_container_image_tool !== 'undefined') {
-    disableContainerImageTool = Boolean(additionalConfig.disable_container_image_tool);
-    delete additionalConfig.disable_container_image_tool;
-  }
-
-  let containerImageToolDefinition = null;
-  if (additionalConfig.containerImageTool && typeof additionalConfig.containerImageTool === 'object') {
-    containerImageToolDefinition = additionalConfig.containerImageTool;
-    delete additionalConfig.containerImageTool;
-  } else if (additionalConfig.container_image_tool && typeof additionalConfig.container_image_tool === 'object') {
-    containerImageToolDefinition = additionalConfig.container_image_tool;
-    delete additionalConfig.container_image_tool;
-  }
-
-  let defaultModalitiesOverride = null;
-  if (additionalConfig.defaultResponseModalities) {
-    defaultModalitiesOverride = additionalConfig.defaultResponseModalities;
-    delete additionalConfig.defaultResponseModalities;
-  } else if (additionalConfig.default_response_modalities) {
-    defaultModalitiesOverride = additionalConfig.default_response_modalities;
-    delete additionalConfig.default_response_modalities;
-  }
-
-  if (Array.isArray(additionalConfig.tools)) {
-    tools = additionalConfig.tools;
-    delete additionalConfig.tools;
-  }
-
-  const imageTool = containerImageToolDefinition
-    ? JSON.parse(JSON.stringify(containerImageToolDefinition))
-    : JSON.parse(JSON.stringify(DEFAULT_CONTAINER_IMAGE_TOOL));
-  if (!disableContainerImageTool) {
-    const existingNames = new Set(tools.map(tool => tool && tool.name));
-    if (!existingNames.has(imageTool.name)) {
-      tools.push(imageTool);
-    }
-  }
-
-  const defaultSessionConfig = {
-    instructions: instructions || "You are a helpful AI assistant.",
-    tools,
-    tool_choice: toolChoice || "auto",
-    input_audio_transcription: {
-      model: "gpt-4o-mini-transcribe"
-    },
-    modalities: [...DEFAULT_MODALITIES],
-    voice: "verse"
-  };
-
-  const sessionConfig = deepMerge(defaultSessionConfig, additionalConfig);
-
-  if (!Array.isArray(sessionConfig.modalities) || sessionConfig.modalities.length === 0) {
-    sessionConfig.modalities = [...DEFAULT_MODALITIES];
-  }
-
-  sessionConfig.tools = Array.isArray(sessionConfig.tools) ? sessionConfig.tools : [];
-
-  const defaultModalities = Array.isArray(defaultModalitiesOverride) && defaultModalitiesOverride.length > 0
-    ? defaultModalitiesOverride
-    : sessionConfig.modalities;
-
-  return {
-    sessionConfig,
-    defaultModalities,
-    containerToolName: imageTool.name
-  };
-}
-
-function getResponseModalities(modalitiesOverride) {
-  if (Array.isArray(modalitiesOverride) && modalitiesOverride.length > 0) {
-    return modalitiesOverride;
-  }
-
-  return defaultResponseModalities && defaultResponseModalities.length > 0
-    ? defaultResponseModalities
-    : [...DEFAULT_MODALITIES];
 }
 
 function normalizeModalitiesList(modalities) {
@@ -239,6 +153,99 @@ function normalizeImagePayload(imagePayload) {
     base64Data,
     mimeType: mimeType || 'image/png'
   };
+}
+
+function getResponseModalities(modalitiesOverride) {
+  if (Array.isArray(modalitiesOverride) && modalitiesOverride.length > 0) {
+    return modalitiesOverride;
+  }
+
+  return defaultResponseModalities && defaultResponseModalities.length > 0
+    ? defaultResponseModalities
+    : [...DEFAULT_MODALITIES];
+}
+
+/* ── FM Bridge ────────────────────────────────────────────────── */
+
+/*
+ * Expose functions to FileMaker
+ * These functions can be called from FileMaker scripts to control
+ * the WebRTC connection and audio transmission
+ */
+window.initializeWebRTC = initializeWebRTC;
+window.startAudioTransmission = startAudioTransmission;
+window.stopAudioTransmission = stopAudioTransmission;
+window.sendResponseCancel = sendResponseCancel;
+window.stopLLMGeneration = stopLLMGeneration;
+window.hasActiveResponse = hasActiveResponse;
+window.cleanupWebRTC = cleanupWebRTC;
+window.sendToolResponse = sendToolResponse;
+window.createModelResponse = createModelResponse;
+window.updateSession = updateSession;
+window.showToast = showToast;
+window.sendContainerImageToRealtime = sendContainerImageToRealtime;
+
+/*
+ * Function to send tool response back to OpenAI
+ *
+ * This function takes the output from a tool execution in FileMaker
+ * and sends it back to the OpenAI API through the WebRTC data channel.
+ *
+ * @param {string} toolResponse - JSON string containing the tool response data
+ */
+function sendToolResponse(toolResponse) {
+  toolResponse = JSON.parse(toolResponse);
+
+  if (!toolResponse.call_id) {
+    console.error("Missing call_id in toolResponse");
+    return;
+  }
+
+  if (dc && dc.readyState === "open") {
+    const response = {
+      type: "conversation.item.create",
+      item: {
+        type: "function_call_output",
+        call_id: toolResponse.call_id,
+        output: JSON.stringify(toolResponse.output)
+      }
+    };
+
+    console.log("Preparing to send response:", response);
+    console.log("Response stringified:", JSON.stringify(response));
+
+    dc.send(JSON.stringify(response));
+    console.log("Sent tool response");
+  } else {
+    console.error("Data channel not ready for tool response. State:", dc ? dc.readyState : "no dc");
+  }
+}
+
+/*
+ * Function to trigger model response after tools
+ *
+ * After a tool has been executed and its response sent back to OpenAI,
+ * this function requests the model to generate a new response.
+ * It also updates the UI to show the listening icon.
+ */
+function createModelResponse() {
+  if (dc && dc.readyState === "open") {
+    /* Switch from thinking to listening icon */
+    if (!isPaused) {
+      showIcon('ear');
+    }
+
+    const responseCreateEvent = {
+      type: "response.create",
+      response: {
+        modalities: getResponseModalities()
+      }
+    };
+    dc.send(JSON.stringify(responseCreateEvent));
+    console.log("Requested new model response");
+  } else {
+    console.error("Data channel not ready for response creation");
+  }
 }
 
 function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
@@ -329,77 +336,98 @@ function sendContainerImageToRealtime(imagePayload, requestResponse = true) {
   return true;
 }
 
-/*
- * Function to send tool response back to OpenAI
- *
- * This function takes the output from a tool execution in FileMaker
- * and sends it back to the OpenAI API through the WebRTC data channel.
- * 
- * @param {string} toolResponse - JSON string containing the tool response data
- */
-function sendToolResponse(toolResponse) {
-  toolResponse = JSON.parse(toolResponse);
+/* ── Sessions ─────────────────────────────────────────────────── */
 
-  if (!toolResponse.call_id) {
-    console.error("Missing call_id in toolResponse");
-    return;
+function prepareSessionConfiguration(instructions, toolsStr, toolChoice, sessionConfigStr) {
+  let tools = [];
+
+  const parsedTools = parseJsonSafely(toolsStr, 'tools');
+  if (Array.isArray(parsedTools)) {
+    tools = parsedTools;
   }
 
-  if (dc && dc.readyState === "open") {
-    const response = {
-      type: "conversation.item.create",
-      item: {
-        type: "function_call_output",
-        call_id: toolResponse.call_id,
-        output: JSON.stringify(toolResponse.output)
-      }
-    };
-    
-    console.log("Preparing to send response:", response);
-    console.log("Response stringified:", JSON.stringify(response));
+  const additionalConfig = parseJsonSafely(sessionConfigStr, 'session configuration') || {};
 
-    dc.send(JSON.stringify(response));
-    console.log("Sent tool response");
-  } else {
-    console.error("Data channel not ready for tool response. State:", dc ? dc.readyState : "no dc");
+  let disableContainerImageTool = false;
+  if (typeof additionalConfig.disableDefaultContainerImageTool !== 'undefined') {
+    disableContainerImageTool = Boolean(additionalConfig.disableDefaultContainerImageTool);
+    delete additionalConfig.disableDefaultContainerImageTool;
+  } else if (typeof additionalConfig.disable_container_image_tool !== 'undefined') {
+    disableContainerImageTool = Boolean(additionalConfig.disable_container_image_tool);
+    delete additionalConfig.disable_container_image_tool;
   }
-}
 
-/* 
- * Function to trigger model response after tools
- * 
- * After a tool has been executed and its response sent back to OpenAI,
- * this function requests the model to generate a new response.
- * It also updates the UI to show the listening icon.
- */
-function createModelResponse() {
-  if (dc && dc.readyState === "open") {
-    /* Switch from thinking to listening icon */
-    if (!isPaused) {
-      showIcon('ear');
+  let containerImageToolDefinition = null;
+  if (additionalConfig.containerImageTool && typeof additionalConfig.containerImageTool === 'object') {
+    containerImageToolDefinition = additionalConfig.containerImageTool;
+    delete additionalConfig.containerImageTool;
+  } else if (additionalConfig.container_image_tool && typeof additionalConfig.container_image_tool === 'object') {
+    containerImageToolDefinition = additionalConfig.container_image_tool;
+    delete additionalConfig.container_image_tool;
+  }
+
+  let defaultModalitiesOverride = null;
+  if (additionalConfig.defaultResponseModalities) {
+    defaultModalitiesOverride = additionalConfig.defaultResponseModalities;
+    delete additionalConfig.defaultResponseModalities;
+  } else if (additionalConfig.default_response_modalities) {
+    defaultModalitiesOverride = additionalConfig.default_response_modalities;
+    delete additionalConfig.default_response_modalities;
+  }
+
+  if (Array.isArray(additionalConfig.tools)) {
+    tools = additionalConfig.tools;
+    delete additionalConfig.tools;
+  }
+
+  const imageTool = containerImageToolDefinition
+    ? JSON.parse(JSON.stringify(containerImageToolDefinition))
+    : JSON.parse(JSON.stringify(DEFAULT_CONTAINER_IMAGE_TOOL));
+  if (!disableContainerImageTool) {
+    const existingNames = new Set(tools.map(tool => tool && tool.name));
+    if (!existingNames.has(imageTool.name)) {
+      tools.push(imageTool);
     }
-
-    const responseCreateEvent = {
-      type: "response.create",
-      response: {
-        modalities: getResponseModalities()
-      }
-    };
-    dc.send(JSON.stringify(responseCreateEvent));
-    console.log("Requested new model response");
-  } else {
-    console.error("Data channel not ready for response creation");
   }
+
+  const defaultSessionConfig = {
+    instructions: instructions || "You are a helpful AI assistant.",
+    tools,
+    tool_choice: toolChoice || "auto",
+    input_audio_transcription: {
+      model: "gpt-4o-mini-transcribe"
+    },
+    modalities: [...DEFAULT_MODALITIES],
+    voice: "verse"
+  };
+
+  const sessionConfig = deepMerge(defaultSessionConfig, additionalConfig);
+
+  if (!Array.isArray(sessionConfig.modalities) || sessionConfig.modalities.length === 0) {
+    sessionConfig.modalities = [...DEFAULT_MODALITIES];
+  }
+
+  sessionConfig.tools = Array.isArray(sessionConfig.tools) ? sessionConfig.tools : [];
+
+  const defaultModalities = Array.isArray(defaultModalitiesOverride) && defaultModalitiesOverride.length > 0
+    ? defaultModalitiesOverride
+    : sessionConfig.modalities;
+
+  return {
+    sessionConfig,
+    defaultModalities,
+    containerToolName: imageTool.name
+  };
 }
 
-/* 
+/*
  * Function to update session configuration
- * 
+ *
  * Updates specific session parameters by sending a session.update event
  * to the OpenAI API. Only the provided parameters will be updated.
  * Supports: instructions, temperature, max_response_output_tokens, tools, modalities, speed
  * Note: voice cannot be changed during an active session.
- * 
+ *
  * @param {string} updateParamsJson - JSON string containing session parameters to update
  * @returns {boolean} - True if update was sent, false otherwise
  */
@@ -562,9 +590,11 @@ function updateSession(updateParamsJson) {
   }
 }
 
-/* 
+/* ── Audio Control ────────────────────────────────────────────── */
+
+/*
  * Function to start audio transmission
- * 
+ *
  * Enables both the microphone input and AI audio output tracks.
  * Called when the user unmutes or starts a new conversation.
  */
@@ -587,87 +617,12 @@ function startAudioTransmission() {
   }
 }
 
-/* 
- * Function to send response.cancel event
- * 
- * Sends a cancel event to the OpenAI API to interrupt the model's
- * current speech. This is used when the user mutes the audio or
- * wants to interrupt the AI's response.
- * 
- * @returns {boolean} - True if cancel event was sent, false otherwise
- */
-function sendResponseCancel() {
-  if (dc && dc.readyState === "open") {
-    /* 
-     * Check if there's an active response by checking if audio is playing
-     * and if we have an active response ID 
-     */
-    // console.log("sendResponseCancel called, activeResponseId:", window.activeResponseId);
-
-    if (window.activeResponseId) {
-      const cancelEvent = {
-        type: "response.cancel"
-      };
-      dc.send(JSON.stringify(cancelEvent));
-      // console.log("Sent response.cancel event to interrupt model's speech");
-      return true;
-    } else {
-      // console.log("No active response ID found - skipping cancel event");
-      return false;
-    }
-  } else {
-    console.error("Data channel is not open");
-    return false;
-  }
-}
-
-/* 
- * Function to check if there's an active response
- * 
- * Determines if the AI is currently speaking by checking
- * the audio element's state.
- * 
- * @returns {boolean} - True if AI is speaking, false otherwise
- */
-function hasActiveResponse() {
-  /* Check if audio is currently playing */
-  const isPlaying = audioEl && audioEl.srcObject && !audioEl.paused;
-  // console.log("hasActiveResponse check:", {
-  //   audioEl: !!audioEl,
-  //   srcObject: !!(audioEl && audioEl.srcObject),
-  //   notPaused: !!(audioEl && !audioEl.paused),
-  //   isPlaying: isPlaying
-  // });
-  return isPlaying;
-}
-
-/* 
- * Function to stop the LLM from generating more content
- * 
- * Sends a stop event to the OpenAI API to completely halt
- * the language model's generation process. This is more
- * aggressive than just canceling the current response.
- * 
- * @returns {boolean} - True if stop event was sent, false otherwise
- */
-function stopLLMGeneration() {
-  if (dc && dc.readyState === "open") {
-    const stopEvent = {
-      type: "stop"
-    };
-    dc.send(JSON.stringify(stopEvent));
-    console.log("Sent stop event to cut off LLM output");
-    return true;
-  }
-  return false;
-}
-
-/* 
+/*
  * Function to stop audio transmission
- * 
+ *
  * Disables both the microphone input and AI audio output tracks.
  * Also stops the waveform animation.
- * 
+ *
  * @returns {Promise} - Resolves when audio transmission is stopped
  */
 async function stopAudioTransmission() {
@@ -692,334 +647,84 @@ async function stopAudioTransmission() {
   });
 }
 
-/* 
- * Function to cleanup WebRTC connection
- * 
- * Closes the data channel and peer connection,
- * and resets the active response ID.
- * Called when reinitializing the connection or
- * when the application is closed.
+/*
+ * Function to send response.cancel event
+ *
+ * Sends a cancel event to the OpenAI API to interrupt the model's
+ * current speech. This is used when the user mutes the audio or
+ * wants to interrupt the AI's response.
+ *
+ * @returns {boolean} - True if cancel event was sent, false otherwise
  */
-function cleanupWebRTC() {
-  /* Clear active response ID when cleaning up */
-  window.activeResponseId = null;
-  currentSessionConfig = null;
-  defaultResponseModalities = [...DEFAULT_MODALITIES];
+function sendResponseCancel() {
+  if (dc && dc.readyState === "open") {
+    /*
+     * Check if there's an active response by checking if audio is playing
+     * and if we have an active response ID
+     */
+    // console.log("sendResponseCancel called, activeResponseId:", window.activeResponseId);
 
-  if (dc) {
-    dc.close();
-    dc = null;
-  }
-  if (pc) {
-    pc.close();
-    pc = null;
-  }
-}
-
-/* 
- * Function to initialize the canvas for waveform visualization
- * 
- * Sets up the canvas element and its context, and adds a resize
- * event listener to ensure the canvas always fills the window.
- */
-function initializeCanvas() {
-  canvas = document.getElementById('waveform');
-  ctx = canvas.getContext('2d');
-
-  function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
-
-  resizeCanvas();
-  window.addEventListener('resize', resizeCanvas);
-}
-
-/* 
- * Function to draw the audio waveform visualization
- * 
- * Takes audio data and renders it as a waveform on the canvas.
- * 
- * @param {Uint8Array} dataArray - Audio data from the analyzer
- */
-function drawWaveform(dataArray) {
-  if (!ctx) return;
-
-  /* Clear the canvas with white background */
-  ctx.fillStyle = 'white';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  /* Set up line style for the waveform */
-  ctx.lineWidth = 3.5;
-  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--waveform-color');
-  ctx.beginPath();
-
-  const bufferLength = dataArray.length;
-  const sliceWidth = (canvas.width * 1.0) / bufferLength;
-  let x = 0;
-
-  /* Draw the waveform line */
-  for (let i = 0; i < bufferLength; i++) {
-    const v = dataArray[i] / 128.0;
-    const y = (v * canvas.height) / 2;
-
-    if (i === 0) {
-      ctx.moveTo(x, y);
+    if (window.activeResponseId) {
+      const cancelEvent = {
+        type: "response.cancel"
+      };
+      dc.send(JSON.stringify(cancelEvent));
+      // console.log("Sent response.cancel event to interrupt model's speech");
+      return true;
     } else {
-      ctx.lineTo(x, y);
+      // console.log("No active response ID found - skipping cancel event");
+      return false;
     }
-
-    x += sliceWidth;
-  }
-
-  ctx.lineTo(canvas.width, canvas.height / 2);
-  ctx.stroke();
-}
-
-/* 
- * Function to start the waveform animation
- * 
- * Begins the animation loop that continuously samples audio data
- * and updates the waveform visualization.
- */
-function startWaveform() {
-  if (!animationId && audioAnalyser) {
-    function draw() {
-      animationId = requestAnimationFrame(draw);
-      const dataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
-      audioAnalyser.getByteTimeDomainData(dataArray);
-      drawWaveform(dataArray);
-    }
-    draw();
-  }
-}
-
-/* 
- * Function to create toast timeline container if it doesn't exist
- */
-function createToastTimeline() {
-  if (!document.getElementById('toast-timeline')) {
-    const timeline = document.createElement('div');
-    timeline.id = 'toast-timeline';
-    timeline.className = 'toast-timeline';
-    document.body.appendChild(timeline);
-  }
-}
-
-/* 
- * Function to show a toast notification
- * 
- * @param {string} message - The message to display
- * @param {string} type - The type of toast (tool-call, tool-response, tool-error, agent)
- * @param {string} side - Which side to show on (left, right)
- * @param {Object|string} jsonData - The full JSON data for FileMaker script (optional)
- * @param {number} durationSeconds - How long to show the toast in seconds (default: 5)
- */
-function showToast(message, type, side, jsonData = null, durationSeconds = 5) {
-  createToastTimeline();
-  
-  const timeline = document.getElementById('toast-timeline');
-  if (!timeline) {
-    return;
-  }
-  
-  // Create a row for this toast
-  const toastRow = document.createElement('div');
-  toastRow.className = `toast-row ${side}`;
-  
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.textContent = message;
-  
-  // Store the auto-dismiss timeout ID so we can cancel it if needed
-  let autoDismissTimeout;
-  
-  // Add click handler based on whether JSON data is provided
-  // Check for non-empty string or valid object
-  if (jsonData && (typeof jsonData === 'object' || (typeof jsonData === 'string' && jsonData.trim() !== ''))) {
-    // Ensure jsonData is a string for FileMaker
-    let jsonString = jsonData;
-    if (typeof jsonData !== 'string') {
-      jsonString = JSON.stringify(jsonData);
-    }
-    
-    toast.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      if (window.FileMaker) {
-        try {
-          window.FileMaker.PerformScript("ShowJSON", jsonString);
-        } catch (error) {
-          console.error('Error calling FileMaker script:', error);
-        }
-      }
-    });
   } else {
-    // Add click to dismiss if no JSON data
-    toast.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      // Cancel auto-dismiss and dismiss immediately
-      if (autoDismissTimeout) {
-        clearTimeout(autoDismissTimeout);
-      }
-      dismissToast(toastRow);
-    });
-  }
-  
-  // Add toast to row, then row to timeline
-  toastRow.appendChild(toast);
-  timeline.appendChild(toastRow);
-  
-  // Auto-dismiss after specified duration
-  autoDismissTimeout = setTimeout(() => {
-    dismissToast(toastRow);
-  }, durationSeconds * 1000);
-}
-
-/* 
- * Function to dismiss a toast with animation
- * 
- * @param {HTMLElement} toastRow - The toast row element to dismiss
- */
-function dismissToast(toastRow) {
-  if (toastRow && toastRow.parentNode) {
-    const toast = toastRow.querySelector('.toast');
-    if (toast) {
-      toast.classList.add('fade-out');
-    }
-    setTimeout(() => {
-      if (toastRow.parentNode) {
-        toastRow.parentNode.removeChild(toastRow);
-      }
-    }, 300);
+    console.error("Data channel is not open");
+    return false;
   }
 }
 
-
-/* 
- * Function to display an error message to the user
- * 
- * Creates and shows an error message overlay with the specified text.
- * 
- * @param {string} message - The error message to display
+/*
+ * Function to check if there's an active response
+ *
+ * Determines if the AI is currently speaking by checking
+ * the audio element's state.
+ *
+ * @returns {boolean} - True if AI is speaking, false otherwise
  */
-function showErrorMessage(message) {
-  // Create error container if it doesn't exist
-  let errorContainer = document.getElementById('errorContainer');
-  if (!errorContainer) {
-    errorContainer = document.createElement('div');
-    errorContainer.id = 'errorContainer';
-    document.body.appendChild(errorContainer);
-  }
-
-  // Set the error message
-  errorContainer.textContent = message;
-  errorContainer.style.display = 'flex';
-
-  // Hide the error after 5 seconds
-  setTimeout(() => {
-    errorContainer.style.display = 'none';
-  }, 5000);
+function hasActiveResponse() {
+  /* Check if audio is currently playing */
+  const isPlaying = audioEl && audioEl.srcObject && !audioEl.paused;
+  // console.log("hasActiveResponse check:", {
+  //   audioEl: !!audioEl,
+  //   srcObject: !!(audioEl && audioEl.srcObject),
+  //   notPaused: !!(audioEl && !audioEl.paused),
+  //   isPlaying: isPlaying
+  // });
+  return isPlaying;
 }
 
-/* 
- * Function to stop the waveform animation
- * 
- * Cancels the animation frame, clears the canvas,
- * and shows the ear icon if not paused.
+/*
+ * Function to stop the LLM from generating more content
+ *
+ * Sends a stop event to the OpenAI API to completely halt
+ * the language model's generation process. This is more
+ * aggressive than just canceling the current response.
+ *
+ * @returns {boolean} - True if stop event was sent, false otherwise
  */
-function stopWaveform() {
-  if (animationId) {
-    cancelAnimationFrame(animationId);
-    animationId = null;
-    if (ctx) {
-      ctx.fillStyle = 'white';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-    const earIcon = document.getElementById('earIcon');
-    if (earIcon && !isPaused) {
-      earIcon.style.display = 'block';
-    }
-  }
-}
-
-
-/* 
- * WebRTC and audio processing variables
- * 
- * pc: RTCPeerConnection for WebRTC
- * dc: Data channel for sending/receiving events
- * isPaused: Flag indicating if audio transmission is paused
- * audioTrack: The microphone audio track
- * audioEl: Audio element for playing AI responses
- * audioContext: Web Audio API context
- * audioAnalyser: Analyser node for processing audio data
- * audioDataArray: Buffer for audio data
- */
-let pc = null;
-let dc = null;
-let isPaused = false;
-let audioTrack = null;
-let audioEl = null;
-let audioContext = null;
-let audioAnalyser = null;
-let audioDataArray = null;
-
-/* 
- * Function to initialize the audio analyzer
- * 
- * Creates an audio context and analyzer for processing
- * audio data to visualize the waveform and detect activity.
- */
-function initAudioAnalyser() {
-  if (!audioContext) {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    audioAnalyser = audioContext.createAnalyser();
-    audioAnalyser.fftSize = 256;
-    audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
-  }
-}
-
-/* 
- * Function to check for audio activity
- * 
- * Analyzes the audio data to determine if there's meaningful
- * audio input. If there is, shows the waveform; otherwise,
- * shows the ear icon.
- * 
- * @returns {boolean} - True if audio activity is detected, false otherwise
- */
-function checkAudioActivity() {
-  if (audioAnalyser && !isPaused) {
-    audioAnalyser.getByteFrequencyData(audioDataArray);
-    const average = audioDataArray.reduce((a, b) => a + b) / audioDataArray.length;
-
-    /* Use a threshold to determine if there's meaningful audio */
-    const AUDIO_THRESHOLD = 10; /* Adjust this value based on testing */
-    const hasAudio = average > AUDIO_THRESHOLD;
-    const iconOverlay = document.getElementById('iconOverlay');
-
-    if (hasAudio && !isPaused) {
-      startWaveform();
-      iconOverlay.style.display = 'none';
-    } else {
-      stopWaveform();
-      if (!isPaused) {
-        iconOverlay.style.display = 'flex';
-        showIcon('ear');
-      }
-    }
-
-    return hasAudio;
+function stopLLMGeneration() {
+  if (dc && dc.readyState === "open") {
+    const stopEvent = {
+      type: "stop"
+    };
+    dc.send(JSON.stringify(stopEvent));
+    console.log("Sent stop event to cut off LLM output");
+    return true;
   }
   return false;
 }
 
-/* 
+/*
  * Function to toggle audio transmission on/off
- * 
+ *
  * Handles the mute/unmute functionality when the user clicks
  * the interface. When pausing, it stops audio transmission and
  * cancels any active response. When resuming, it either restarts
@@ -1064,9 +769,318 @@ async function toggleAudioTransmission() {
   }
 }
 
-/* 
+/*
+ * Function to cleanup WebRTC connection
+ *
+ * Closes the data channel and peer connection,
+ * and resets the active response ID.
+ * Called when reinitializing the connection or
+ * when the application is closed.
+ */
+function cleanupWebRTC() {
+  /* Clear active response ID when cleaning up */
+  window.activeResponseId = null;
+  currentSessionConfig = null;
+  defaultResponseModalities = [...DEFAULT_MODALITIES];
+
+  if (dc) {
+    dc.close();
+    dc = null;
+  }
+  if (pc) {
+    pc.close();
+    pc = null;
+  }
+}
+
+/* ── Toasts ───────────────────────────────────────────────────── */
+
+/*
+ * Function to create toast timeline container if it doesn't exist
+ */
+function createToastTimeline() {
+  if (!document.getElementById('toast-timeline')) {
+    const timeline = document.createElement('div');
+    timeline.id = 'toast-timeline';
+    timeline.className = 'toast-timeline';
+    document.body.appendChild(timeline);
+  }
+}
+
+/*
+ * Function to show a toast notification
+ *
+ * @param {string} message - The message to display
+ * @param {string} type - The type of toast (tool-call, tool-response, tool-error, agent)
+ * @param {string} side - Which side to show on (left, right)
+ * @param {Object|string} jsonData - The full JSON data for FileMaker script (optional)
+ * @param {number} durationSeconds - How long to show the toast in seconds (default: 5)
+ */
+function showToast(message, type, side, jsonData = null, durationSeconds = 5) {
+  createToastTimeline();
+
+  const timeline = document.getElementById('toast-timeline');
+  if (!timeline) {
+    return;
+  }
+
+  // Create a row for this toast
+  const toastRow = document.createElement('div');
+  toastRow.className = `toast-row ${side}`;
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+
+  // Store the auto-dismiss timeout ID so we can cancel it if needed
+  let autoDismissTimeout;
+
+  // Add click handler based on whether JSON data is provided
+  // Check for non-empty string or valid object
+  if (jsonData && (typeof jsonData === 'object' || (typeof jsonData === 'string' && jsonData.trim() !== ''))) {
+    // Ensure jsonData is a string for FileMaker
+    let jsonString = jsonData;
+    if (typeof jsonData !== 'string') {
+      jsonString = JSON.stringify(jsonData);
+    }
+
+    toast.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (window.FileMaker) {
+        try {
+          window.FileMaker.PerformScript("ShowJSON", jsonString);
+        } catch (error) {
+          console.error('Error calling FileMaker script:', error);
+        }
+      }
+    });
+  } else {
+    // Add click to dismiss if no JSON data
+    toast.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Cancel auto-dismiss and dismiss immediately
+      if (autoDismissTimeout) {
+        clearTimeout(autoDismissTimeout);
+      }
+      dismissToast(toastRow);
+    });
+  }
+
+  // Add toast to row, then row to timeline
+  toastRow.appendChild(toast);
+  timeline.appendChild(toastRow);
+
+  // Auto-dismiss after specified duration
+  autoDismissTimeout = setTimeout(() => {
+    dismissToast(toastRow);
+  }, durationSeconds * 1000);
+}
+
+/*
+ * Function to dismiss a toast with animation
+ *
+ * @param {HTMLElement} toastRow - The toast row element to dismiss
+ */
+function dismissToast(toastRow) {
+  if (toastRow && toastRow.parentNode) {
+    const toast = toastRow.querySelector('.toast');
+    if (toast) {
+      toast.classList.add('fade-out');
+    }
+    setTimeout(() => {
+      if (toastRow.parentNode) {
+        toastRow.parentNode.removeChild(toastRow);
+      }
+    }, 300);
+  }
+}
+
+
+/*
+ * Function to display an error message to the user
+ *
+ * Creates and shows an error message overlay with the specified text.
+ *
+ * @param {string} message - The error message to display
+ */
+function showErrorMessage(message) {
+  // Create error container if it doesn't exist
+  let errorContainer = document.getElementById('errorContainer');
+  if (!errorContainer) {
+    errorContainer = document.createElement('div');
+    errorContainer.id = 'errorContainer';
+    document.body.appendChild(errorContainer);
+  }
+
+  // Set the error message
+  errorContainer.textContent = message;
+  errorContainer.style.display = 'flex';
+
+  // Hide the error after 5 seconds
+  setTimeout(() => {
+    errorContainer.style.display = 'none';
+  }, 5000);
+}
+
+/* ── Canvas / Waveform ────────────────────────────────────────── */
+
+/*
+ * Function to initialize the canvas for waveform visualization
+ *
+ * Sets up the canvas element and its context, and adds a resize
+ * event listener to ensure the canvas always fills the window.
+ */
+function initializeCanvas() {
+  canvas = document.getElementById('waveform');
+  ctx = canvas.getContext('2d');
+
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+}
+
+/*
+ * Function to draw the audio waveform visualization
+ *
+ * Takes audio data and renders it as a waveform on the canvas.
+ *
+ * @param {Uint8Array} dataArray - Audio data from the analyzer
+ */
+function drawWaveform(dataArray) {
+  if (!ctx) return;
+
+  /* Clear the canvas with white background */
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  /* Set up line style for the waveform */
+  ctx.lineWidth = 3.5;
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--waveform-color');
+  ctx.beginPath();
+
+  const bufferLength = dataArray.length;
+  const sliceWidth = (canvas.width * 1.0) / bufferLength;
+  let x = 0;
+
+  /* Draw the waveform line */
+  for (let i = 0; i < bufferLength; i++) {
+    const v = dataArray[i] / 128.0;
+    const y = (v * canvas.height) / 2;
+
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+
+    x += sliceWidth;
+  }
+
+  ctx.lineTo(canvas.width, canvas.height / 2);
+  ctx.stroke();
+}
+
+/*
+ * Function to start the waveform animation
+ *
+ * Begins the animation loop that continuously samples audio data
+ * and updates the waveform visualization.
+ */
+function startWaveform() {
+  if (!animationId && audioAnalyser) {
+    function draw() {
+      animationId = requestAnimationFrame(draw);
+      const dataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+      audioAnalyser.getByteTimeDomainData(dataArray);
+      drawWaveform(dataArray);
+    }
+    draw();
+  }
+}
+
+/*
+ * Function to stop the waveform animation
+ *
+ * Cancels the animation frame, clears the canvas,
+ * and shows the ear icon if not paused.
+ */
+function stopWaveform() {
+  if (animationId) {
+    cancelAnimationFrame(animationId);
+    animationId = null;
+    if (ctx) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    const earIcon = document.getElementById('earIcon');
+    if (earIcon && !isPaused) {
+      earIcon.style.display = 'block';
+    }
+  }
+}
+
+/*
+ * Function to initialize the audio analyzer
+ *
+ * Creates an audio context and analyzer for processing
+ * audio data to visualize the waveform and detect activity.
+ */
+function initAudioAnalyser() {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    audioAnalyser = audioContext.createAnalyser();
+    audioAnalyser.fftSize = 256;
+    audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+  }
+}
+
+/*
+ * Function to check for audio activity
+ *
+ * Analyzes the audio data to determine if there's meaningful
+ * audio input. If there is, shows the waveform; otherwise,
+ * shows the ear icon.
+ *
+ * @returns {boolean} - True if audio activity is detected, false otherwise
+ */
+function checkAudioActivity() {
+  if (audioAnalyser && !isPaused) {
+    audioAnalyser.getByteFrequencyData(audioDataArray);
+    const average = audioDataArray.reduce((a, b) => a + b) / audioDataArray.length;
+
+    /* Use a threshold to determine if there's meaningful audio */
+    const AUDIO_THRESHOLD = 10; /* Adjust this value based on testing */
+    const hasAudio = average > AUDIO_THRESHOLD;
+    const iconOverlay = document.getElementById('iconOverlay');
+
+    if (hasAudio && !isPaused) {
+      startWaveform();
+      iconOverlay.style.display = 'none';
+    } else {
+      stopWaveform();
+      if (!isPaused) {
+        iconOverlay.style.display = 'flex';
+        showIcon('ear');
+      }
+    }
+
+    return hasAudio;
+  }
+  return false;
+}
+
+/* ── Bootstrap ────────────────────────────────────────────────── */
+
+/*
  * Initialize the application when the DOM is fully loaded
- * 
+ *
  * Sets up the canvas, adds event listeners, and shows the initial ear icon.
  */
 document.addEventListener("DOMContentLoaded", () => {
@@ -1080,12 +1094,12 @@ document.addEventListener("DOMContentLoaded", () => {
   showIcon('ear');
 });
 
-/* 
+/*
  * Function to initialize the WebRTC connection with OpenAI
- * 
+ *
  * Sets up the peer connection, data channel, and audio tracks
  * for real-time communication with the OpenAI API.
- * 
+ *
  * @param {string} ephemeralKey - OpenAI API key
  * @param {string} model - The model to use (e.g., "gpt-4o")
  * @param {string} instructions - System instructions for the AI
