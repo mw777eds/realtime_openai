@@ -15,9 +15,8 @@
           <div class="menu">
             <button id="menu-toggle" class="menu-toggle" aria-expanded="false" aria-haspopup="true" title="Menu"></button>
             <div id="menu-panel" class="menu-panel" hidden role="menu" aria-label="Main menu">
-              <button id="btn-voice" class="menu-item toggle active" aria-pressed="true" role="menuitem">Voice</button>
-              <button id="btn-text" class="menu-item toggle" aria-pressed="false" role="menuitem">Text</button>
-              <button id="btn-toasts" class="menu-item toggle active" aria-pressed="true" role="menuitem">Toasts</button>
+              <button id="btn-text" class="menu-item toggle active" aria-pressed="true" role="menuitem">Text</button>
+              <button id="btn-toasts" class="menu-item toggle" aria-pressed="false" role="menuitem">Toasts</button>
               <hr />
               <button id="btn-tool-calls" class="menu-item toggle" aria-pressed="false" role="menuitem">Show Tool Calls</button>
               <button id="btn-copy-minified" class="menu-item" role="menuitem">Copy Test Payload</button>
@@ -51,15 +50,11 @@
       (function(){
         try {
           window.__pendingBootstrapPayload = window.__pendingBootstrapPayload || null;
-          window.__pendingRealtimeInitPayload = window.__pendingRealtimeInitPayload || null;
           if (typeof window.bootstrapApp !== 'function') {
             window.bootstrapApp = function(payload){ try { window.__pendingBootstrapPayload = payload; } catch (_) {} };
           }
           if (typeof window.applySessionState !== 'function') {
             window.applySessionState = function(payload){ try { window.__pendingBootstrapPayload = payload; } catch (_) {} };
-          }
-          if (typeof window.applyRealtimeInit !== 'function') {
-            window.applyRealtimeInit = function(payload){ try { window.__pendingRealtimeInitPayload = payload; } catch (_) {} };
           }
           window.__bootstrapStubsReady = true;
         } catch (_) {}

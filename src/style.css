@@ -3,16 +3,6 @@ html, body, #app {
   height: 100%;
 }
 
-#waveform,
-.realtime-widget #waveform {
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  cursor: pointer;
-}
-
 /* Header / Sidebar / Workspace */
 .app-header {
   height: 48px;
@@ -287,63 +277,6 @@ html, body, #app {
   background: #f7f8fa;
 }
 
-/* Realtime widget */
-.realtime-widget {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.realtime-widget .gs-handle {
-  cursor: move;
-  background: #006690;
-  color: #fff;
-  padding: 6px 10px;
-  font-size: 14px;
-  line-height: 1;
-  position: relative;
-  z-index: 2500;
-}
-
-.realtime-widget .rt-body {
-  position: relative;
-  flex: 1 1 auto;
-}
-
-.realtime-widget #waveform {
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-.realtime-widget #clickOverlay {
-  position: absolute;
-  /* leave an 8px gutter around edges so GridStack resize handles remain clickable */
-  top: 8px;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
-  background-color: transparent;
-  z-index: 1000;
-  cursor: pointer;
-}
-
-.realtime-widget #iconOverlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(255, 255, 255, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  pointer-events: none;
-}
-
 /* Toasts widget */
 .toasts-widget {
   height: 100%;
@@ -363,11 +296,6 @@ html, body, #app {
   flex: 1 1 auto;
   overflow: auto;
   padding: 8px;
-}
-
-:root {
-  --icon-color: rgba(0, 102, 144, 0.7);
-  --waveform-color: #006690;
 }
 
 body {
@@ -409,24 +337,6 @@ h1 {
   font-weight: 400;
   line-height: 1.2;
   padding:11px 11px 11px 0px;
-}
-
-/* clickOverlay styles are now scoped within .realtime-widget */
-
-/* iconOverlay styles are now scoped within .realtime-widget */
-
-.icon {
-  width: 50%;
-  height: 50%;
-  opacity: 0;
-  display: none;
-  fill: var(--icon-color);
-  transition: opacity 0.3s ease-in-out;
-}
-
-.icon.visible {
-  opacity: 1;
-  display: block;
 }
 
 img {
@@ -717,8 +627,7 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .toast,
-  .toast.fade-out,
-  .icon {
+  .toast.fade-out {
     transition: none !important;
   }
 }
