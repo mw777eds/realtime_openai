@@ -3,6 +3,56 @@ import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 import { computeLayoutMD5 } from './md5.js';
 
+/*
+ ==============================================================================
+ File: src/index.js
+
+ Sections:
+   §1  Utilities
+   §2  FM Bridge
+   §3  Sessions
+   §4  Canonical History
+   §5  Text Chat
+   §6  Toasts
+   §7  Grid / Layout
+   §8  Public API + Bootstrap / DOMContentLoaded
+
+ Notes:
+ - Function declarations are used to preserve hoisting.
+ - FileMaker callbacks are stubbed in index.html before module load.
+ ==============================================================================
+*/
+
+/* ── State ─────────────────────────────────────────────────────── */
+
+let grid = null;
+let toastsWidgetEl = null;
+let textWidgetEl = null;
+let convosWidgetEl = null;
+let isConvosDocked = true;
+let floatEnabled = true;
+
+/* Persisted per-mode settings cached in the web app */
+let persistedSettings = { docked: null, undocked: null };
+
+/* In-memory chat buffer to retain messages while Text widget is hidden */
+const chatBuffer = [];
+const HISTORY_MAX_ITEMS = 400;
+const sessionHistory = [];
+let showToolPills = false;
+let prefsReady = false;
+let applyingFromFM = false;
+let mutatingLayout = false;
+
+/* Sessions list (for sidebar and undocked Conversations widget) */
+window.__sessions = window.__sessions || []; // [{id, title}]
+/* Track recently deleted sessions to filter them from stale FileMaker responses */
+const __recentlyDeletedSessions = new Set();
+
+/* ============================================================ */
+/* §1  Utilities                                                 */
+/* ============================================================ */
+
 /* Minimal on-screen debug tracer (overlay disabled) */
 function debugTrace(label, data) {
   // Enable by setting window.__debugTrace = true from the console if needed
@@ -38,62 +88,209 @@ function logWithSnapshot(trigger, details = {}) {
     try { debugTrace(trigger, details); } catch (__){}
   }
 }
- 
+
+function createId(prefix = 'msg') {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function parseJsonSafely(value, label) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'object') {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    console.error(`Failed to parse JSON for ${label}:`, error);
+    return null;
+  }
+}
+
+function setPressed(btn, on) {
+  if (!btn) return;
+  btn.classList.toggle('active', !!on);
+  btn.setAttribute('aria-pressed', String(!!on));
+}
+
+function stopDragFrom(el) {
+  if (!el) return;
+  ['mousedown', 'touchstart', 'pointerdown'].forEach(evt => {
+    el.addEventListener(evt, (e) => e.stopPropagation(), true);
+  });
+}
+
+function getCurrentMode() {
+  return isConvosDocked ? 'docked' : 'undocked';
+}
+
+/**
+ * Read file as DataURL
+ * @param {File} file
+ * @returns {Promise<string>}
+ */
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+}
+
+function showJsonModal(data) {
+  const existing = document.querySelector('.json-modal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.className = 'json-modal';
+  modal.innerHTML = `
+    <div class="json-modal-content">
+      <div class="json-modal-header">
+        <div class="json-modal-title">Details</div>
+        <button class="json-modal-close" aria-label="Close">×</button>
+      </div>
+      <pre class="json-content"></pre>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('.json-content').textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  modal.querySelector('.json-modal-close').addEventListener('click', hideJsonModal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) hideJsonModal(); });
+}
+
+function hideJsonModal() {
+  const modal = document.querySelector('.json-modal');
+  if (modal) modal.remove();
+}
+
+/**
+ * Generic confirm modal (Promise-based).
+ * Reuses the json-modal styles already present in the app.
+ * Returns a Promise<boolean> that resolves true on confirm, false on cancel/close.
+ */
+function showConfirmModal(message, options = {}) {
+  const opts = {
+    title: options.title || 'Confirm',
+    confirmText: options.confirmText || 'OK',
+    cancelText: options.cancelText || 'Cancel',
+    danger: !!options.danger
+  };
+
+  // Remove any existing modal first
+  const existing = document.querySelector('.json-modal');
+  if (existing) existing.remove();
+
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'json-modal';
+    modal.innerHTML = `
+      <div class="json-modal-content">
+        <div class="json-modal-header">
+          <div class="json-modal-title">${opts.title}</div>
+          <button class="json-modal-close" aria-label="Close">×</button>
+        </div>
+        <div class="json-confirm-message" style="padding: 8px 12px;">
+          ${message}
+        </div>
+        <div class="json-modal-actions" style="display:flex; gap:8px; justify-content:flex-end; padding: 0 12px 12px;">
+          <button class="json-confirm-cancel">${opts.cancelText}</button>
+          <button class="json-confirm-ok${opts.danger ? ' danger' : ''}">${opts.confirmText}</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(modal);
+
+    const btnClose = modal.querySelector('.json-modal-close');
+    const btnCancel = modal.querySelector('.json-confirm-cancel');
+    const btnOk = modal.querySelector('.json-confirm-ok');
+
+    function cleanup(result) {
+      try { modal.remove(); } catch (_) {}
+      resolve(result);
+    }
+
+    btnClose?.addEventListener('click', () => cleanup(false));
+    btnCancel?.addEventListener('click', () => cleanup(false));
+    btnOk?.addEventListener('click', () => cleanup(true));
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) cleanup(false);
+    });
+
+    function onKey(e) {
+      if (e.key === 'Escape') {
+        document.removeEventListener('keydown', onKey);
+        cleanup(false);
+      } else if (e.key === 'Enter') {
+        document.removeEventListener('keydown', onKey);
+        cleanup(true);
+      }
+    }
+    document.addEventListener('keydown', onKey);
+
+    try { btnOk?.focus(); } catch (_) {}
+  });
+}
+
 /*
- ==============================================================================
- File: src/index.js
-
- Organization (no logic change):
- - State and constants
- - Sessions and Sidebar
- - Canonical History and Rendering
- - Text Chat
- - Toasts
- - Grid/Layout and Settings
- - Bootstrap and DOMContentLoaded (last)
-
- Notes:
- - Function declarations are used to preserve hoisting.
- - FileMaker callbacks are stubbed in index.html before module load.
- ==============================================================================
-*/
-
-let grid = null;
-let toastsWidgetEl = null;
-let textWidgetEl = null;
-let convosWidgetEl = null;
-let isConvosDocked = true;
-let floatEnabled = true;
-
-/* Persisted per-mode settings cached in the web app */
-let persistedSettings = { docked: null, undocked: null };
-
-/* In-memory chat buffer to retain messages while Text widget is hidden */
-const chatBuffer = [];
-const HISTORY_MAX_ITEMS = 400;
-const sessionHistory = [];
-let showToolPills = false;
-let prefsReady = false;
-let applyingFromFM = false;
-let mutatingLayout = false;
-let settingsSaveTimer = null;
-let layoutSaveTimer = null;
-function scheduleSaveSettings(delay = 400) {
-  if (settingsSaveTimer) { try { clearTimeout(settingsSaveTimer); } catch (_) {} }
-  settingsSaveTimer = setTimeout(() => { try { saveSession({ settings: true }); } catch (_) {} }, Math.max(0, delay));
-}
-function scheduleSaveLayout(delay = 400) {
-  if (layoutSaveTimer) { try { clearTimeout(layoutSaveTimer); } catch (_) {} }
-  layoutSaveTimer = setTimeout(() => { try { saveSession({ layout: true }); } catch (_) {} }, Math.max(0, delay));
+ * Conversations helpers
+ */
+function filterConversations(listEl, query) {
+  if (!listEl) return;
+  const q = (query || '').toLowerCase();
+  Array.from(listEl.children || []).forEach((item) => {
+    const text = (item.textContent || '').toLowerCase();
+    item.style.display = text.includes(q) ? '' : 'none';
+  });
 }
 
-/* ================================ */
-/* Sessions and Sidebar             */
-/* ================================ */
-/* Sessions list (for sidebar and undocked Conversations widget) */
-window.__sessions = window.__sessions || []; // [{id, title}]
-/* Track recently deleted sessions to filter them from stale FileMaker responses */
-const __recentlyDeletedSessions = new Set();
+function attachConversationSearch(inputEl, listEl) {
+  if (!inputEl || !listEl) return;
+  inputEl.addEventListener('input', () => filterConversations(listEl, inputEl.value));
+}
+
+/* ============================================================ */
+/* §2  FM Bridge                                                 */
+/* ============================================================ */
+
+/* FileMaker bridge: centralized script names and safe wrapper (no behavior change yet) */
+const FM_SCRIPTS = Object.freeze({
+  SaveState: 'Session_SaveState',
+  GetState: 'Session_GetState',
+  NewSession: 'Session_New',
+  GridSave: 'Grid_SaveLayout',
+  GridLoad: 'Grid_LoadLayout',
+  GridRestore: 'Grid_RestoreDefaultLayout',
+  ChatText: 'Chat_TextRequest',
+  HandleAPIError: 'HandleAPIError',
+  LogMessage: 'LogMessage',
+  ShowJSON: 'ShowJSON',
+  DeleteSession: 'Session_Delete',
+  RenameSession: 'Session_Rename'
+});
+
+/**
+ * Safely call a FileMaker script.
+ * Accepts an object or string payload; objects are JSON-stringified.
+ * Returns true on success, false on failure or when FileMaker is not available.
+ */
+function callFM(name, payload) {
+  if (!window.FileMaker?.PerformScript) return false;
+  try {
+    const arg = typeof payload === 'string' ? payload : (payload != null ? JSON.stringify(payload) : '');
+    window.FileMaker.PerformScript(name, arg);
+    return true;
+  } catch (e) {
+    console.warn('FileMaker.PerformScript failed', name, e);
+    return false;
+  }
+}
+
+/* ============================================================ */
+/* §3  Sessions                                                  */
+/* ============================================================ */
 
 function setSessionList(list) {
   if (!Array.isArray(list)) {
@@ -575,755 +772,6 @@ function applySessionState(payload) {
 
 /* Agents are fully managed by FileMaker (no agent state in JS) */
 
-function createId(prefix = 'msg') {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function trimHistory() {
-  if (sessionHistory.length > HISTORY_MAX_ITEMS) {
-    sessionHistory.splice(0, sessionHistory.length - HISTORY_MAX_ITEMS);
-  }
-}
-
-function appendCanonicalMessage(role, text, metadata = {}) {
-  if (!text) return null;
-  
-  // Normalize metadata to always use 'api' field
-  const normalizedMetadata = {
-    api: metadata.api || metadata.source || null
-  };
-  
-  const item = {
-    id: createId('m'),
-    ts: Date.now(),
-    role,
-    type: 'message',
-    content: text,
-    metadata: normalizedMetadata
-  };
-  sessionHistory.push(item);
-  // Ensure Conversations widget appears when undocked only if a saved rect exists
-  if (!isConvosDocked && !convosWidgetEl) {
-    const saved = getSavedWidgetRect('convo', getCurrentMode());
-    if (saved) { window.__addConversationsWidget && window.__addConversationsWidget(saved); }
-  }
-  trimHistory();
-  return item;
-}
-
-function appendToolCall(name, args, call_id, responseId, summary = null) {
-  sessionHistory.push({
-    id: createId('tc'),
-    ts: Date.now(),
-    role: 'tool',
-    type: 'tool_call',
-    content: (typeof summary === 'string' && summary.trim() !== '' ? summary.trim() : null),
-    metadata: {
-      responseId: responseId || null,
-      call_id: call_id || null,
-      tool: { name: name || 'unknown', arguments: args ?? null }
-    }
-  });
-  trimHistory();
-}
-
-function appendToolResult(call_id, output, status = 'success', error = null) {
-  // Derive the tool name from the most recent matching tool_call (by call_id)
-  let toolName = null;
-  try {
-    for (let i = sessionHistory.length - 1; i >= 0; i--) {
-      const it = sessionHistory[i];
-      if (it && it.type === 'tool_call' && (it.metadata?.call_id === call_id || it.metadata?.call_id === (call_id || null))) {
-        toolName = it.metadata?.tool?.name || null;
-        break;
-      }
-    }
-  } catch (_) {}
-
-  sessionHistory.push({
-    id: createId('tr'),
-    ts: Date.now(),
-    role: 'tool',
-    type: 'tool_result',
-    content: output ?? null,
-    metadata: {
-      call_id: call_id || null,
-      status,
-      error,
-      tool: toolName ? { name: toolName } : undefined
-    }
-  });
-  trimHistory();
-}
-
-function renderToolPill(label, data, id = null) {
-  const row = document.createElement('div');
-  row.className = 'tool-pill-row';
-  row.style.position = 'relative';
-
-  const pill = document.createElement('button');
-  pill.type = 'button';
-  pill.className = 'tool-pill';
-  pill.textContent = label;
-  pill.style.position = 'relative';
-  pill.addEventListener('click', () => {
-    if (window.FileMaker) {
-      try { if (callFM(FM_SCRIPTS.ShowJSON, data)) return; } catch (_) {}
-    }
-    showJsonModal(data);
-  });
-
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'msg-close';
-  closeBtn.textContent = '×';
-  closeBtn.style.position = 'absolute';
-  closeBtn.style.top = '-8px';
-  closeBtn.style.right = '-6px';
-  closeBtn.style.display = 'none';
-  closeBtn.style.border = 'none';
-  closeBtn.style.background = 'transparent';
-  closeBtn.style.color = 'inherit';
-  closeBtn.style.cursor = 'pointer';
-  closeBtn.style.fontSize = '18px';
-  closeBtn.style.zIndex = '2';
-  closeBtn.setAttribute('aria-label', 'Delete item');
-  closeBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (id) {
-      deleteHistoryItem(id);
-    }
-  });
-
-  pill.addEventListener('mouseenter', () => { closeBtn.style.display = 'block'; });
-  pill.addEventListener('mouseleave', () => { closeBtn.style.display = 'none'; });
-
-  row.appendChild(pill);
-  pill.appendChild(closeBtn);
-
-  const list = document.getElementById('chat-messages');
-  if (list) {
-    list.appendChild(row);
-    list.scrollTop = list.scrollHeight;
-  }
-}
-
-function renderChatFromHistory() {
-  const list = document.getElementById('chat-messages');
-  if (!list) return;
-  list.innerHTML = '';
-
-  const lastIdx = sessionHistory.length - 1;
-
-  for (let i = 0; i < sessionHistory.length; i++) {
-    const item = sessionHistory[i];
-    if (!item) continue;
-
-    if (item.type === 'message') {
-      renderChatMessage(item.role, item.content, item.id);
-      continue;
-    }
-
-    if (item.type === 'tool_call' || item.type === 'tool_result') {
-      if (showToolPills) {
-        const name = item?.metadata?.tool?.name || 'unknown';
-        let label;
-        if (item.type === 'tool_call') {
-          const c = (typeof item.content === 'string' ? item.content : '').trim();
-          label = c ? `Tool call: ${name} — ${safeStr(c, 140)}` : `Tool call: ${name}`;
-        } else {
-          label = `Tool result: ${name}`.trim();
-        }
-        renderToolPill(label, item, item.id);
-      } else {
-        // Pills OFF: only show a pill if it is the final item in history.
-        // This ensures no pills appear between any chat messages.
-        if (i === lastIdx) {
-          const name = item?.metadata?.tool?.name || 'unknown';
-          let label;
-          if (item.type === 'tool_call') {
-            const c = (typeof item.content === 'string' ? item.content : '').trim();
-            label = c ? `Tool call: ${name} — ${safeStr(c, 140)}` : `Tool call: ${name}`;
-          } else {
-            label = `Tool result: ${name}`.trim();
-          }
-          renderToolPill(label, item, item.id);
-        }
-      }
-    }
-  }
-}
-
-function deleteHistoryItem(id) {
-  const idx = sessionHistory.findIndex(it => it && it.id === id);
-  if (idx >= 0) {
-    sessionHistory.splice(idx, 1);
-    rebuildChatBufferFromSession();
-    renderChatFromHistory();
-    try { saveSession({ history: true }); } catch (_) {}
-    return true;
-  }
-  return false;
-}
-
-function rebuildChatBufferFromSession() {
-  try {
-    const msgs = sessionHistory
-      .filter(it => it && it.type === 'message')
-      .map(it => ({
-        role: it.role,
-        text: it.content || '',
-        ts: it.ts,
-        source: it.metadata?.api || null
-      }));
-    chatBuffer.splice(0, chatBuffer.length, ...msgs);
-  } catch (_) {}
-}
-
-function showJsonModal(data) {
-  const existing = document.querySelector('.json-modal');
-  if (existing) existing.remove();
-  const modal = document.createElement('div');
-  modal.className = 'json-modal';
-  modal.innerHTML = `
-    <div class="json-modal-content">
-      <div class="json-modal-header">
-        <div class="json-modal-title">Details</div>
-        <button class="json-modal-close" aria-label="Close">×</button>
-      </div>
-      <pre class="json-content"></pre>
-    </div>`;
-  document.body.appendChild(modal);
-  modal.querySelector('.json-content').textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-  modal.querySelector('.json-modal-close').addEventListener('click', hideJsonModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) hideJsonModal(); });
-}
-
-function hideJsonModal() {
-  const modal = document.querySelector('.json-modal');
-  if (modal) modal.remove();
-}
-
-/**
- * Generic confirm modal (Promise-based).
- * Reuses the json-modal styles already present in the app.
- * Returns a Promise<boolean> that resolves true on confirm, false on cancel/close.
- */
-function showConfirmModal(message, options = {}) {
-  const opts = {
-    title: options.title || 'Confirm',
-    confirmText: options.confirmText || 'OK',
-    cancelText: options.cancelText || 'Cancel',
-    danger: !!options.danger
-  };
-
-  // Remove any existing modal first
-  const existing = document.querySelector('.json-modal');
-  if (existing) existing.remove();
-
-  return new Promise((resolve) => {
-    const modal = document.createElement('div');
-    modal.className = 'json-modal';
-    modal.innerHTML = `
-      <div class="json-modal-content">
-        <div class="json-modal-header">
-          <div class="json-modal-title">${opts.title}</div>
-          <button class="json-modal-close" aria-label="Close">×</button>
-        </div>
-        <div class="json-confirm-message" style="padding: 8px 12px;">
-          ${message}
-        </div>
-        <div class="json-modal-actions" style="display:flex; gap:8px; justify-content:flex-end; padding: 0 12px 12px;">
-          <button class="json-confirm-cancel">${opts.cancelText}</button>
-          <button class="json-confirm-ok${opts.danger ? ' danger' : ''}">${opts.confirmText}</button>
-        </div>
-      </div>`;
-
-    document.body.appendChild(modal);
-
-    const btnClose = modal.querySelector('.json-modal-close');
-    const btnCancel = modal.querySelector('.json-confirm-cancel');
-    const btnOk = modal.querySelector('.json-confirm-ok');
-
-    function cleanup(result) {
-      try { modal.remove(); } catch (_) {}
-      resolve(result);
-    }
-
-    btnClose?.addEventListener('click', () => cleanup(false));
-    btnCancel?.addEventListener('click', () => cleanup(false));
-    btnOk?.addEventListener('click', () => cleanup(true));
-
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) cleanup(false);
-    });
-
-    function onKey(e) {
-      if (e.key === 'Escape') {
-        document.removeEventListener('keydown', onKey);
-        cleanup(false);
-      } else if (e.key === 'Enter') {
-        document.removeEventListener('keydown', onKey);
-        cleanup(true);
-      }
-    }
-    document.addEventListener('keydown', onKey);
-
-    try { btnOk?.focus(); } catch (_) {}
-  });
-}
-
-function getCurrentMode() {
-  return isConvosDocked ? 'docked' : 'undocked';
-}
-
-function loadPersistedSettings() {
-  try {
-    const rawDocked = localStorage.getItem('settings:docked');
-    const rawUndocked = localStorage.getItem('settings:undocked');
-    if (rawDocked) {
-      const env = JSON.parse(rawDocked);
-      if (env && env.settings && Array.isArray(env.settings.layout) && !persistedSettings.docked) {
-        persistedSettings.docked = env.settings;
-      }
-    }
-    if (rawUndocked) {
-      const env = JSON.parse(rawUndocked);
-      if (env && env.settings && Array.isArray(env.settings.layout) && !persistedSettings.undocked) {
-        persistedSettings.undocked = env.settings;
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to load persisted settings from localStorage', e);
-  }
-}
-
-/* Helpers to cache/restore individual widget positions per-mode */
-function ensureModeSettings(mode = getCurrentMode()) {
-  if (!persistedSettings[mode]) {
-    const snapshot = computeCurrentSettingsSnapshot();
-    persistedSettings[mode] = snapshot || {
-      version: 1,
-      columns: grid?.engine?.column || grid?.opts?.column || 12,
-      cellHeight: undefined,
-      float: !!floatEnabled,
-      text: !!textWidgetEl,
-      toasts: !!toastsWidgetEl,
-      showToolCalls: !!showToolPills,
-      layout: []
-    };
-  }
-  if (!Array.isArray(persistedSettings[mode].layout)) {
-    persistedSettings[mode].layout = [];
-  }
-  return persistedSettings[mode];
-}
-
-function persistModeSettings(mode = getCurrentMode()) {
-  try {
-    localStorage.setItem(`settings:${mode}`, JSON.stringify({ key: mode, settings: persistedSettings[mode] }));
-  } catch (_) {}
-}
-
-function getSavedWidgetRect(widget, mode = getCurrentMode()) {
-  const s = persistedSettings[mode];
-  if (!s || !Array.isArray(s.layout)) return null;
-  const entry = s.layout.find(n => n && n.widget === widget);
-  if (entry && typeof entry.x === 'number') {
-    return { x: entry.x, y: entry.y, w: entry.w, h: entry.h };
-  }
-  return null;
-}
-
-function updateSavedWidgetRect(widget, rect, mode = getCurrentMode()) {
-  if (!rect || typeof rect !== 'object') return;
-  const s = ensureModeSettings(mode);
-  const layout = s.layout;
-  const idx = layout.findIndex(n => n && n.widget === widget);
-  const normalized = {
-    widget,
-    x: Number(rect.x ?? 0),
-    y: Number(rect.y ?? 0),
-    w: Number(rect.w ?? 4),
-    h: Number(rect.h ?? 4)
-  };
-  if (idx >= 0) {
-    layout[idx] = normalized;
-  } else {
-    layout.push(normalized);
-  }
-  persistModeSettings(mode);
-}
-
-/* Widget add dispatcher used by layout rebuilders (Step 4) */
-function addWidgetByType(type, rect, flags) {
-  const adders = {
-    toasts: (r) => flags.includeToasts && window.__addToastsWidget && window.__addToastsWidget(r),
-    text: (r) => flags.includeText && window.__addTextWidget && window.__addTextWidget(r),
-    convo: (r) => (!isConvosDocked) && window.__addConversationsWidget && window.__addConversationsWidget(r)
-  };
-  const fn = adders[type];
-  if (fn) fn(rect);
-}
-
-/* Default widget positions removed: layouts must come from session/user defaults */
-
-/* Rebuild grid from a layout array (+ float), respecting current dock state for convo */
-function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
-  if (!grid) return;
-  mutatingLayout = true;
-  try {
-    try {
-      debugTrace('[rebuildFromLayout] start', { mode: getCurrentMode(), md5: (Array.isArray(layout) ? computeLayoutMD5(layout) : 'n/a'), layout });
-    } catch (_) {}
-
-  const desiredFloat = (typeof float === 'boolean') ? !!float : !!floatEnabled;
-  if (typeof grid.float === 'function') {
-    // Prevent intermediate repack while removing/adding nodes
-    grid.float(false);
-  }
-
-  const includeText = options.includeText !== undefined ? !!options.includeText : true;
-  const includeToasts = options.includeToasts !== undefined ? !!options.includeToasts : true;
-
-  // Remove all existing widgets (batched to prevent reflow/pack during teardown)
-  const existing = [...(grid.engine?.nodes || [])];
-  grid.batchUpdate();
-  existing.forEach(n => n?.el && grid.removeWidget(n.el));
-  toastsWidgetEl = null;
-  textWidgetEl = null;
-  convosWidgetEl = null;
-
-  // Add widgets back based on layout (respect toggles) via dispatcher
-  const flags = { includeText, includeToasts };
-  const nodesToAdd = Array.isArray(layout) ? [...layout] : [];
-  nodesToAdd.sort((a, b) => (a.y - b.y) || (a.x - b.x));
-  const desiredNodes = nodesToAdd.map(n => ({
-    widget: String(n.widget),
-    x: Number(n.x), y: Number(n.y), w: Number(n.w), h: Number(n.h)
-  }));
-  desiredNodes.forEach(n => {
-    addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h, autoPosition: false }, flags);
-  });
-  grid.commit();
-  if (typeof grid.float === 'function') {
-    floatEnabled = desiredFloat;
-    grid.float(desiredFloat);
-  }
-  // Enforce final positions post-commit and log actual vs desired for diagnostics
-  try {
-    const actual = (grid.engine?.nodes || []).map(n => ({
-      widget: n?.el?.dataset?.widget || null, x: n.x, y: n.y, w: n.w, h: n.h
-    }));
-    const elByType = {
-      toasts: toastsWidgetEl,
-      text: textWidgetEl,
-      convo: convosWidgetEl
-    };
-    desiredNodes.forEach(n => {
-      const el = elByType[n.widget];
-      if (el && el.gridstackNode && (el.gridstackNode.x !== n.x || el.gridstackNode.y !== n.y || el.gridstackNode.w !== n.w || el.gridstackNode.h !== n.h)) {
-        grid.update(el, { x: n.x, y: n.y, w: n.w, h: n.h });
-      }
-    });
-    const actualAfter = (grid.engine?.nodes || []).map(n => ({
-      widget: n?.el?.dataset?.widget || null, x: n.x, y: n.y, w: n.w, h: n.h
-    }));
-    const diff = { desired: desiredNodes, actualBefore: actual, actualAfter };
-    window.__lastLayoutDiff = diff;
-    debugTrace('[layout:rebuild] enforced positions', { mode: getCurrentMode(), float: desiredFloat, diff });
-  } catch (e) {
-    console.warn('[layout:rebuild] enforcement failed', e);
-  }
-  } finally {
-    mutatingLayout = false;
-    if (prefsReady && !applyingFromFM) scheduleSaveLayout(250);
-  }
-}
-
-/* Apply settings for a given mode (docked/undocked): set toggles, float, and rebuild layout */
-function applySettingsForMode(mode) {
-  const settings = persistedSettings[mode];
-  if (!settings || !Array.isArray(settings.layout)) return false;
-
-
-  // Apply grid sizing options before rebuilding
-  if (typeof settings.columns === 'number' && grid && typeof grid.column === 'function') {
-    grid.column(settings.columns);
-  }
-  if (typeof settings.cellHeight === 'number' && grid && typeof grid.cellHeight === 'function') {
-    grid.cellHeight(settings.cellHeight);
-  }
-
-  // Update menu button states
-  const btnText = document.getElementById('btn-text');
-  const btnToasts = document.getElementById('btn-toasts');
-  const btnToolCalls = document.getElementById('btn-tool-calls');
-  if (btnText) {
-    setPressed(btnText, !!settings.text);
-  }
-  if (btnToasts) {
-    setPressed(btnToasts, !!settings.toasts);
-  }
-  if (btnToolCalls) {
-    const on = (typeof settings.showToolCalls === 'boolean') ? !!settings.showToolCalls : !!showToolPills;
-    setPressed(btnToolCalls, on);
-    showToolPills = on;
-    renderChatFromHistory();
-  }
-
-  try { debugTrace('[applySettingsForMode] using', { mode, md5: computeLayoutMD5(settings.layout), float: settings.float, layout: settings.layout }); } catch (_) {}
-
-  rebuildFromLayout(settings.layout, settings.float, {
-    includeText: !!settings.text,
-    includeToasts: !!settings.toasts
-  });
-  return true;
-}
-
-
-/*
- * Expose functions to FileMaker
- */
-window.showToast = showToast;
-window.setUISettings = setUISettings;
-window.getChatHistoryText = chatHistoryToText;
-window.logChatHistory = logChatHistory;
-window.getChatBuffer = getChatBuffer;
-window.logChatBufferRaw = logChatBufferRaw;
-window.bootstrapApp = bootstrapApp;
-window.copyMinifiedHistory = copyMinifiedHistory;
-window.buildBootstrapTestPayload = buildBootstrapTestPayload;
-window.applyLoadedLayout = applyLoadedLayout;
-window.applySettingsEnvelope = applySettingsEnvelope;
-window.savePreferences = savePreferences;
-window.saveSession = saveSession;
-window.saveSessionState = saveSessionState;
-window.getSessionState = getSessionState;
-window.switchSession = switchSession;
-window.startNewSession = startNewSession;
-window.applySessionState = applySessionState;
-window.requestSessionState = requestSessionState;
-window.setSessionList = setSessionList;
-window.applySessionTitle = applySessionTitle;
-
-function parseJsonSafely(value, label) {
-  if (!value) {
-    return null;
-  }
-
-  if (typeof value === 'object') {
-    return value;
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch (error) {
-    console.error(`Failed to parse JSON for ${label}:`, error);
-    return null;
-  }
-}
-
-function setPressed(btn, on) {
-  if (!btn) return;
-  btn.classList.toggle('active', !!on);
-  btn.setAttribute('aria-pressed', String(!!on));
-}
-
-function stopDragFrom(el) {
-  if (!el) return;
-  ['mousedown', 'touchstart', 'pointerdown'].forEach(evt => {
-    el.addEventListener(evt, (e) => e.stopPropagation(), true);
-  });
-}
- 
-/* FileMaker bridge: centralized script names and safe wrapper (no behavior change yet) */
-const FM_SCRIPTS = Object.freeze({
-  SaveState: 'Session_SaveState',
-  GetState: 'Session_GetState',
-  NewSession: 'Session_New',
-  GridSave: 'Grid_SaveLayout',
-  GridLoad: 'Grid_LoadLayout',
-  GridRestore: 'Grid_RestoreDefaultLayout',
-  ChatText: 'Chat_TextRequest',
-  HandleAPIError: 'HandleAPIError',
-  LogMessage: 'LogMessage',
-  ShowJSON: 'ShowJSON',
-  DeleteSession: 'Session_Delete',
-  RenameSession: 'Session_Rename'
-});
-
-/**
- * Safely call a FileMaker script.
- * Accepts an object or string payload; objects are JSON-stringified.
- * Returns true on success, false on failure or when FileMaker is not available.
- */
-function callFM(name, payload) {
-  if (!window.FileMaker?.PerformScript) return false;
-  try {
-    const arg = typeof payload === 'string' ? payload : (payload != null ? JSON.stringify(payload) : '');
-    window.FileMaker.PerformScript(name, arg);
-    return true;
-  } catch (e) {
-    console.warn('FileMaker.PerformScript failed', name, e);
-    return false;
-  }
-}
-
-/* 
- * Function to create toast timeline container if it doesn't exist
- */
-function createToastTimeline() {
-  // Toasts widget owns #toast-timeline; no-op if absent
-  return;
-}
-
-/*
- * Conversations helpers
- */
-function filterConversations(listEl, query) {
-  if (!listEl) return;
-  const q = (query || '').toLowerCase();
-  Array.from(listEl.children || []).forEach((item) => {
-    const text = (item.textContent || '').toLowerCase();
-    item.style.display = text.includes(q) ? '' : 'none';
-  });
-}
-
-function attachConversationSearch(inputEl, listEl) {
-  if (!inputEl || !listEl) return;
-  inputEl.addEventListener('input', () => filterConversations(listEl, inputEl.value));
-}
-
-/*
- * Text chat helpers
- */
-
-/**
- * Record a chat message into the in-memory buffer.
- * Keeps recent messages so the Text widget can render history on mount.
- */
-function recordChatMessage(role, text, opts = {}) {
-  if (!text) return;
-  chatBuffer.push({
-    role,
-    text,
-    ts: Date.now(),
-    source: opts.source || null
-  });
-  // Prevent unbounded growth during long sessions
-  if (chatBuffer.length > 1000) {
-    chatBuffer.splice(0, chatBuffer.length - 1000);
-  }
-}
-
-/**
- * Render a single chat message to the Text widget UI (if mounted).
- */
-function renderChatMessage(role, text, id = null) {
-  const list = document.getElementById('chat-messages');
-  if (!list || !text) return;
-
-  const row = document.createElement('div');
-  row.className = `chat-message ${role}`;
-  row.style.position = 'relative';
-  if (id) row.setAttribute('data-id', id);
-
-  const bubble = document.createElement('div');
-  bubble.className = 'bubble';
-  bubble.textContent = text;
-  bubble.style.position = 'relative';
-
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'msg-close';
-  closeBtn.textContent = '×';
-  closeBtn.style.position = 'absolute';
-  closeBtn.style.top = '-8px';
-  closeBtn.style.right = '-6px';
-  closeBtn.style.display = 'none';
-  closeBtn.style.border = 'none';
-  closeBtn.style.background = 'transparent';
-  closeBtn.style.color = 'inherit';
-  closeBtn.style.cursor = 'pointer';
-  closeBtn.style.fontSize = '18px';
-  closeBtn.style.zIndex = '2';
-  closeBtn.setAttribute('aria-label', 'Delete message');
-  closeBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (id) {
-      deleteHistoryItem(id);
-    }
-  });
-
-  bubble.addEventListener('mouseenter', () => { closeBtn.style.display = 'block'; });
-  bubble.addEventListener('mouseleave', () => { closeBtn.style.display = 'none'; });
-
-  row.appendChild(bubble);
-  bubble.appendChild(closeBtn);
-  list.appendChild(row);
-
-  // autoscroll
-  list.scrollTop = list.scrollHeight;
-}
-
-/**
- * Append a chat message: always store in buffer, and render if widget mounted.
- * @param {'user'|'assistant'|'system'} role
- * @param {string} text
- * @param {object} [opts]
- */
-function appendChatMessage(role, text, opts = {}) {
-  if (!text) return;
-  recordChatMessage(role, text, opts);
-  const item = appendCanonicalMessage(role, text, { api: opts.source || null });
-  renderChatMessage(role, text, item?.id || null);
-}
-
-/**
- * Convert the in-memory chat history buffer to a plain text transcript.
- * Format: "[HH:MM:SS] role: message" per line.
- * Returns "(no chat history yet)" if empty.
- */
-function chatHistoryToText() {
-  if (!Array.isArray(chatBuffer) || chatBuffer.length === 0) {
-    return "(no chat history yet)";
-  }
-  return chatBuffer.map(m => {
-    const d = m && typeof m.ts === 'number' ? new Date(m.ts) : null;
-    const time = d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString() : '';
-    const role = m?.role || 'unknown';
-    const text = m?.text || '';
-    return time ? `[${time}] ${role}: ${text}` : `${role}: ${text}`;
-  }).join('\n');
-}
-
-/**
- * Log the current chat history as plain text to the console.
- * Returns the same text string for convenience.
- */
-function logChatHistory() {
-  const text = chatHistoryToText();
-  return text;
-}
-
-/**
- * Return a shallow copy of the in-memory chat buffer.
- */
-function getChatBuffer() {
-  return Array.isArray(chatBuffer) ? chatBuffer.slice() : [];
-}
-
-/**
- * Console.log the raw chat buffer as JSON (pretty by default).
- * @param {boolean} pretty
- * @returns {string} The JSON string that was logged.
- */
-function logChatBufferRaw(pretty = true) {
-  const out = pretty ? JSON.stringify(getChatBuffer(), null, 2) : JSON.stringify(getChatBuffer());
-  return out;
-}
-
 /**
  * Return current session state for FileMaker: id, mode, history, per-mode layouts.
  */
@@ -1542,219 +990,338 @@ function copyMinifiedHistory() {
   return text;
 }
 
-/**
- * Bootstrap the app from FileMaker with session, settings, and history.
- * Accepts an object or a JSON string.
- * Seeds in-memory caches and defers layout application to initial mount.
- */
-function bootstrapApp(payload) {
-  try {
-    const raw = typeof payload === 'string' ? JSON.parse(payload) : (payload || {});
-    const data = (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'success'))
-      ? (raw.success ? (raw.result || {}) : null)
-      : raw;
-    if (!data) {
-      console.error('bootstrapApp failed: App_Init returned success=false or invalid payload');
-      return false;
-    }
-    const mode = data.key || data.mode || (data.settings && (data.settings.key || data.settings.mode)) || 'docked';
+/* ============================================================ */
+/* §4  Canonical History                                         */
+/* ============================================================ */
 
-    // Seed sessions list (sidebar and undocked widget)
-    if (Array.isArray(data.sessions)) {
-      setSessionList(data.sessions);
-    }
-
-    // Seed history: preserve tool_call/tool_result; buffer only message items for legacy UI
-    if (Array.isArray(data.history)) {
-      const incoming = [];
-      const bufferMsgs = [];
-      for (const m of data.history) {
-        const ts =
-          (m && m.ts !== undefined) ? m.ts
-          : (m && m.timestamp !== undefined) ? m.timestamp
-          : (m && m.time !== undefined) ? m.time
-          : Date.now();
-
-        // Canonical tool_call
-        if (m && m.type === 'tool_call') {
-          incoming.push({
-            id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('tc'),
-            ts,
-            role: 'tool',
-            type: 'tool_call',
-            content: (typeof m?.content === 'string' ? m.content : null),
-            metadata: {
-              responseId: m.responseId || null,
-              call_id: m.call_id || m.id || null,
-              tool: {
-                name: m.name || m?.tool?.name || 'unknown',
-                arguments: (m?.args ?? m?.arguments ?? m?.tool?.arguments) ?? null
-              }
-            }
-          });
-          continue;
-        }
-
-        // Canonical tool_result
-        if (m && m.type === 'tool_result') {
-          incoming.push({
-            id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('tr'),
-            ts,
-            role: 'tool',
-            type: 'tool_result',
-            content: (m.output ?? m.content) ?? null,
-            metadata: {
-              call_id: m.call_id || null,
-              status: m.status || null
-            }
-          });
-          continue;
-        }
-
-        // Message-like entries
-        const role = m?.role || 'system';
-        const text = typeof m?.content === 'string'
-          ? m.content
-          : (typeof m?.text === 'string' ? m.text : '');
-
-        incoming.push({
-          id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('m'),
-          ts,
-          role,
-          type: 'message',
-          content: text,
-          metadata: { api: m?.metadata?.api ?? m?.metadata?.source ?? m?.source ?? null }
-        });
-
-        if (text) {
-          bufferMsgs.push({
-            role,
-            text,
-            ts,
-            source: m?.metadata?.api ?? m?.metadata?.source ?? m?.source ?? null
-          });
-        }
-      }
-
-      sessionHistory.splice(0, sessionHistory.length, ...incoming);
-      trimHistory();
-
-      chatBuffer.splice(0, chatBuffer.length, ...bufferMsgs);
-
-      // If Text widget is already mounted, render immediately
-      renderChatFromHistory();
-    }
-
-    // Cache per-mode settings (normalize debug -> toasts)
-    const s = data.settings || {};
-    const toasts = (s.toasts !== undefined) ? !!s.toasts : !!s.debug;
-    // Accept layout only at root-level
-    const layoutObj = (data.layout && typeof data.layout === 'object' && !Array.isArray(data.layout))
-      ? data.layout
-      : null;
-    if (!layoutObj && s && typeof s.layout === 'object' && !Array.isArray(s.layout)) {
-      try { showToast('[bootstrapApp] Ignored settings.layout; layout must be at the root level.', 'tool-error', 'left', null, 6); } catch (_) {}
-    }
-
-    if (layoutObj) {
-      ['docked', 'undocked'].forEach((k) => {
-        const arr = layoutObj[k];
-        if (Array.isArray(arr)) {
-          const prev = persistedSettings[k] || {};
-          // Normalize numeric fields to ensure GridStack honors coordinates exactly
-          const normalizedArr = Array.isArray(arr)
-            ? arr.map(n => ({
-                widget: String(n.widget),
-                x: Number(n.x),
-                y: Number(n.y),
-                w: Number(n.w),
-                h: Number(n.h)
-              }))
-            : [];
-
-          const incomingSource = data.sessionId ? 'session' : 'machine';
-          const incomingSessionId = data.sessionId || null;
-          const existingSource = prev.__source || null;
-          const existingSessionId = prev.__sessionId || null;
-
-          // Do not let a machine/default payload overwrite an existing session-scoped cache
-          if (existingSource === 'session' && existingSessionId && incomingSource === 'machine') {
-            try { debugTrace('[bootstrapApp] skip machine override', { key: k }); } catch (_) {}
-            return;
-          }
-
-          persistedSettings[k] = {
-            version: s.version || prev.version || 1,
-            columns: s.columns || prev.columns || 12,
-            cellHeight: s.cellHeight !== undefined ? s.cellHeight : prev.cellHeight,
-            float: (s.float !== undefined) ? !!s.float : !!prev.float,
-            text: (s.text !== undefined) ? !!s.text : !!prev.text,
-            toasts,
-            showToolCalls: (typeof s.showToolCalls === 'boolean') ? !!s.showToolCalls : prev.showToolCalls,
-            layout: normalizedArr,
-            __source: incomingSource,
-            __sessionId: incomingSessionId
-          };
-          try {
-            localStorage.setItem(`settings:${k}`, JSON.stringify({ key: k, settings: persistedSettings[k] }));
-          } catch (_) {}
-          try {
-            debugTrace('[bootstrapApp] cached', { key: k, md5: computeLayoutMD5(normalizedArr), layout: normalizedArr });
-          } catch (_) {}
-        }
-      });
-    }
-
-    // Agents are managed in FileMaker; ignore any activeAgent in payload
-
-    // Persist desired mode and session id for later application
-    window.__bootstrapMode = mode;
-    if (data.sessionId) {
-      window.__sessionId = data.sessionId;
-    }
-    // Highlight the active session in any rendered lists
-    highlightActiveSession(window.__sessionId || '');
-
-    // If grid is already initialized, immediately align dock state and apply layout/toggles
-    if (grid) {
-      applyingFromFM = true;
-      try {
-        if (mode === 'docked') {
-          if (!isConvosDocked && window.__dockConvos) window.__dockConvos();
-        } else {
-          if (isConvosDocked && window.__undockConvos) window.__undockConvos();
-        }
-
-        // Only apply cached settings if they are session-scoped for this session; otherwise request from FM
-        const haveSessionScoped =
-          persistedSettings[mode]
-          && persistedSettings[mode].__source === 'session'
-          && (persistedSettings[mode].__sessionId === (data.sessionId || window.__sessionId || null));
-
-        let applied = false;
-        if (haveSessionScoped) {
-          applied = applySettingsForMode(mode);
-        }
-
-        if (!applied) {
-          const loaded = loadLayoutForCurrentMode();
-          if (!loaded && typeof window.__syncWidgets === 'function') {
-            window.__syncWidgets();
-          }
-        }
-      } catch (e) {
-        console.warn('Immediate apply after bootstrap failed; will rely on initial mount', e);
-      }
-      applyingFromFM = false;
-    }
-
-    // Mark bootstrap as completed to enable post-bootstrap behaviors/logging
-    window.__bootstrapDone = true;
-    return true;
-  } catch (e) {
-    console.error('bootstrapApp failed', e);
-    return false;
+function trimHistory() {
+  if (sessionHistory.length > HISTORY_MAX_ITEMS) {
+    sessionHistory.splice(0, sessionHistory.length - HISTORY_MAX_ITEMS);
   }
+}
+
+function appendCanonicalMessage(role, text, metadata = {}) {
+  if (!text) return null;
+
+  // Normalize metadata to always use 'api' field
+  const normalizedMetadata = {
+    api: metadata.api || metadata.source || null
+  };
+
+  const item = {
+    id: createId('m'),
+    ts: Date.now(),
+    role,
+    type: 'message',
+    content: text,
+    metadata: normalizedMetadata
+  };
+  sessionHistory.push(item);
+  // Ensure Conversations widget appears when undocked only if a saved rect exists
+  if (!isConvosDocked && !convosWidgetEl) {
+    const saved = getSavedWidgetRect('convo', getCurrentMode());
+    if (saved) { window.__addConversationsWidget && window.__addConversationsWidget(saved); }
+  }
+  trimHistory();
+  return item;
+}
+
+function appendToolCall(name, args, call_id, responseId, summary = null) {
+  sessionHistory.push({
+    id: createId('tc'),
+    ts: Date.now(),
+    role: 'tool',
+    type: 'tool_call',
+    content: (typeof summary === 'string' && summary.trim() !== '' ? summary.trim() : null),
+    metadata: {
+      responseId: responseId || null,
+      call_id: call_id || null,
+      tool: { name: name || 'unknown', arguments: args ?? null }
+    }
+  });
+  trimHistory();
+}
+
+function appendToolResult(call_id, output, status = 'success', error = null) {
+  // Derive the tool name from the most recent matching tool_call (by call_id)
+  let toolName = null;
+  try {
+    for (let i = sessionHistory.length - 1; i >= 0; i--) {
+      const it = sessionHistory[i];
+      if (it && it.type === 'tool_call' && (it.metadata?.call_id === call_id || it.metadata?.call_id === (call_id || null))) {
+        toolName = it.metadata?.tool?.name || null;
+        break;
+      }
+    }
+  } catch (_) {}
+
+  sessionHistory.push({
+    id: createId('tr'),
+    ts: Date.now(),
+    role: 'tool',
+    type: 'tool_result',
+    content: output ?? null,
+    metadata: {
+      call_id: call_id || null,
+      status,
+      error,
+      tool: toolName ? { name: toolName } : undefined
+    }
+  });
+  trimHistory();
+}
+
+function renderToolPill(label, data, id = null) {
+  const row = document.createElement('div');
+  row.className = 'tool-pill-row';
+  row.style.position = 'relative';
+
+  const pill = document.createElement('button');
+  pill.type = 'button';
+  pill.className = 'tool-pill';
+  pill.textContent = label;
+  pill.style.position = 'relative';
+  pill.addEventListener('click', () => {
+    if (window.FileMaker) {
+      try { if (callFM(FM_SCRIPTS.ShowJSON, data)) return; } catch (_) {}
+    }
+    showJsonModal(data);
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'msg-close';
+  closeBtn.textContent = '×';
+  closeBtn.style.position = 'absolute';
+  closeBtn.style.top = '-8px';
+  closeBtn.style.right = '-6px';
+  closeBtn.style.display = 'none';
+  closeBtn.style.border = 'none';
+  closeBtn.style.background = 'transparent';
+  closeBtn.style.color = 'inherit';
+  closeBtn.style.cursor = 'pointer';
+  closeBtn.style.fontSize = '18px';
+  closeBtn.style.zIndex = '2';
+  closeBtn.setAttribute('aria-label', 'Delete item');
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (id) {
+      deleteHistoryItem(id);
+    }
+  });
+
+  pill.addEventListener('mouseenter', () => { closeBtn.style.display = 'block'; });
+  pill.addEventListener('mouseleave', () => { closeBtn.style.display = 'none'; });
+
+  row.appendChild(pill);
+  pill.appendChild(closeBtn);
+
+  const list = document.getElementById('chat-messages');
+  if (list) {
+    list.appendChild(row);
+    list.scrollTop = list.scrollHeight;
+  }
+}
+
+function renderChatFromHistory() {
+  const list = document.getElementById('chat-messages');
+  if (!list) return;
+  list.innerHTML = '';
+
+  const lastIdx = sessionHistory.length - 1;
+
+  for (let i = 0; i < sessionHistory.length; i++) {
+    const item = sessionHistory[i];
+    if (!item) continue;
+
+    if (item.type === 'message') {
+      renderChatMessage(item.role, item.content, item.id);
+      continue;
+    }
+
+    if (item.type === 'tool_call' || item.type === 'tool_result') {
+      if (showToolPills) {
+        const name = item?.metadata?.tool?.name || 'unknown';
+        let label;
+        if (item.type === 'tool_call') {
+          const c = (typeof item.content === 'string' ? item.content : '').trim();
+          label = c ? `Tool call: ${name} — ${safeStr(c, 140)}` : `Tool call: ${name}`;
+        } else {
+          label = `Tool result: ${name}`.trim();
+        }
+        renderToolPill(label, item, item.id);
+      } else {
+        // Pills OFF: only show a pill if it is the final item in history.
+        // This ensures no pills appear between any chat messages.
+        if (i === lastIdx) {
+          const name = item?.metadata?.tool?.name || 'unknown';
+          let label;
+          if (item.type === 'tool_call') {
+            const c = (typeof item.content === 'string' ? item.content : '').trim();
+            label = c ? `Tool call: ${name} — ${safeStr(c, 140)}` : `Tool call: ${name}`;
+          } else {
+            label = `Tool result: ${name}`.trim();
+          }
+          renderToolPill(label, item, item.id);
+        }
+      }
+    }
+  }
+}
+
+function deleteHistoryItem(id) {
+  const idx = sessionHistory.findIndex(it => it && it.id === id);
+  if (idx >= 0) {
+    sessionHistory.splice(idx, 1);
+    rebuildChatBufferFromSession();
+    renderChatFromHistory();
+    try { saveSession({ history: true }); } catch (_) {}
+    return true;
+  }
+  return false;
+}
+
+function rebuildChatBufferFromSession() {
+  try {
+    const msgs = sessionHistory
+      .filter(it => it && it.type === 'message')
+      .map(it => ({
+        role: it.role,
+        text: it.content || '',
+        ts: it.ts,
+        source: it.metadata?.api || null
+      }));
+    chatBuffer.splice(0, chatBuffer.length, ...msgs);
+  } catch (_) {}
+}
+
+/* ============================================================ */
+/* §5  Text Chat                                                 */
+/* ============================================================ */
+
+/**
+ * Record a chat message into the in-memory buffer.
+ * Keeps recent messages so the Text widget can render history on mount.
+ */
+function recordChatMessage(role, text, opts = {}) {
+  if (!text) return;
+  chatBuffer.push({
+    role,
+    text,
+    ts: Date.now(),
+    source: opts.source || null
+  });
+  // Prevent unbounded growth during long sessions
+  if (chatBuffer.length > 1000) {
+    chatBuffer.splice(0, chatBuffer.length - 1000);
+  }
+}
+
+/**
+ * Render a single chat message to the Text widget UI (if mounted).
+ */
+function renderChatMessage(role, text, id = null) {
+  const list = document.getElementById('chat-messages');
+  if (!list || !text) return;
+
+  const row = document.createElement('div');
+  row.className = `chat-message ${role}`;
+  row.style.position = 'relative';
+  if (id) row.setAttribute('data-id', id);
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  bubble.style.position = 'relative';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'msg-close';
+  closeBtn.textContent = '×';
+  closeBtn.style.position = 'absolute';
+  closeBtn.style.top = '-8px';
+  closeBtn.style.right = '-6px';
+  closeBtn.style.display = 'none';
+  closeBtn.style.border = 'none';
+  closeBtn.style.background = 'transparent';
+  closeBtn.style.color = 'inherit';
+  closeBtn.style.cursor = 'pointer';
+  closeBtn.style.fontSize = '18px';
+  closeBtn.style.zIndex = '2';
+  closeBtn.setAttribute('aria-label', 'Delete message');
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (id) {
+      deleteHistoryItem(id);
+    }
+  });
+
+  bubble.addEventListener('mouseenter', () => { closeBtn.style.display = 'block'; });
+  bubble.addEventListener('mouseleave', () => { closeBtn.style.display = 'none'; });
+
+  row.appendChild(bubble);
+  bubble.appendChild(closeBtn);
+  list.appendChild(row);
+
+  // autoscroll
+  list.scrollTop = list.scrollHeight;
+}
+
+/**
+ * Append a chat message: always store in buffer, and render if widget mounted.
+ * @param {'user'|'assistant'|'system'} role
+ * @param {string} text
+ * @param {object} [opts]
+ */
+function appendChatMessage(role, text, opts = {}) {
+  if (!text) return;
+  recordChatMessage(role, text, opts);
+  const item = appendCanonicalMessage(role, text, { api: opts.source || null });
+  renderChatMessage(role, text, item?.id || null);
+}
+
+/**
+ * Convert the in-memory chat history buffer to a plain text transcript.
+ * Format: "[HH:MM:SS] role: message" per line.
+ * Returns "(no chat history yet)" if empty.
+ */
+function chatHistoryToText() {
+  if (!Array.isArray(chatBuffer) || chatBuffer.length === 0) {
+    return "(no chat history yet)";
+  }
+  return chatBuffer.map(m => {
+    const d = m && typeof m.ts === 'number' ? new Date(m.ts) : null;
+    const time = d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString() : '';
+    const role = m?.role || 'unknown';
+    const text = m?.text || '';
+    return time ? `[${time}] ${role}: ${text}` : `${role}: ${text}`;
+  }).join('\n');
+}
+
+/**
+ * Log the current chat history as plain text to the console.
+ * Returns the same text string for convenience.
+ */
+function logChatHistory() {
+  const text = chatHistoryToText();
+  return text;
+}
+
+/**
+ * Return a shallow copy of the in-memory chat buffer.
+ */
+function getChatBuffer() {
+  return Array.isArray(chatBuffer) ? chatBuffer.slice() : [];
+}
+
+/**
+ * Console.log the raw chat buffer as JSON (pretty by default).
+ * @param {boolean} pretty
+ * @returns {string} The JSON string that was logged.
+ */
+function logChatBufferRaw(pretty = true) {
+  const out = pretty ? JSON.stringify(getChatBuffer(), null, 2) : JSON.stringify(getChatBuffer());
+  return out;
 }
 
 /**
@@ -1800,20 +1367,6 @@ function handleChatSend() {
 }
 
 /**
- * Read file as DataURL
- * @param {File} file
- * @returns {Promise<string>}
- */
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = reject;
-    reader.onload = () => resolve(reader.result);
-    reader.readAsDataURL(file);
-  });
-}
-
-/**
  * Handle image file(s) selected from the text widget
  * @param {FileList} files
  * @param {string} promptFromInput
@@ -1823,9 +1376,21 @@ async function handleChatImageUpload(files, promptFromInput = '') {
   showToast('Image upload is not available in text-only mode.', 'tool-error', 'left', null, 5);
 }
 
-/* 
+/* ============================================================ */
+/* §6  Toasts                                                    */
+/* ============================================================ */
+
+/*
+ * Function to create toast timeline container if it doesn't exist
+ */
+function createToastTimeline() {
+  // Toasts widget owns #toast-timeline; no-op if absent
+  return;
+}
+
+/*
  * Function to show a toast notification
- * 
+ *
  * @param {string} message - The message to display
  * @param {string} type - The type of toast (tool-call, tool-response, tool-error, agent)
  * @param {string} side - Which side to show on (left, right)
@@ -1891,9 +1456,9 @@ function showToast(message, type, side, jsonData = null, durationSeconds = 5) {
   }, durationSeconds * 1000);
 }
 
-/* 
+/*
  * Function to dismiss a toast with animation
- * 
+ *
  * @param {HTMLElement} toastRow - The toast row element to dismiss
  */
 function dismissToast(toastRow) {
@@ -1910,12 +1475,11 @@ function dismissToast(toastRow) {
   }
 }
 
-
-/* 
+/*
  * Function to display an error message to the user
- * 
+ *
  * Creates and shows an error message overlay with the specified text.
- * 
+ *
  * @param {string} message - The error message to display
  */
 function showErrorMessage(message) {
@@ -1935,6 +1499,225 @@ function showErrorMessage(message) {
   setTimeout(() => {
     errorContainer.style.display = 'none';
   }, 5000);
+}
+
+/* ============================================================ */
+/* §7  Grid / Layout                                             */
+/* ============================================================ */
+
+let settingsSaveTimer = null;
+let layoutSaveTimer = null;
+function scheduleSaveSettings(delay = 400) {
+  if (settingsSaveTimer) { try { clearTimeout(settingsSaveTimer); } catch (_) {} }
+  settingsSaveTimer = setTimeout(() => { try { saveSession({ settings: true }); } catch (_) {} }, Math.max(0, delay));
+}
+function scheduleSaveLayout(delay = 400) {
+  if (layoutSaveTimer) { try { clearTimeout(layoutSaveTimer); } catch (_) {} }
+  layoutSaveTimer = setTimeout(() => { try { saveSession({ layout: true }); } catch (_) {} }, Math.max(0, delay));
+}
+
+function loadPersistedSettings() {
+  try {
+    const rawDocked = localStorage.getItem('settings:docked');
+    const rawUndocked = localStorage.getItem('settings:undocked');
+    if (rawDocked) {
+      const env = JSON.parse(rawDocked);
+      if (env && env.settings && Array.isArray(env.settings.layout) && !persistedSettings.docked) {
+        persistedSettings.docked = env.settings;
+      }
+    }
+    if (rawUndocked) {
+      const env = JSON.parse(rawUndocked);
+      if (env && env.settings && Array.isArray(env.settings.layout) && !persistedSettings.undocked) {
+        persistedSettings.undocked = env.settings;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load persisted settings from localStorage', e);
+  }
+}
+
+/* Helpers to cache/restore individual widget positions per-mode */
+function ensureModeSettings(mode = getCurrentMode()) {
+  if (!persistedSettings[mode]) {
+    const snapshot = computeCurrentSettingsSnapshot();
+    persistedSettings[mode] = snapshot || {
+      version: 1,
+      columns: grid?.engine?.column || grid?.opts?.column || 12,
+      cellHeight: undefined,
+      float: !!floatEnabled,
+      text: !!textWidgetEl,
+      toasts: !!toastsWidgetEl,
+      showToolCalls: !!showToolPills,
+      layout: []
+    };
+  }
+  if (!Array.isArray(persistedSettings[mode].layout)) {
+    persistedSettings[mode].layout = [];
+  }
+  return persistedSettings[mode];
+}
+
+function persistModeSettings(mode = getCurrentMode()) {
+  try {
+    localStorage.setItem(`settings:${mode}`, JSON.stringify({ key: mode, settings: persistedSettings[mode] }));
+  } catch (_) {}
+}
+
+function getSavedWidgetRect(widget, mode = getCurrentMode()) {
+  const s = persistedSettings[mode];
+  if (!s || !Array.isArray(s.layout)) return null;
+  const entry = s.layout.find(n => n && n.widget === widget);
+  if (entry && typeof entry.x === 'number') {
+    return { x: entry.x, y: entry.y, w: entry.w, h: entry.h };
+  }
+  return null;
+}
+
+function updateSavedWidgetRect(widget, rect, mode = getCurrentMode()) {
+  if (!rect || typeof rect !== 'object') return;
+  const s = ensureModeSettings(mode);
+  const layout = s.layout;
+  const idx = layout.findIndex(n => n && n.widget === widget);
+  const normalized = {
+    widget,
+    x: Number(rect.x ?? 0),
+    y: Number(rect.y ?? 0),
+    w: Number(rect.w ?? 4),
+    h: Number(rect.h ?? 4)
+  };
+  if (idx >= 0) {
+    layout[idx] = normalized;
+  } else {
+    layout.push(normalized);
+  }
+  persistModeSettings(mode);
+}
+
+/* Widget add dispatcher used by layout rebuilders (Step 4) */
+function addWidgetByType(type, rect, flags) {
+  const adders = {
+    toasts: (r) => flags.includeToasts && window.__addToastsWidget && window.__addToastsWidget(r),
+    text: (r) => flags.includeText && window.__addTextWidget && window.__addTextWidget(r),
+    convo: (r) => (!isConvosDocked) && window.__addConversationsWidget && window.__addConversationsWidget(r)
+  };
+  const fn = adders[type];
+  if (fn) fn(rect);
+}
+
+/* Default widget positions removed: layouts must come from session/user defaults */
+
+/* Rebuild grid from a layout array (+ float), respecting current dock state for convo */
+function rebuildFromLayout(layout = [], float = floatEnabled, options = {}) {
+  if (!grid) return;
+  mutatingLayout = true;
+  try {
+    try {
+      debugTrace('[rebuildFromLayout] start', { mode: getCurrentMode(), md5: (Array.isArray(layout) ? computeLayoutMD5(layout) : 'n/a'), layout });
+    } catch (_) {}
+
+  const desiredFloat = (typeof float === 'boolean') ? !!float : !!floatEnabled;
+  if (typeof grid.float === 'function') {
+    // Prevent intermediate repack while removing/adding nodes
+    grid.float(false);
+  }
+
+  const includeText = options.includeText !== undefined ? !!options.includeText : true;
+  const includeToasts = options.includeToasts !== undefined ? !!options.includeToasts : true;
+
+  // Remove all existing widgets (batched to prevent reflow/pack during teardown)
+  const existing = [...(grid.engine?.nodes || [])];
+  grid.batchUpdate();
+  existing.forEach(n => n?.el && grid.removeWidget(n.el));
+  toastsWidgetEl = null;
+  textWidgetEl = null;
+  convosWidgetEl = null;
+
+  // Add widgets back based on layout (respect toggles) via dispatcher
+  const flags = { includeText, includeToasts };
+  const nodesToAdd = Array.isArray(layout) ? [...layout] : [];
+  nodesToAdd.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  const desiredNodes = nodesToAdd.map(n => ({
+    widget: String(n.widget),
+    x: Number(n.x), y: Number(n.y), w: Number(n.w), h: Number(n.h)
+  }));
+  desiredNodes.forEach(n => {
+    addWidgetByType(n.widget, { x: n.x, y: n.y, w: n.w, h: n.h, autoPosition: false }, flags);
+  });
+  grid.commit();
+  if (typeof grid.float === 'function') {
+    floatEnabled = desiredFloat;
+    grid.float(desiredFloat);
+  }
+  // Enforce final positions post-commit and log actual vs desired for diagnostics
+  try {
+    const actual = (grid.engine?.nodes || []).map(n => ({
+      widget: n?.el?.dataset?.widget || null, x: n.x, y: n.y, w: n.w, h: n.h
+    }));
+    const elByType = {
+      toasts: toastsWidgetEl,
+      text: textWidgetEl,
+      convo: convosWidgetEl
+    };
+    desiredNodes.forEach(n => {
+      const el = elByType[n.widget];
+      if (el && el.gridstackNode && (el.gridstackNode.x !== n.x || el.gridstackNode.y !== n.y || el.gridstackNode.w !== n.w || el.gridstackNode.h !== n.h)) {
+        grid.update(el, { x: n.x, y: n.y, w: n.w, h: n.h });
+      }
+    });
+    const actualAfter = (grid.engine?.nodes || []).map(n => ({
+      widget: n?.el?.dataset?.widget || null, x: n.x, y: n.y, w: n.w, h: n.h
+    }));
+    const diff = { desired: desiredNodes, actualBefore: actual, actualAfter };
+    window.__lastLayoutDiff = diff;
+    debugTrace('[layout:rebuild] enforced positions', { mode: getCurrentMode(), float: desiredFloat, diff });
+  } catch (e) {
+    console.warn('[layout:rebuild] enforcement failed', e);
+  }
+  } finally {
+    mutatingLayout = false;
+    if (prefsReady && !applyingFromFM) scheduleSaveLayout(250);
+  }
+}
+
+/* Apply settings for a given mode (docked/undocked): set toggles, float, and rebuild layout */
+function applySettingsForMode(mode) {
+  const settings = persistedSettings[mode];
+  if (!settings || !Array.isArray(settings.layout)) return false;
+
+
+  // Apply grid sizing options before rebuilding
+  if (typeof settings.columns === 'number' && grid && typeof grid.column === 'function') {
+    grid.column(settings.columns);
+  }
+  if (typeof settings.cellHeight === 'number' && grid && typeof grid.cellHeight === 'function') {
+    grid.cellHeight(settings.cellHeight);
+  }
+
+  // Update menu button states
+  const btnText = document.getElementById('btn-text');
+  const btnToasts = document.getElementById('btn-toasts');
+  const btnToolCalls = document.getElementById('btn-tool-calls');
+  if (btnText) {
+    setPressed(btnText, !!settings.text);
+  }
+  if (btnToasts) {
+    setPressed(btnToasts, !!settings.toasts);
+  }
+  if (btnToolCalls) {
+    const on = (typeof settings.showToolCalls === 'boolean') ? !!settings.showToolCalls : !!showToolPills;
+    setPressed(btnToolCalls, on);
+    showToolPills = on;
+    renderChatFromHistory();
+  }
+
+  try { debugTrace('[applySettingsForMode] using', { mode, md5: computeLayoutMD5(settings.layout), float: settings.float, layout: settings.layout }); } catch (_) {}
+
+  rebuildFromLayout(settings.layout, settings.float, {
+    includeText: !!settings.text,
+    includeToasts: !!settings.toasts
+  });
+  return true;
 }
 
 /*
@@ -1978,7 +1761,7 @@ function setUISettings(updateParamsJson) {
   }
 }
 
-/* 
+/*
  * Save current GridStack layout (x,y,w,h + widget type) to FileMaker or console.
  */
 function saveCurrentLayout() {
@@ -2042,7 +1825,7 @@ function restoreDefaultLayout() {
   }
 }
 
-/* 
+/*
  * Load and apply saved layout for current mode (localStorage fallback until FM is wired)
  */
 function loadLayoutForCurrentMode() {
@@ -2314,12 +2097,253 @@ function savePreferences() {
   scheduleSaveSettings(0);
 }
 
+/* ============================================================ */
+/* §8  Public API + Bootstrap / DOMContentLoaded                 */
+/* ============================================================ */
 
+/*
+ * Expose functions to FileMaker
+ */
+window.showToast = showToast;
+window.setUISettings = setUISettings;
+window.getChatHistoryText = chatHistoryToText;
+window.logChatHistory = logChatHistory;
+window.getChatBuffer = getChatBuffer;
+window.logChatBufferRaw = logChatBufferRaw;
+window.bootstrapApp = bootstrapApp;
+window.copyMinifiedHistory = copyMinifiedHistory;
+window.buildBootstrapTestPayload = buildBootstrapTestPayload;
+window.applyLoadedLayout = applyLoadedLayout;
+window.applySettingsEnvelope = applySettingsEnvelope;
+window.savePreferences = savePreferences;
+window.saveSession = saveSession;
+window.saveSessionState = saveSessionState;
+window.getSessionState = getSessionState;
+window.switchSession = switchSession;
+window.startNewSession = startNewSession;
+window.applySessionState = applySessionState;
+window.requestSessionState = requestSessionState;
+window.setSessionList = setSessionList;
+window.applySessionTitle = applySessionTitle;
 
+/**
+ * Bootstrap the app from FileMaker with session, settings, and history.
+ * Accepts an object or a JSON string.
+ * Seeds in-memory caches and defers layout application to initial mount.
+ */
+function bootstrapApp(payload) {
+  try {
+    const raw = typeof payload === 'string' ? JSON.parse(payload) : (payload || {});
+    const data = (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'success'))
+      ? (raw.success ? (raw.result || {}) : null)
+      : raw;
+    if (!data) {
+      console.error('bootstrapApp failed: App_Init returned success=false or invalid payload');
+      return false;
+    }
+    const mode = data.key || data.mode || (data.settings && (data.settings.key || data.settings.mode)) || 'docked';
 
-/* 
+    // Seed sessions list (sidebar and undocked widget)
+    if (Array.isArray(data.sessions)) {
+      setSessionList(data.sessions);
+    }
+
+    // Seed history: preserve tool_call/tool_result; buffer only message items for legacy UI
+    if (Array.isArray(data.history)) {
+      const incoming = [];
+      const bufferMsgs = [];
+      for (const m of data.history) {
+        const ts =
+          (m && m.ts !== undefined) ? m.ts
+          : (m && m.timestamp !== undefined) ? m.timestamp
+          : (m && m.time !== undefined) ? m.time
+          : Date.now();
+
+        // Canonical tool_call
+        if (m && m.type === 'tool_call') {
+          incoming.push({
+            id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('tc'),
+            ts,
+            role: 'tool',
+            type: 'tool_call',
+            content: (typeof m?.content === 'string' ? m.content : null),
+            metadata: {
+              responseId: m.responseId || null,
+              call_id: m.call_id || m.id || null,
+              tool: {
+                name: m.name || m?.tool?.name || 'unknown',
+                arguments: (m?.args ?? m?.arguments ?? m?.tool?.arguments) ?? null
+              }
+            }
+          });
+          continue;
+        }
+
+        // Canonical tool_result
+        if (m && m.type === 'tool_result') {
+          incoming.push({
+            id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('tr'),
+            ts,
+            role: 'tool',
+            type: 'tool_result',
+            content: (m.output ?? m.content) ?? null,
+            metadata: {
+              call_id: m.call_id || null,
+              status: m.status || null
+            }
+          });
+          continue;
+        }
+
+        // Message-like entries
+        const role = m?.role || 'system';
+        const text = typeof m?.content === 'string'
+          ? m.content
+          : (typeof m?.text === 'string' ? m.text : '');
+
+        incoming.push({
+          id: (m && m.id != null && String(m.id).trim() !== '') ? String(m.id) : createId('m'),
+          ts,
+          role,
+          type: 'message',
+          content: text,
+          metadata: { api: m?.metadata?.api ?? m?.metadata?.source ?? m?.source ?? null }
+        });
+
+        if (text) {
+          bufferMsgs.push({
+            role,
+            text,
+            ts,
+            source: m?.metadata?.api ?? m?.metadata?.source ?? m?.source ?? null
+          });
+        }
+      }
+
+      sessionHistory.splice(0, sessionHistory.length, ...incoming);
+      trimHistory();
+
+      chatBuffer.splice(0, chatBuffer.length, ...bufferMsgs);
+
+      // If Text widget is already mounted, render immediately
+      renderChatFromHistory();
+    }
+
+    // Cache per-mode settings (normalize debug -> toasts)
+    const s = data.settings || {};
+    const toasts = (s.toasts !== undefined) ? !!s.toasts : !!s.debug;
+    // Accept layout only at root-level
+    const layoutObj = (data.layout && typeof data.layout === 'object' && !Array.isArray(data.layout))
+      ? data.layout
+      : null;
+    if (!layoutObj && s && typeof s.layout === 'object' && !Array.isArray(s.layout)) {
+      try { showToast('[bootstrapApp] Ignored settings.layout; layout must be at the root level.', 'tool-error', 'left', null, 6); } catch (_) {}
+    }
+
+    if (layoutObj) {
+      ['docked', 'undocked'].forEach((k) => {
+        const arr = layoutObj[k];
+        if (Array.isArray(arr)) {
+          const prev = persistedSettings[k] || {};
+          // Normalize numeric fields to ensure GridStack honors coordinates exactly
+          const normalizedArr = Array.isArray(arr)
+            ? arr.map(n => ({
+                widget: String(n.widget),
+                x: Number(n.x),
+                y: Number(n.y),
+                w: Number(n.w),
+                h: Number(n.h)
+              }))
+            : [];
+
+          const incomingSource = data.sessionId ? 'session' : 'machine';
+          const incomingSessionId = data.sessionId || null;
+          const existingSource = prev.__source || null;
+          const existingSessionId = prev.__sessionId || null;
+
+          // Do not let a machine/default payload overwrite an existing session-scoped cache
+          if (existingSource === 'session' && existingSessionId && incomingSource === 'machine') {
+            try { debugTrace('[bootstrapApp] skip machine override', { key: k }); } catch (_) {}
+            return;
+          }
+
+          persistedSettings[k] = {
+            version: s.version || prev.version || 1,
+            columns: s.columns || prev.columns || 12,
+            cellHeight: s.cellHeight !== undefined ? s.cellHeight : prev.cellHeight,
+            float: (s.float !== undefined) ? !!s.float : !!prev.float,
+            text: (s.text !== undefined) ? !!s.text : !!prev.text,
+            toasts,
+            showToolCalls: (typeof s.showToolCalls === 'boolean') ? !!s.showToolCalls : prev.showToolCalls,
+            layout: normalizedArr,
+            __source: incomingSource,
+            __sessionId: incomingSessionId
+          };
+          try {
+            localStorage.setItem(`settings:${k}`, JSON.stringify({ key: k, settings: persistedSettings[k] }));
+          } catch (_) {}
+          try {
+            debugTrace('[bootstrapApp] cached', { key: k, md5: computeLayoutMD5(normalizedArr), layout: normalizedArr });
+          } catch (_) {}
+        }
+      });
+    }
+
+    // Agents are managed in FileMaker; ignore any activeAgent in payload
+
+    // Persist desired mode and session id for later application
+    window.__bootstrapMode = mode;
+    if (data.sessionId) {
+      window.__sessionId = data.sessionId;
+    }
+    // Highlight the active session in any rendered lists
+    highlightActiveSession(window.__sessionId || '');
+
+    // If grid is already initialized, immediately align dock state and apply layout/toggles
+    if (grid) {
+      applyingFromFM = true;
+      try {
+        if (mode === 'docked') {
+          if (!isConvosDocked && window.__dockConvos) window.__dockConvos();
+        } else {
+          if (isConvosDocked && window.__undockConvos) window.__undockConvos();
+        }
+
+        // Only apply cached settings if they are session-scoped for this session; otherwise request from FM
+        const haveSessionScoped =
+          persistedSettings[mode]
+          && persistedSettings[mode].__source === 'session'
+          && (persistedSettings[mode].__sessionId === (data.sessionId || window.__sessionId || null));
+
+        let applied = false;
+        if (haveSessionScoped) {
+          applied = applySettingsForMode(mode);
+        }
+
+        if (!applied) {
+          const loaded = loadLayoutForCurrentMode();
+          if (!loaded && typeof window.__syncWidgets === 'function') {
+            window.__syncWidgets();
+          }
+        }
+      } catch (e) {
+        console.warn('Immediate apply after bootstrap failed; will rely on initial mount', e);
+      }
+      applyingFromFM = false;
+    }
+
+    // Mark bootstrap as completed to enable post-bootstrap behaviors/logging
+    window.__bootstrapDone = true;
+    return true;
+  } catch (e) {
+    console.error('bootstrapApp failed', e);
+    return false;
+  }
+}
+
+/*
  * Initialize the application when the DOM is fully loaded
- * 
+ *
  * Bootstraps GridStack and mounts the Toasts / Text widgets based on toggles.
  */
 document.addEventListener("DOMContentLoaded", () => {
@@ -2712,7 +2736,7 @@ document.addEventListener("DOMContentLoaded", () => {
     persistedSettings[mode].text = false;
     persistModeSettings(mode);
   }
-  
+
   function syncWidgets() {
     const textOn = document.getElementById('btn-text')?.classList.contains('active');
     const toastsOn = document.getElementById('btn-toasts')?.classList.contains('active');
@@ -2732,7 +2756,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.__dockConvos = dockConvos;
   window.__undockConvos = undockConvos;
   window.__syncWidgets = syncWidgets;
-  
+
   // Toggle buttons
   btnText?.addEventListener('click', (e) => {
     e.stopPropagation();

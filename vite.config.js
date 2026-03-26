@@ -2,18 +2,16 @@ import fs from 'fs';
 import { defineConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   server: {
     host: "localhost",
     port: 1234,
-    https: {
-      key: fs.readFileSync('../localhost-key.pem'),
-      cert: fs.readFileSync('../localhost-cert.pem'),
-    },
-  },
-  https: {
-    key: fs.readFileSync('../localhost-key.pem'),
-    cert: fs.readFileSync('../localhost-cert.pem'),
+    ...(command === 'serve' ? {
+      https: {
+        key: fs.readFileSync('../localhost-key.pem'),
+        cert: fs.readFileSync('../localhost-cert.pem'),
+      },
+    } : {}),
   },
   plugins: [viteSingleFile()],
   build: {
@@ -24,9 +22,6 @@ export default defineConfig({
     brotliSize: false,
     rollupOptions: {
       inlineDynamicImports: true,
-      //   output: {
-      //     manualChunks: () => "everything.js",
-      //   },
     },
   },
-});
+}));
